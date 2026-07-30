@@ -62,10 +62,9 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .header-icon-button:active { transform: translateY(0); }
 .header-icon-button:focus-visible { outline: 3px solid rgb(255 203 183 / 45%); outline-offset: 3px; }
 .page-shell { width: min(100% - 48px, 1080px); margin-inline: auto; padding-block: 48px 80px; }
-.hero, .section-heading, .dialog__heading, .dialog__actions, .panel__heading {
+.section-heading, .dialog__heading, .dialog__actions, .panel__heading {
   display: flex; align-items: center; justify-content: space-between; gap: 24px;
 }
-.hero { align-items: end; margin-bottom: 30px; }
 .lead, .muted { color: var(--muted); }
 .lead { max-width: 660px; margin-bottom: 0; font-size: 1.06rem; }
 .eyebrow { margin-bottom: 8px; color: var(--accent); font-size: .75rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
@@ -78,8 +77,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .button--primary:hover { background: #3a4c6e; }
 .button--secondary { color: var(--navy); border-color: var(--line); background: white; }
 .button--danger { color: var(--danger); border-color: #edc9bc; background: white; }
-.button--chatgpt { color: #082a1c; background: #7ee2b8; }
-.button--chatgpt:hover { background: #68d7a8; }
 .button:disabled { cursor: wait; opacity: .65; }
 .add-material-button {
   display: grid;
@@ -436,12 +433,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .guide-steps { display: grid; gap: 16px; margin: 24px 0; padding-left: 24px; }
 .guide-steps li { padding-left: 6px; }
 .guide-steps p { margin: 3px 0 0; color: var(--muted); }
-.guide-example { padding: 16px; border-radius: 12px; background: var(--paper); }
-.guide-example pre {
-  margin: 10px 0 0;
-  font: .92rem/1.65 ui-monospace, SFMono-Regular, Consolas, monospace;
-  white-space: pre-wrap;
-}
 .guide-prompt { margin-top: 18px; }
 .guide-prompt__heading {
   display: flex;
@@ -795,36 +786,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .word-card__source a { color: inherit; }
 .ai-assistant-dialog { width: min(720px, calc(100% - 32px)); max-height: min(860px, calc(100vh - 32px)); }
 .ai-dialog-intro { margin: 16px 0 20px; color: var(--muted); }
-.segmented-control {
-  display: flex;
-  gap: 8px;
-  margin: 16px 0;
-  padding: 0;
-  border: 0;
-}
-.segmented-control legend {
-  width: 100%;
-  margin-bottom: 7px;
-  color: var(--ink);
-  font-size: .86rem;
-  font-weight: 800;
-}
-.segmented-control label { flex: 1; }
-.segmented-control input { position: absolute; opacity: 0; pointer-events: none; }
-.segmented-control span {
-  display: block;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--muted);
-  background: white;
-  font-size: .86rem;
-  font-weight: 750;
-  text-align: center;
-  cursor: pointer;
-}
-.segmented-control label:has(input:checked) span { border-color: #92d3b6; color: #126b42; background: #e3f6ec; }
-.segmented-control label:focus-within span { outline: 3px solid rgb(31 183 104 / 18%); outline-offset: 2px; }
 .ai-guide { padding: 16px 18px; border-radius: 12px; background: #f1f4f9; }
 .ai-guide ol { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 22px; color: #4d586f; font-size: .86rem; }
 .ai-prompt-field { margin-bottom: 14px; }
@@ -885,7 +846,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 
 @media (max-width: 720px) {
   .page-shell { width: min(100% - 32px, 1080px); padding-top: 34px; }
-  .hero { display: block; }
   .guide-prompt__heading { align-items: stretch; flex-direction: column; }
   .dashboard { grid-template-columns: 1fr; }
   .section-heading { align-items: flex-end; }
@@ -894,9 +854,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   .add-material-button--floating { right: 20px; bottom: 20px; }
   .history-panel { right: 0; }
   .word-card { max-height: min(65vh, 520px); }
-  .segmented-control { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .segmented-control label { min-width: 0; }
-  .segmented-control span { padding-inline: 6px; }
   .milestone-card { align-items: flex-start; }
   .detail-layout {
     display: block;

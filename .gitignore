@@ -10,6 +10,7 @@ dist/
 .firebase/
 .runtime/
 npm-debug.log*
+debug.log
 playwright-report/
 test-results/
 

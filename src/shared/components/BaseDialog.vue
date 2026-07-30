@@ -43,7 +43,15 @@ defineExpose({ close, showModal });
             <p class="eyebrow">{{ eyebrow }}</p>
             <h2 :id="titleId">{{ title }}</h2>
           </div>
-          <button class="icon-button" type="button" aria-label="關閉" @click="close">×</button>
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="關閉"
+            autofocus
+            @click="close"
+          >
+            ×
+          </button>
         </div>
         <slot />
       </div>

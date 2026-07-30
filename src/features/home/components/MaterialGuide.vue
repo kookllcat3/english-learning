@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 
 interface DialogController {
@@ -58,7 +58,9 @@ const DOCX_PROMPT = `你是一位專業的英語教材編輯與圖文文件設�
 const dialog = ref<DialogController | null>(null);
 const promptType = ref<PromptType>("text");
 const status = ref("");
+const visiblePrompt = ref(TEXT_PROMPT);
 const currentPrompt = computed(() => promptType.value === "text" ? TEXT_PROMPT : DOCX_PROMPT);
+let promptRenderFrame: number | undefined;
 
 function openDialog(): void {
   status.value = "";
@@ -68,6 +70,11 @@ function openDialog(): void {
 function selectPrompt(type: PromptType): void {
   promptType.value = type;
   status.value = "";
+  window.cancelAnimationFrame(promptRenderFrame ?? 0);
+  promptRenderFrame = window.requestAnimationFrame(() => {
+    visiblePrompt.value = currentPrompt.value;
+    promptRenderFrame = undefined;
+  });
 }
 
 async function copyPrompt(): Promise<void> {
@@ -78,6 +85,10 @@ async function copyPrompt(): Promise<void> {
     status.value = "複製失敗，請手動選取提示詞後按 Ctrl+C。";
   }
 }
+
+onBeforeUnmount(() => {
+  window.cancelAnimationFrame(promptRenderFrame ?? 0);
+});
 </script>
 
 <template>
@@ -110,11 +121,21 @@ async function copyPrompt(): Promise<void> {
 
     <section class="guide-prompt" aria-labelledby="guide-prompt-title">
       <div class="guide-prompt__heading">
-        <div>
-          <strong id="guide-prompt-title">素材製作提示詞</strong>
-          <p>依輸出格式選擇版本，再貼到你慣用的 AI 工具。</p>
+        <div class="guide-prompt__title-row">
+          <strong id="guide-prompt-title">AI 教材生成提示詞</strong>
+          <button
+            class="icon-button guide-prompt__copy"
+            type="button"
+            aria-label="複製提示詞"
+            title="複製提示詞"
+            @click="copyPrompt"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="8" y="8" width="11" height="11" rx="2" />
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+            </svg>
+          </button>
         </div>
-        <button class="button button--secondary" type="button" @click="copyPrompt">複製提示詞</button>
       </div>
       <div class="prompt-tabs" role="tablist" aria-label="提示詞版本">
         <button
@@ -125,7 +146,7 @@ async function copyPrompt(): Promise<void> {
           :aria-selected="promptType === 'text'"
           @click="selectPrompt('text')"
         >
-          純文字素材
+          純文字
         </button>
         <button
           class="prompt-tab"
@@ -135,10 +156,10 @@ async function copyPrompt(): Promise<void> {
           :aria-selected="promptType === 'docx'"
           @click="selectPrompt('docx')"
         >
-          圖文 DOCX
+          圖文
         </button>
       </div>
-      <textarea :value="currentPrompt" readonly rows="22" />
+      <textarea :value="visiblePrompt" readonly rows="22" />
       <p class="copy-status" role="status">{{ status }}</p>
     </section>
   </BaseDialog>

@@ -1,0 +1,39 @@
+{
+  "name": "english-learning",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first English learning material library.",
+  "license": "MIT",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "npm run test:unit",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:production": "node scripts/run-production-tests.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "check": "npm run typecheck && npm run test:unit && vite build",
+    "check:full": "npm run check && npm run test:e2e && npm run test:e2e:production"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pinia": "4.0.2",
+    "vue": "3.5.40",
+    "vue-router": "5.2.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.62.0",
+    "@types/node": "26.1.2",
+    "@vitejs/plugin-vue": "6.0.8",
+    "typescript": "6.0.3",
+    "vite": "8.1.5",
+    "vitest": "4.1.10",
+    "vue-tsc": "3.3.8"
+  }
+}

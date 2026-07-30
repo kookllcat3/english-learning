@@ -1,0 +1,31 @@
+# Local learning data and product documents
+materials/
+data/
+*.xlsx
+.~lock.*#
+
+# Dependencies and local runtime
+node_modules/
+dist/
+.firebase/
+.runtime/
+npm-debug.log*
+playwright-report/
+test-results/
+
+# Private deployment and implementation notes
+.firebaserc
+firebase.json
+docs/archive/
+
+# Codex and agent tooling
+.agents/
+.codex/
+.codex-remote-attachments/
+outputs/
+plugin/
+mcp/
+AGENTS.md
+
+# Operating system files
+.DS_Store

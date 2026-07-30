@@ -89,23 +89,88 @@ function Install-PortableNode {
   return $nodePath
 }
 
+function Get-NpmCliPath {
+  param([string]$NodePath)
+
+  $nodeDirectory = Split-Path -Parent $NodePath
+  $npmCliPath = Join-Path $nodeDirectory "node_modules\npm\bin\npm-cli.js"
+  if (-not (Test-Path -LiteralPath $npmCliPath -PathType Leaf)) {
+    throw "npm was not found next to the selected Node.js runtime."
+  }
+
+  return $npmCliPath
+}
+
+function Install-Dependencies {
+  param(
+    [string]$NodePath,
+    [string]$NpmCliPath
+  )
+
+  $lockFile = Join-Path $projectDirectory "package-lock.json"
+  if (-not (Test-Path -LiteralPath $lockFile -PathType Leaf)) {
+    throw "package-lock.json was not found. The application cannot install locked dependencies."
+  }
+
+  $runtimeDirectory = Join-Path $projectDirectory ".runtime"
+  $lockMarker = Join-Path $runtimeDirectory "dependency-lock.sha256"
+  $viteEntryPoint = Join-Path $projectDirectory "node_modules\vite\bin\vite.js"
+  $expectedLockHash = (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash
+  $installedLockHash = if (Test-Path -LiteralPath $lockMarker -PathType Leaf) {
+    (Get-Content -LiteralPath $lockMarker -Raw).Trim()
+  } else {
+    ""
+  }
+
+  if (
+    (Test-Path -LiteralPath $viteEntryPoint -PathType Leaf) -and
+    $installedLockHash -eq $expectedLockHash
+  ) {
+    return
+  }
+
+  if (
+    (Test-Path -LiteralPath $viteEntryPoint -PathType Leaf) -and
+    -not $installedLockHash
+  ) {
+    Set-Location -LiteralPath $projectDirectory
+    & $NodePath $NpmCliPath ls --depth=0 --silent | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
+      Set-Content -LiteralPath $lockMarker -Value $expectedLockHash -Encoding Ascii
+      return
+    }
+  }
+
+  Write-Host "Preparing the locked application dependencies..."
+  Set-Location -LiteralPath $projectDirectory
+  & $NodePath $NpmCliPath ci --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unable to install application dependencies. Check the internet connection and try again."
+  }
+
+  New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
+  Set-Content -LiteralPath $lockMarker -Value $expectedLockHash -Encoding Ascii
+  Write-Host "Application dependencies are ready."
+}
+
 $systemNode = Get-Command node.exe -ErrorAction SilentlyContinue
 $nodeExecutable = if ($systemNode -and (Test-CompatibleNode $systemNode.Source)) {
   $systemNode.Source
 } else {
   Install-PortableNode (Get-SystemArchitecture)
 }
+$npmCli = Get-NpmCliPath $nodeExecutable
 
 if ($CheckOnly) {
   Write-Host "Compatible Node.js: $nodeExecutable"
+  Write-Host "Compatible npm: $npmCli"
   exit 0
 }
 
 Set-Location -LiteralPath $projectDirectory
+Install-Dependencies $nodeExecutable $npmCli
 $viteEntryPoint = Join-Path $projectDirectory "node_modules\vite\bin\vite.js"
-if (-not (Test-Path -LiteralPath $viteEntryPoint -PathType Leaf)) {
-  throw "Vite was not found. Run npm ci in the project directory, then try again."
-}
 
 Write-Host "Starting English Learning..."
 Write-Host "The website will open at http://127.0.0.1:4173/"

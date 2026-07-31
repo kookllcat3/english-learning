@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
-
-interface DialogController {
-  close(): void;
-  showModal(): void;
-}
+import type { DialogController } from "../../../shared/components/base-dialog.js";
 
 type PromptType = "docx" | "text";
 

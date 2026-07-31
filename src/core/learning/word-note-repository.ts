@@ -1,11 +1,8 @@
 import { STORES, readOne, writeOne } from "../database/database.js";
 import type { WordNoteRecord } from "../models/models.js";
+import { isValidWord, normalizeWord } from "../text/text.js";
 
 const MAX_NOTE_LENGTH = 20_000;
-
-function normalizeWord(word: string): string {
-  return word.trim().toLocaleLowerCase("en");
-}
 
 export async function getWordNote(word: string): Promise<WordNoteRecord | undefined> {
   return readOne(STORES.wordNotes, normalizeWord(word));
@@ -13,7 +10,7 @@ export async function getWordNote(word: string): Promise<WordNoteRecord | undefi
 
 export async function saveWordNote(word: string, markdown: string): Promise<WordNoteRecord> {
   const normalizedWord = normalizeWord(word);
-  if (!/^[a-z]+(?:'[a-z]+)*$/.test(normalizedWord)) {
+  if (!isValidWord(normalizedWord)) {
     throw new Error("無法儲存格式不正確的單字筆記。");
   }
   if (markdown.length > MAX_NOTE_LENGTH) {

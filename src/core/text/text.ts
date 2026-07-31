@@ -1,6 +1,17 @@
+const ENGLISH_WORD_PATTERN = /^[a-z]+(?:'[a-z]+)*$/;
+
+export function normalizeWord(word: string): string {
+  return word.trim().replaceAll("’", "'").toLocaleLowerCase("en");
+}
+
+export function isValidWord(word: string): boolean {
+  return ENGLISH_WORD_PATTERN.test(word);
+}
+
 export function extractUniqueWords(text: string): string[] {
-  const matches = text.toLocaleLowerCase("en").match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
-  return [...new Set(matches)].sort((first, second) => first.localeCompare(second));
+  const matches = text.match(/[a-z]+(?:['’][a-z]+)*/gi) ?? [];
+  return [...new Set(matches.map(normalizeWord))]
+    .sort((first, second) => first.localeCompare(second));
 }
 
 export function fileNameWithoutExtension(fileName: string): string {

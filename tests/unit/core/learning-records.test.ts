@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   materialWithLearningProgress,
+  mergeNewerRecords,
   newerRecord,
 } from "../../../src/core/learning/learning-records.js";
 
@@ -19,6 +20,23 @@ describe("learning record conflict resolution", () => {
     const incoming = { id: "material", knownWords: ["animal"], updatedAt };
 
     expect(newerRecord(current, incoming)).toBe(incoming);
+  });
+
+  it("merges records by key while preserving the newest version", () => {
+    const current = [
+      { id: "existing", value: "old", updatedAt: "2026-07-29T10:00:00.000Z" },
+      { id: "local", value: "kept", updatedAt: "2026-07-29T12:00:00.000Z" },
+    ];
+    const incoming = [
+      { id: "existing", value: "new", updatedAt: "2026-07-29T11:00:00.000Z" },
+      { id: "added", value: "imported", updatedAt: "2026-07-29T09:00:00.000Z" },
+    ];
+
+    expect(mergeNewerRecords(current, incoming, "id")).toEqual([
+      incoming[0],
+      current[1],
+      incoming[1],
+    ]);
   });
 
   it("refreshes the count, words, and update time together", () => {

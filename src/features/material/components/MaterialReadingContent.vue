@@ -5,6 +5,7 @@ import type {
   TextContentBlock,
   VocabularyRecord,
 } from "../../../core/models/models.js";
+import { normalizeWord } from "../../../core/text/text.js";
 import {
   familiarityDelay,
   familiarityLevel,
@@ -15,9 +16,12 @@ import MaterialImage from "./MaterialImage.vue";
 interface TextSegment {
   delay?: number;
   label: string;
-  level?: FamiliarityLevel;
-  materialCount?: number;
   word?: string;
+}
+
+interface WordPresentation {
+  level: FamiliarityLevel;
+  style: Record<string, string>;
 }
 
 interface RenderedTextBlock {
@@ -43,7 +47,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  activate: [word: string, rect: DOMRect, key: string];
+  activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
   deactivate: [];
   lookup: [word: string, rect: DOMRect];
 }>();
@@ -53,23 +57,16 @@ function paragraphs(block: TextContentBlock): string[] {
   return block.text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
-function hasFamiliarity(segment: TextSegment): boolean {
-  return (segment.level?.level ?? 0) > 0;
-}
-
 function textSegments(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   const wordPattern = /[a-z]+(?:['’][a-z]+)*/gi;
   let cursor = 0;
   for (const match of text.matchAll(wordPattern)) {
     if (match.index > cursor) segments.push({ label: text.slice(cursor, match.index) });
-    const normalizedWord = match[0].replaceAll("’", "'").toLocaleLowerCase("en");
-    const materialCount = props.vocabularyProgress.get(normalizedWord)?.materialCount ?? 0;
+    const normalizedWord = normalizeWord(match[0]);
     segments.push({
       delay: familiarityDelay(normalizedWord),
       label: match[0],
-      level: familiarityLevel(props.familiarityLevels, materialCount),
-      materialCount,
       word: normalizedWord,
     });
     cursor = match.index + match[0].length;
@@ -94,6 +91,38 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
       };
     }));
 
+const wordPresentations = computed(() => {
+  const presentations = new Map<string, WordPresentation>();
+  renderedBlocks.value.forEach((block) => {
+    if (block.type !== "text") return;
+    block.paragraphs.forEach((paragraph) => {
+      paragraph.segments.forEach((segment) => {
+        if (!segment.word || presentations.has(segment.word)) return;
+        const materialCount = props.vocabularyProgress.get(segment.word)?.materialCount ?? 0;
+        const level = familiarityLevel(props.familiarityLevels, materialCount);
+        presentations.set(segment.word, {
+          level,
+          style: {
+            "--familiarity-outline-opacity": String(level.outlineOpacity),
+            "--outline-flow-opacity": String(level.flowOpacity),
+            "--outline-flow-duration": `${level.flowDuration}s`,
+            "--outline-glow-blur": `${level.glowBlur}px`,
+          },
+        });
+      });
+    });
+  });
+  return presentations;
+});
+
+function presentationFor(segment: TextSegment): WordPresentation | undefined {
+  return segment.word ? wordPresentations.value.get(segment.word) : undefined;
+}
+
+function hasFamiliarity(segment: TextSegment): boolean {
+  return (presentationFor(segment)?.level.level ?? 0) > 0;
+}
+
 function wordElement(target: EventTarget | null): HTMLElement | null {
   return target instanceof Element ? target.closest<HTMLElement>(".reading-word") : null;
 }
@@ -102,14 +131,16 @@ function activateWordElement(target: EventTarget | null): void {
   const element = wordElement(target);
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
-  if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key);
+  if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "focus");
 }
 
 function handlePointerOver(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
-  activateWordElement(element);
+  const word = element.dataset.word;
+  const key = element.dataset.wordKey;
+  if (word && key) emit("activate", word, element.getBoundingClientRect(), key, "hover");
 }
 
 function handlePointerOut(event: PointerEvent): void {
@@ -128,7 +159,12 @@ function finishTouch(event: PointerEvent): void {
   if (!touchStart || touchStart.pointerId !== event.pointerId) return;
   const moved = Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y);
   touchStart = null;
-  if (moved <= 8) activateWordElement(event.target);
+  if (moved <= 8) {
+    const element = wordElement(event.target);
+    const word = element?.dataset.word;
+    const key = element?.dataset.wordKey;
+    if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "touch");
+  }
 }
 
 function handleDoubleClick(event: MouseEvent): void {
@@ -191,7 +227,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
             :key="segmentIndex"
           >
             <span
-              v-if="segment.word && segment.level"
+              v-if="segment.word"
               class="reading-word"
               :class="{
                 'is-active': activeWord === `${paragraph.key}-${segmentIndex}`,
@@ -201,13 +237,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :data-word="segment.word"
               :data-word-key="`${paragraph.key}-${segmentIndex}`"
               :data-known-label="segment.label"
-              :data-familiarity-level="segment.level.level"
-              :style="{
-                '--familiarity-outline-opacity': String(segment.level.outlineOpacity),
-                '--outline-flow-opacity': String(segment.level.flowOpacity),
-                '--outline-flow-duration': `${segment.level.flowDuration}s`,
-                '--outline-glow-blur': `${segment.level.glowBlur}px`,
-              }"
+              :style="presentationFor(segment)?.style"
               tabindex="-1"
             ><template v-if="hasFamiliarity(segment)"><span
               v-for="(character, characterIndex) in segment.label"

@@ -8,11 +8,8 @@ import {
 import { createBackupPackage, readBackupPackage } from "../../../core/backup/backup-package.js";
 import { notifyLearningDataChanged } from "../../../core/learning/learning-sync.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
-
-interface DialogController {
-  close(): void;
-  showModal(): void;
-}
+import type { DialogController } from "../../../shared/components/base-dialog.js";
+import { errorMessage } from "../../../shared/errors.js";
 
 const MAX_BACKUP_BYTES = 100 * 1024 * 1024;
 
@@ -20,10 +17,6 @@ const backupFile = ref<HTMLInputElement | null>(null);
 const backupStatus = ref("");
 const dialog = ref<DialogController | null>(null);
 const storageUsage = ref("正在估算目前網站使用的儲存空間…");
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "發生未知錯誤。";
-}
 
 function formatBytes(bytes?: number): string {
   if (bytes === undefined || !Number.isFinite(bytes) || bytes <= 0) return "0 MB";

@@ -2,13 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { BackupMaterial } from "../../../core/models/models.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
+import type { DialogController } from "../../../shared/components/base-dialog.js";
 import { usePageActionsStore } from "../../../app/stores/page-actions.js";
 import { getAiPrompt, setAiPrompt } from "../../../core/settings/settings-repository.js";
-
-interface DialogController {
-  close(): void;
-  showModal(): void;
-}
 
 const GUIDE_STEPS = [
   "開啟你慣用的 AI 服務，建立一個新對話。",

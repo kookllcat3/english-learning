@@ -1,3 +1,15 @@
+import type {
+  BackupStoreRecords,
+  MaterialAssetRecord,
+  MaterialBundle,
+  MaterialContentRecord,
+  MaterialRecord,
+  MaterialTermsRecord,
+  SettingRecord,
+  VocabularyRecord,
+  WordNoteRecord,
+} from "../models/models.js";
+
 const DATABASE_NAME = "english-learning";
 const DATABASE_VERSION = 6;
 
@@ -101,6 +113,22 @@ export async function readOne<K extends StoreName>(
   return requestResult(transaction.objectStore(storeName).get(key));
 }
 
+export async function readMany<K extends StoreName>(
+  storeName: K,
+  keys: IDBValidKey[],
+): Promise<Array<StoreRecordMap[K] | undefined>> {
+  if (keys.length === 0) return [];
+  const database = await openDatabase();
+  const transaction = database.transaction(storeName, "readonly");
+  const completion = transactionResult(transaction);
+  const store = transaction.objectStore(storeName);
+  const [records] = await Promise.all([
+    Promise.all(keys.map((key) => requestResult(store.get(key)))),
+    completion,
+  ]);
+  return records;
+}
+
 export async function writeOne<K extends StoreName>(
   storeName: K,
   value: StoreRecordMap[K],
@@ -197,14 +225,3 @@ export async function writeBackupStores({
   settings.forEach((setting) => settingsStore.put(setting));
   await transactionResult(transaction);
 }
-import type {
-  BackupStoreRecords,
-  MaterialAssetRecord,
-  MaterialBundle,
-  MaterialContentRecord,
-  MaterialRecord,
-  MaterialTermsRecord,
-  SettingRecord,
-  VocabularyRecord,
-  WordNoteRecord,
-} from "../models/models.js";

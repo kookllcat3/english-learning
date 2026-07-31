@@ -19,3 +19,16 @@ export function materialWithLearningProgress<
     updatedAt,
   } as T;
 }
+
+export function mergeNewerRecords<T extends TimestampedRecord, K extends keyof T>(
+  current: T[],
+  incoming: T[],
+  key: K,
+): T[] {
+  const records = new Map<T[K], T>(current.map((record) => [record[key], record]));
+  incoming.forEach((record) => {
+    const existing = records.get(record[key]);
+    records.set(record[key], existing ? newerRecord(existing, record) : record);
+  });
+  return [...records.values()];
+}

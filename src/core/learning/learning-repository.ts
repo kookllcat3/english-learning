@@ -2,6 +2,7 @@ import {
   STORES,
   deleteMaterialBundle,
   readAll,
+  readMany,
   readOne,
   writeBackupStores,
   writeLearningProgress,
@@ -10,9 +11,15 @@ import {
 } from "../database/database.js";
 import {
   materialWithLearningProgress,
-  newerRecord,
+  mergeNewerRecords,
 } from "./learning-records.js";
-import { extractUniqueWords, fileNameWithoutExtension, utf8Size } from "../text/text.js";
+import {
+  extractUniqueWords,
+  fileNameWithoutExtension,
+  isValidWord,
+  normalizeWord,
+  utf8Size,
+} from "../text/text.js";
 import { AI_PROMPT_MAX_LENGTH } from "../settings/settings-repository.js";
 import type {
   BackupMaterial,
@@ -21,21 +28,17 @@ import type {
   DashboardStatistics,
   LearningBackup,
   MaterialRecord,
-  SettingRecord,
   VocabularyRecord,
-  WordNoteRecord,
 } from "../models/models.js";
 
 const MAX_MATERIAL_BYTES = 2 * 1024 * 1024;
 const BACKUP_SCHEMA_VERSION = 3;
 const MATERIALS_PER_PAGE = 12;
 
+export type MaterialSort = "newest" | "oldest" | "progress" | "title";
+
 let materialIndexPromise: Promise<void> | undefined;
 let materialKnowledgePromise: Promise<void> | undefined;
-
-function normalizeWord(word: string): string {
-  return word.trim().toLocaleLowerCase("en");
-}
 
 function requiredMaterialTitle(title: string, fileName: string): string {
   const resolvedTitle = title.trim() || fileNameWithoutExtension(fileName);
@@ -146,8 +149,7 @@ async function ensureMaterialKnowledge(): Promise<void> {
 
 async function listMaterials(): Promise<MaterialRecord[]> {
   await ensureMaterialKnowledge();
-  const materials = await readAll(STORES.materials);
-  return materials.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  return readAll(STORES.materials);
 }
 
 export async function getMaterial(id: string): Promise<BackupMaterial> {
@@ -227,7 +229,7 @@ export async function removeMaterial(id: string): Promise<void> {
   if (!material?.knownWords?.length) return;
   const [remainingMaterials, currentRecords] = await Promise.all([
     readAll(STORES.materials),
-    Promise.all(material.knownWords.map((word) => readOne(STORES.vocabulary, word))),
+    readMany(STORES.vocabulary, material.knownWords),
   ]);
   const timestamp = new Date().toISOString();
   const vocabulary = material.knownWords.map((word, index) => {
@@ -253,9 +255,7 @@ export async function getVocabularyProgress(
     readAll(STORES.materials),
   ]);
   const materialWords = terms?.words ?? [];
-  const records = await Promise.all(
-    materialWords.map((word) => readOne(STORES.vocabulary, word)),
-  );
+  const records = await readMany(STORES.vocabulary, materialWords);
   const currentKnownWords = new Set(
     materials.find((material) => material.id === materialId)?.knownWords ?? [],
   );
@@ -290,9 +290,7 @@ export async function setWordsKnown(
   const materialWordSet = new Set(terms.words);
   const normalizedWords = [...new Set(words.map(normalizeWord).filter((word) =>
     word && materialWordSet.has(word)))];
-  const currentRecords = await Promise.all(
-    normalizedWords.map((word) => readOne(STORES.vocabulary, word)),
-  );
+  const currentRecords = await readMany(STORES.vocabulary, normalizedWords);
   const knownWords = new Set(material.knownWords);
   normalizedWords.forEach((word) => {
     if (learned) knownWords.add(word);
@@ -352,39 +350,39 @@ function milestoneFor({
   };
 }
 
+function materialCompletion(material: MaterialRecord): number {
+  return material.wordCount === 0 ? 0 : material.knownCount / material.wordCount;
+}
+
+function compareMaterials(
+  sort: MaterialSort,
+): (first: MaterialRecord, second: MaterialRecord) => number {
+  if (sort === "oldest") {
+    return (first, second) => first.createdAt.localeCompare(second.createdAt);
+  }
+  if (sort === "title") {
+    return (first, second) => first.title.localeCompare(second.title, "zh-Hant");
+  }
+  if (sort === "progress") {
+    return (first, second) => materialCompletion(second) - materialCompletion(first)
+      || second.updatedAt.localeCompare(first.updatedAt);
+  }
+  return (first, second) => second.createdAt.localeCompare(first.createdAt);
+}
+
 export async function getDashboard(
   page = 1,
   query = "",
-  status = "all",
-  sort = "newest",
+  sort: MaterialSort = "newest",
 ) {
   const [materials, knownWords] = await Promise.all([listMaterials(), readKnownWords()]);
   const materialCount = materials.length;
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  let filteredMaterials = normalizedQuery
+  const filteredMaterials = normalizedQuery
     ? materials.filter((material) =>
       `${material.title}\n${material.description}`.toLocaleLowerCase().includes(normalizedQuery))
     : materials;
-  filteredMaterials = filteredMaterials.filter((material) => {
-    if (status === "not-started") return material.knownCount === 0;
-    if (status === "in-progress") {
-      return material.knownCount > 0 && material.knownCount < material.wordCount;
-    }
-    if (status === "completed") {
-      return material.wordCount > 0 && material.knownCount === material.wordCount;
-    }
-    return true;
-  });
-  filteredMaterials.sort((first, second) => {
-    if (sort === "oldest") return first.createdAt.localeCompare(second.createdAt);
-    if (sort === "title") return first.title.localeCompare(second.title, "zh-Hant");
-    if (sort === "progress") {
-      const firstProgress = first.wordCount === 0 ? 0 : first.knownCount / first.wordCount;
-      const secondProgress = second.wordCount === 0 ? 0 : second.knownCount / second.wordCount;
-      return secondProgress - firstProgress || second.updatedAt.localeCompare(first.updatedAt);
-    }
-    return second.createdAt.localeCompare(first.createdAt);
-  });
+  filteredMaterials.sort(compareMaterials(sort));
   const filteredCount = filteredMaterials.length;
   const pageCount = Math.max(1, Math.ceil(filteredCount / MATERIALS_PER_PAGE));
   const currentPage = Math.min(Math.max(1, page), pageCount);
@@ -392,9 +390,10 @@ export async function getDashboard(
   const completedMaterialCount = materials.filter(
     (material) => material.wordCount > 0 && material.knownCount === material.wordCount,
   ).length;
-  const totalProgress = materials.reduce((sum, material) => (
-    sum + (material.wordCount === 0 ? 0 : material.knownCount / material.wordCount)
-  ), 0);
+  const totalProgress = materials.reduce(
+    (sum, material) => sum + materialCompletion(material),
+    0,
+  );
   const statistics = {
     materialCount,
     knownWordCount: knownWords.size,
@@ -404,7 +403,7 @@ export async function getDashboard(
   return {
     materials: filteredMaterials.slice(start, start + MATERIALS_PER_PAGE).map((material) => ({
       ...material,
-      completion: material.wordCount === 0 ? 0 : material.knownCount / material.wordCount,
+      completion: materialCompletion(material),
     })),
     statistics,
     milestone: milestoneFor(statistics),
@@ -416,7 +415,6 @@ export async function getDashboard(
       startItem: filteredCount === 0 ? 0 : start + 1,
       endItem: Math.min(start + MATERIALS_PER_PAGE, filteredCount),
       query: query.trim(),
-      status,
       sort,
     },
   };
@@ -543,7 +541,7 @@ function validateBackup(backup: LearningBackup): void {
         || (
           Array.isArray(material.knownWords)
           && new Set(material.knownWords).size === material.knownWords.length
-          && material.knownWords.every((word) => /^[a-z]+(?:'[a-z]+)*$/.test(word))
+          && material.knownWords.every(isValidWord)
         )
       )
       && isTimestamp(material.createdAt)
@@ -592,7 +590,7 @@ function validateBackup(backup: LearningBackup): void {
   backup.vocabulary.forEach((record) => {
     const isValid = isRecord(record)
       && typeof record.word === "string"
-      && /^[a-z]+(?:'[a-z]+)*$/.test(record.word)
+      && isValidWord(record.word)
       && typeof record.learned === "boolean"
       && (record.learnedAt === null || isTimestamp(record.learnedAt))
       && isTimestamp(record.updatedAt);
@@ -606,7 +604,7 @@ function validateBackup(backup: LearningBackup): void {
   (backup.wordNotes ?? []).forEach((note) => {
     const isValid = isRecord(note)
       && typeof note.word === "string"
-      && /^[a-z]+(?:'[a-z]+)*$/.test(note.word)
+      && isValidWord(note.word)
       && typeof note.markdown === "string"
       && note.markdown.length <= 20_000
       && isTimestamp(note.createdAt)
@@ -671,24 +669,12 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
     readAll(STORES.wordNotes),
     readAll(STORES.settings),
   ]);
-  const merge = <T extends MaterialRecord | VocabularyRecord | WordNoteRecord | SettingRecord>(
-    current: T[],
-    incoming: T[],
-    key: keyof T,
-  ): T[] => {
-    const records = new Map(current.map((item) => [item[key], item]));
-    incoming.forEach((item) => {
-      const existing = records.get(item[key]);
-      records.set(item[key], existing ? newerRecord(existing, item) : item);
-    });
-    return [...records.values()];
-  };
-  let vocabulary = merge(currentVocabulary, backup.vocabulary, "word")
+  let vocabulary = mergeNewerRecords(currentVocabulary, backup.vocabulary, "word")
     .map(currentVocabularyRecord);
   const legacyKnownWords = new Set(
     vocabulary.filter((record) => record.learned).map((record) => record.word),
   );
-  const mergedMaterials = merge(currentMaterials, backup.materials, "id");
+  const mergedMaterials = mergeNewerRecords(currentMaterials, backup.materials, "id");
   const bundles = mergedMaterials.map((material) => {
     validateMaterialContent(material.content);
     const words = extractUniqueWords(material.content);
@@ -749,8 +735,8 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
       words: bundle.words,
     })),
     vocabulary,
-    wordNotes: merge(currentWordNotes, backup.wordNotes ?? [], "word"),
-    settings: merge(
+    wordNotes: mergeNewerRecords(currentWordNotes, backup.wordNotes ?? [], "word"),
+    settings: mergeNewerRecords(
       currentSettings.filter(({ key }) => key !== "familiarityTrackingVersion"),
       (backup.settings ?? []).filter(({ key }) => key !== "familiarityTrackingVersion"),
       "key",

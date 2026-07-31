@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onErrorCaptured, ref } from "vue";
+import { errorMessage as getErrorMessage } from "../errors.js";
 
 const errorMessage = ref("");
 
 onErrorCaptured((error) => {
   console.error("Unhandled Vue view error", error);
-  errorMessage.value = error instanceof Error ? error.message : "發生未知錯誤。";
+  errorMessage.value = getErrorMessage(error);
   return false;
 });
 

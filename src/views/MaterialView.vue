@@ -19,10 +19,11 @@ import {
 } from "../core/settings/settings-repository.js";
 import {
   notifyLearningDataChanged,
-  subscribeToLearningData,
 } from "../core/learning/learning-sync.js";
-import { extractUniqueWords } from "../core/text/text.js";
+import { extractUniqueWords, isValidWord, normalizeWord } from "../core/text/text.js";
 import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
+import { errorMessage as getErrorMessage } from "../shared/errors.js";
+import { useLearningDataRefresh } from "../app/composables/use-learning-data-refresh.js";
 import AiAssistantDialog from "../features/material/components/AiAssistantDialog.vue";
 import {
   familiarityColors,
@@ -33,11 +34,17 @@ import MaterialReadingContent from "../features/material/components/MaterialRead
 import WordCard from "../features/material/components/WordCard.vue";
 
 type MaterialViewMode = "reading" | "vocabulary";
+
 interface WordCardController {
   close(): void;
   keepInViewport(): void;
-  open(word: string, rect: DOMRect): Promise<void>;
+  open(word: string, rect: DOMRect, shouldPin?: boolean): Promise<void>;
 }
+
+const INITIAL_VISIBLE_WORD_LIMIT = 300;
+const WORD_CARD_CLOSE_DELAY_MS = 120;
+const WORD_CARD_HOVER_DELAY_MS = 1000;
+const WORD_SELECTION_DELAY_MS = 220;
 
 const route = useRoute();
 const material = ref<BackupMaterial | null>(null);
@@ -51,7 +58,7 @@ const searchQuery = ref("");
 const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
-const visibleWordLimit = ref(300);
+const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
 const materialTitleViewport = ref<HTMLElement | null>(null);
@@ -63,9 +70,9 @@ const wordCardPinned = ref(false);
 let loadSequence = 0;
 let selectionTimer: number | undefined;
 let wordCloseTimer: number | undefined;
+let wordHoverTimer: number | undefined;
 let mediaQuery: MediaQueryList | null = null;
 let materialTitleResizeObserver: ResizeObserver | null = null;
-let unsubscribeFromLearningData: (() => void) | null = null;
 
 const knownWords = computed(() => new Set(
   [...vocabularyProgress.value.values()]
@@ -143,7 +150,7 @@ async function updateWords(words: string[], learned: boolean): Promise<void> {
     await refreshKnownWords();
     notifyLearningDataChanged("vocabulary");
   } catch (error) {
-    actionError.value = error instanceof Error ? error.message : "無法更新單字進度。";
+    actionError.value = getErrorMessage(error, "無法更新單字進度。");
   }
 }
 
@@ -156,38 +163,55 @@ async function saveFamiliarityColor(): Promise<void> {
   try {
     await setFamiliarityColor(familiarityColor.value);
   } catch (error) {
-    actionError.value = error instanceof Error ? error.message : "無法更新熟悉度顏色。";
+    actionError.value = getErrorMessage(error, "無法更新熟悉度顏色。");
   }
 }
 
-function openWordCard(word: string, rect: DOMRect, key = ""): void {
+function openWordCard(
+  word: string,
+  rect: DOMRect,
+  key = "",
+  trigger: "hover" | "focus" | "touch" | "selection" | "direct" = "direct",
+): void {
   if (wordCardPinned.value || document.activeElement?.closest(".word-card")) return;
+  window.clearTimeout(wordHoverTimer);
+  if (trigger === "hover" && !activeWord.value) {
+    wordHoverTimer = window.setTimeout(() => {
+      wordHoverTimer = undefined;
+      openWordCard(word, rect, key, "direct");
+    }, WORD_CARD_HOVER_DELAY_MS);
+    return;
+  }
   window.clearTimeout(wordCloseTimer);
   activeWord.value = key;
-  void wordCard.value?.open(word, rect);
+  void wordCard.value?.open(word, rect, trigger === "selection");
 }
 
 function scheduleWordCardClose(): void {
+  window.clearTimeout(wordHoverTimer);
   if (!activeWord.value || wordCardPinned.value) return;
   window.clearTimeout(wordCloseTimer);
   wordCloseTimer = window.setTimeout(() => {
     activeWord.value = "";
     wordCard.value?.close();
-  }, 120);
+  }, WORD_CARD_CLOSE_DELAY_MS);
 }
 
 function keepWordCardOpen(): void {
   window.clearTimeout(wordCloseTimer);
+  window.clearTimeout(wordHoverTimer);
   window.clearTimeout(selectionTimer);
 }
 
 function closeWordCard(): void {
   window.clearTimeout(wordCloseTimer);
+  window.clearTimeout(wordHoverTimer);
   activeWord.value = "";
 }
 
 function setWordCardPinned(pinned: boolean): void {
   window.clearTimeout(wordCloseTimer);
+  window.clearTimeout(wordHoverTimer);
   wordCardPinned.value = pinned;
 }
 
@@ -202,14 +226,14 @@ function handleWordSelection(): void {
     || !readingContent?.contains(selection.anchorNode)
   ) return;
 
-  const word = selection.toString().trim().replaceAll("’", "'").toLocaleLowerCase("en");
-  if (!/^[a-z]+(?:'[a-z]+)*$/.test(word)) return;
-  openWordCard(word, selection.getRangeAt(0).getBoundingClientRect());
+  const word = normalizeWord(selection.toString());
+  if (!isValidWord(word)) return;
+  openWordCard(word, selection.getRangeAt(0).getBoundingClientRect(), "", "selection");
 }
 
 function scheduleSelectionLookup(): void {
   window.clearTimeout(selectionTimer);
-  selectionTimer = window.setTimeout(handleWordSelection, 220);
+  selectionTimer = window.setTimeout(handleWordSelection, WORD_SELECTION_DELAY_MS);
 }
 
 function updateCompactLayout(): void {
@@ -241,24 +265,25 @@ function handleKeydown(event: KeyboardEvent): void {
   familiarityHelpOpen.value = false;
 }
 
-function handleVisibilityChange(): void {
-  if (document.visibilityState !== "visible") {
-    activeWord.value = "";
-    wordCard.value?.close();
-    return;
-  }
+function closeTransientWordCard(): void {
+  activeWord.value = "";
+  wordCard.value?.close();
+}
+
+function refreshLearningProgress(): void {
   void refreshKnownWords().catch((error: unknown) => {
-    actionError.value = error instanceof Error ? error.message : "無法重新載入單字進度。";
+    actionError.value = getErrorMessage(error, "無法重新載入單字進度。");
   });
 }
 
-function handlePageShow(event: PageTransitionEvent): void {
-  if (event.persisted) handleVisibilityChange();
-}
+useLearningDataRefresh({
+  onHidden: closeTransientWordCard,
+  refresh: refreshLearningProgress,
+});
 
 watch(() => route.params.id, () => void loadMaterialPage());
 watch(searchQuery, () => {
-  visibleWordLimit.value = 300;
+  visibleWordLimit.value = INITIAL_VISIBLE_WORD_LIMIT;
 });
 watch(material, async () => {
   await nextTick();
@@ -273,12 +298,9 @@ onMounted(() => {
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("selectionchange", scheduleSelectionLookup);
   document.addEventListener("keydown", handleKeydown);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  window.addEventListener("pageshow", handlePageShow);
   window.addEventListener("resize", updateCompactLayout);
   materialTitleResizeObserver = new ResizeObserver(updateMaterialTitleOverflow);
   if (materialTitleViewport.value) materialTitleResizeObserver.observe(materialTitleViewport.value);
-  unsubscribeFromLearningData = subscribeToLearningData(() => void refreshKnownWords());
   void loadMaterialPage();
 });
 
@@ -286,14 +308,12 @@ onBeforeUnmount(() => {
   loadSequence += 1;
   window.clearTimeout(selectionTimer);
   window.clearTimeout(wordCloseTimer);
+  window.clearTimeout(wordHoverTimer);
   wordCard.value?.close();
-  unsubscribeFromLearningData?.();
   mediaQuery?.removeEventListener("change", updateCompactLayout);
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   document.removeEventListener("selectionchange", scheduleSelectionLookup);
   document.removeEventListener("keydown", handleKeydown);
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
-  window.removeEventListener("pageshow", handlePageShow);
   window.removeEventListener("resize", updateCompactLayout);
   materialTitleResizeObserver?.disconnect();
   materialTitleResizeObserver = null;
@@ -387,8 +407,7 @@ onBeforeUnmount(() => {
                 role="tooltip"
               >
                 熟悉度依單字在幾份素材中被你勾選為認識來計算，同一份素材只算一次。
-                Lv.0 不顯示效果；從 Lv.1 起，標記的深度、流光亮度、速度與光暈會逐級增強。
-                Level 採 RPG 式累進門檻，素材越多，升級需要的素材數也越多。
+                尚未建立熟悉度時不顯示效果；隨著認識這個單字的素材增加，標記深度、流光與光暈會逐步增強。
                 點擊旁邊色帶可以自訂標記顏色。
               </span>
             </p>
@@ -454,7 +473,7 @@ onBeforeUnmount(() => {
               v-if="displayedWords.length < visibleWords.length"
               class="text-button"
               type="button"
-              @click="visibleWordLimit += 300"
+              @click="visibleWordLimit += INITIAL_VISIBLE_WORD_LIMIT"
             >
               顯示更多（尚有 {{ visibleWords.length - displayedWords.length }} 個）
             </button>
@@ -465,9 +484,7 @@ onBeforeUnmount(() => {
       <WordCard
         ref="wordCard"
         :style="readingPanelStyle"
-        :familiarity-levels="familiarityLevels"
         :known-words="knownWords"
-        :vocabulary-progress="vocabularyProgress"
         @close="closeWordCard"
         @enter="keepWordCardOpen"
         @leave="scheduleWordCardClose"

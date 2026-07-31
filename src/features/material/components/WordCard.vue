@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import type { VocabularyRecord } from "../../../core/models/models.js";
 import {
   getWordNote,
   saveWordNote,
 } from "../../../core/learning/word-note-repository.js";
-import { familiarityLevel, type FamiliarityLevel } from "../familiarity.js";
 import { htmlToMarkdown, renderMarkdown } from "../markdown.js";
-import { calculateWordCardTop } from "../word-card-position.js";
+import { useWordCardPosition } from "../use-word-card-position.js";
+import { errorMessage } from "../../../shared/errors.js";
 
 const props = defineProps<{
-  familiarityLevels: FamiliarityLevel[];
   knownWords: Set<string>;
-  vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 const emit = defineEmits<{
   close: [];
@@ -28,7 +25,6 @@ const selectedWord = ref("");
 const markdown = ref("");
 const savedMarkdown = ref("");
 const saveMessage = ref("");
-const familiarityDetailsOpen = ref(false);
 const visible = ref(false);
 const pinned = ref(false);
 const pointerInteractionActive = ref(false);
@@ -36,29 +32,13 @@ let pointerInsideCard = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
 let savedSelection: Range | null = null;
-let anchorRect: DOMRect | null = null;
-let cardResizeObserver: ResizeObserver | null = null;
+const {
+  clearAnchor,
+  keepInViewport: keepPositionInViewport,
+  positionAt,
+} = useWordCardPosition(card);
 
 const isKnown = computed(() => props.knownWords.has(selectedWord.value));
-const materialCount = computed(() =>
-  props.vocabularyProgress.get(selectedWord.value)?.materialCount ?? 0);
-const currentLevel = computed(() =>
-  familiarityLevel(props.familiarityLevels, materialCount.value));
-const nextLevel = computed(() =>
-  props.familiarityLevels.find((item) => item.level === currentLevel.value.level + 1));
-const levelProgress = computed(() => {
-  if (!nextLevel.value) return 100;
-  const span = nextLevel.value.minMaterials - currentLevel.value.minMaterials;
-  return Math.min(100, Math.max(
-    0,
-    ((materialCount.value - currentLevel.value.minMaterials) / span) * 100,
-  ));
-});
-const remainingMaterials = computed(() =>
-  Math.max(0, (nextLevel.value?.minMaterials ?? materialCount.value) - materialCount.value));
-const familiarityIndicatorStyle = computed(() => ({
-  "--familiarity-level-background-opacity": String(currentLevel.value.outlineOpacity),
-}));
 
 function cancelScheduledSave(): void {
   window.clearTimeout(saveTimer);
@@ -78,7 +58,7 @@ async function persistNote(): Promise<void> {
     saveMessage.value = "已儲存";
   } catch (error) {
     if (word !== selectedWord.value) return;
-    saveMessage.value = error instanceof Error ? error.message : "單字筆記儲存失敗。";
+    saveMessage.value = errorMessage(error, "單字筆記儲存失敗。");
   }
 }
 
@@ -89,11 +69,12 @@ function scheduleSave(): void {
 }
 
 function close(): void {
+  noteSequence += 1;
   void persistNote();
   window.speechSynthesis?.cancel();
   visible.value = false;
   selectedWord.value = "";
-  anchorRect = null;
+  clearAnchor();
   if (pinned.value) {
     pinned.value = false;
     emit("pinChange", false);
@@ -104,6 +85,12 @@ function close(): void {
 function togglePinned(): void {
   pinned.value = !pinned.value;
   emit("pinChange", pinned.value);
+}
+
+function pin(): void {
+  if (pinned.value) return;
+  pinned.value = true;
+  emit("pinChange", true);
 }
 
 function keepCardOpen(): void {
@@ -133,68 +120,18 @@ function handleCardFocusOut(): void {
   queueMicrotask(closeCardWhenIdle);
 }
 
-function clampPosition(left: number, top: number): { left: number; top: number } {
-  if (!card.value) return { left, top };
-  const margin = 12;
-  const rect = card.value.getBoundingClientRect();
-  const headerBottom = document.querySelector(".site-header")?.getBoundingClientRect().bottom ?? 0;
-  const minTop = Math.max(margin, headerBottom + margin);
-  return {
-    left: Math.min(window.innerWidth - rect.width - margin, Math.max(margin, left)),
-    top: Math.min(Math.max(minTop, window.innerHeight - rect.height - margin), Math.max(minTop, top)),
-  };
-}
-
-function setPosition(left: number, top: number): void {
-  if (!card.value) return;
-  const position = clampPosition(left, top);
-  card.value.style.left = `${position.left}px`;
-  card.value.style.top = `${position.top}px`;
-}
-
-function positionAt(rect: DOMRect): void {
-  if (!card.value) return;
-  anchorRect = rect;
-  const margin = 12;
-  const gap = 10;
-  const headerBottom = document.querySelector(".site-header")?.getBoundingClientRect().bottom ?? 0;
-  const minimumTop = Math.max(margin, headerBottom + margin);
-  const viewportHeight = Math.max(210, window.innerHeight - minimumTop - margin);
-  card.value.style.maxHeight = `${Math.min(560, viewportHeight)}px`;
-  const cardRect = card.value.getBoundingClientRect();
-  const top = calculateWordCardTop({
-    cardHeight: cardRect.height,
-    gap,
-    margin,
-    minimumTop,
-    targetBottom: rect.bottom,
-    targetTop: rect.top,
-    viewportHeight: window.innerHeight,
-  });
-  const left = Math.min(
-    window.innerWidth - cardRect.width - margin,
-    Math.max(margin, rect.left + (rect.width - cardRect.width) / 2),
-  );
-  card.value.style.left = `${left}px`;
-  card.value.style.top = `${top}px`;
-}
-
-async function open(word: string, rect: DOMRect): Promise<void> {
+async function open(word: string, rect: DOMRect, shouldPin = false): Promise<void> {
   const sequence = ++noteSequence;
-  cancelScheduledSave();
+  await persistNote();
+  if (sequence !== noteSequence) return;
   selectedWord.value = word;
+  pinned.value = shouldPin;
+  if (shouldPin) emit("pinChange", true);
   markdown.value = "";
   savedMarkdown.value = "";
   saveMessage.value = "";
-  familiarityDetailsOpen.value = false;
   visible.value = true;
   await nextTick();
-  if (!cardResizeObserver && card.value) {
-    cardResizeObserver = new ResizeObserver(() => {
-      if (visible.value && anchorRect) positionAt(anchorRect);
-    });
-    cardResizeObserver.observe(card.value);
-  }
   positionAt(rect);
   try {
     const note = await getWordNote(word);
@@ -261,24 +198,35 @@ function pastePlainText(event: ClipboardEvent): void {
 }
 
 function keepInViewport(): void {
-  if (!visible.value || !card.value) return;
-  const rect = card.value.getBoundingClientRect();
-  setPosition(rect.left, rect.top);
+  if (visible.value) keepPositionInViewport();
 }
 
-defineExpose({ close, keepInViewport, open });
+function pinWhenWordIsSelected(): void {
+  if (!card.value || !visible.value) return;
+  const selection = window.getSelection();
+  const heading = card.value.querySelector(".word-card__heading");
+  if (
+    !selection
+    || selection.isCollapsed
+    || selection.rangeCount === 0
+    || !heading?.contains(selection.anchorNode)
+  ) return;
+  pin();
+}
+
+defineExpose({ close, keepInViewport, open, pin });
 onMounted(() => {
   window.addEventListener("pointerup", finishCardInteraction);
   window.addEventListener("pointercancel", finishCardInteraction);
+  document.addEventListener("selectionchange", pinWhenWordIsSelected);
 });
 onBeforeUnmount(() => {
   cancelScheduledSave();
   void persistNote();
   window.speechSynthesis?.cancel();
-  cardResizeObserver?.disconnect();
-  cardResizeObserver = null;
   window.removeEventListener("pointerup", finishCardInteraction);
   window.removeEventListener("pointercancel", finishCardInteraction);
+  document.removeEventListener("selectionchange", pinWhenWordIsSelected);
 });
 </script>
 
@@ -316,42 +264,6 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <div class="word-card__actions">
-        <div
-          class="word-card__familiarity"
-          @mouseenter="familiarityDetailsOpen = true"
-          @mouseleave="familiarityDetailsOpen = false"
-        >
-          <button
-            type="button"
-            :class="{ 'has-familiarity-level': currentLevel.level > 0 }"
-            :style="familiarityIndicatorStyle"
-            :aria-expanded="familiarityDetailsOpen"
-            aria-label="查看熟悉度升級進度"
-            @focus="familiarityDetailsOpen = true"
-            @blur="familiarityDetailsOpen = false"
-            @click="familiarityDetailsOpen = true"
-          >
-            Lv.{{ currentLevel.level }}
-          </button>
-          <div v-show="familiarityDetailsOpen" class="familiarity-progress" role="tooltip">
-            <div class="familiarity-progress__heading">
-              <strong>熟悉度 Lv.{{ currentLevel.level }}</strong>
-              <span v-if="nextLevel">{{ materialCount }} / {{ nextLevel.minMaterials }}</span>
-              <span v-else>MAX</span>
-            </div>
-            <div
-              class="familiarity-progress__track"
-              role="progressbar"
-              :aria-valuenow="levelProgress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              <span :style="{ width: `${levelProgress}%` }" />
-            </div>
-            <p v-if="nextLevel">再於 {{ remainingMaterials }} 份素材標記認識即可升到 Lv.{{ nextLevel.level }}</p>
-            <p v-else>已達目前最高熟悉度等級</p>
-          </div>
-        </div>
         <button
           class="icon-button"
           type="button"

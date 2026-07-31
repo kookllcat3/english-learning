@@ -12,6 +12,7 @@ import {
   createMaterial,
   getDashboard,
   removeMaterial,
+  type MaterialSort,
   updateMaterial,
 } from "../../../core/learning/learning-repository.js";
 import {
@@ -21,7 +22,6 @@ import {
 } from "../../../core/settings/settings-repository.js";
 import {
   notifyLearningDataChanged,
-  subscribeToLearningData,
 } from "../../../core/learning/learning-sync.js";
 import type {
   ContentBlock,
@@ -30,7 +30,10 @@ import type {
 } from "../../../core/models/models.js";
 import AsyncState from "../../../shared/components/AsyncState.vue";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
+import type { DialogController } from "../../../shared/components/base-dialog.js";
+import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
 import { useDashboardStore } from "../../../app/stores/dashboard.js";
+import { useLearningDataRefresh } from "../../../app/composables/use-learning-data-refresh.js";
 
 type Dashboard = Awaited<ReturnType<typeof getDashboard>>;
 type DashboardMaterial = Dashboard["materials"][number];
@@ -39,11 +42,6 @@ interface ImportedMaterial {
   assets: Array<Omit<MaterialAssetRecord, "materialId">>;
   content: string;
   contentBlocks?: ContentBlock[];
-}
-
-interface DialogController {
-  close(): void;
-  showModal(): void;
 }
 
 const SEARCH_DELAY_MS = 180;
@@ -69,7 +67,6 @@ const pagination = ref({
   pageCount: 1,
   query: "",
   startItem: 0,
-  status: "all",
   totalItems: 0,
   totalLibraryItems: 0,
 });
@@ -78,13 +75,11 @@ const removingMaterialId = ref("");
 const pastedContent = ref("");
 const savingMaterial = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
-const sort = ref("newest");
+const sort = ref<MaterialSort>("newest");
 let searchTimer: number | undefined;
 let scrollPositionBeforeSorting: number | undefined;
-let unsubscribeFromLearningData = () => {};
 
-const hasActiveFilter = computed(() => Boolean(pagination.value.query)
-  || pagination.value.status !== "all");
+const hasActiveFilter = computed(() => Boolean(pagination.value.query));
 
 const libraryCount = computed(() => {
   if (hasActiveFilter.value) {
@@ -100,10 +95,6 @@ const emptyState = computed(() => ({
     : "新增第一份文字檔，替自己的英文學習歷程留下起點。",
   title: hasActiveFilter.value ? "找不到符合的素材" : "還沒有學習素材",
 }));
-
-function displayError(error: unknown): string {
-  return error instanceof Error ? error.message : "發生未知錯誤。";
-}
 
 function completionPercentage(material: DashboardMaterial): number {
   return Math.round(material.completion * 100);
@@ -183,10 +174,11 @@ function handlePastedContent(): void {
 }
 
 async function addMaterial(): Promise<void> {
+  const form = addForm.value;
+  if (!form) return;
   addMessage.value = "";
   savingMaterial.value = true;
-  if (!addForm.value) return;
-  const formData = new FormData(addForm.value);
+  const formData = new FormData(form);
   const fileEntry = formData.get("file");
   const file = fileEntry instanceof File ? fileEntry : null;
   const titleEntry = formData.get("title");
@@ -211,7 +203,7 @@ async function addMaterial(): Promise<void> {
     closeAddDialog();
     notifyLearningDataChanged("materials");
   } catch (error) {
-    addMessage.value = displayError(error);
+    addMessage.value = getErrorMessage(error);
   } finally {
     savingMaterial.value = false;
   }
@@ -224,7 +216,7 @@ async function renameMaterial(): Promise<void> {
     closeEditDialog();
     notifyLearningDataChanged("materials");
   } catch (error) {
-    editMessage.value = displayError(error);
+    editMessage.value = getErrorMessage(error);
   }
 }
 
@@ -232,7 +224,7 @@ async function loadDashboard(page = pagination.value.currentPage): Promise<void>
   loading.value = true;
   errorMessage.value = "";
   try {
-    const dashboard = await getDashboard(page, query.value, "all", sort.value);
+    const dashboard = await getDashboard(page, query.value, sort.value);
     materials.value = dashboard.materials;
     pagination.value = dashboard.pagination;
     dashboardStore.update({
@@ -240,7 +232,7 @@ async function loadDashboard(page = pagination.value.currentPage): Promise<void>
       statistics: dashboard.statistics,
     });
   } catch (error) {
-    errorMessage.value = displayError(error);
+    errorMessage.value = getErrorMessage(error);
   } finally {
     loading.value = false;
   }
@@ -305,7 +297,7 @@ async function removeSelectedMaterial(material: DashboardMaterial): Promise<void
     await removeMaterial(material.id);
     notifyLearningDataChanged("materials");
   } catch (error) {
-    window.alert(displayError(error));
+    window.alert(getErrorMessage(error));
   } finally {
     removingMaterialId.value = "";
   }
@@ -317,32 +309,20 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 }
 
-function handlePageShow(event: PageTransitionEvent): void {
-  if (event.persisted) void loadDashboard();
-}
-
-function handleVisibilityChange(): void {
-  if (document.visibilityState === "visible") void loadDashboard();
-}
-
 function openAddDialog(): void {
   addDialog.value?.showModal();
 }
 
+useLearningDataRefresh({ refresh: () => void loadDashboard() });
+
 onMounted(() => {
-  unsubscribeFromLearningData = subscribeToLearningData(() => void loadDashboard());
   document.addEventListener("click", handleDocumentClick);
-  window.addEventListener("pageshow", handlePageShow);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
   void Promise.all([loadSearchHistory(), loadDashboard()]);
 });
 
 onUnmounted(() => {
   window.clearTimeout(searchTimer);
-  unsubscribeFromLearningData();
   document.removeEventListener("click", handleDocumentClick);
-  window.removeEventListener("pageshow", handlePageShow);
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 </script>
 

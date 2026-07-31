@@ -45,7 +45,7 @@ test("uses one Vue app and persists learning progress through routed views", asy
   await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
   await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
 
-  await page.getByRole("link", { name: "回到素材列表" }).click();
+  await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
   await expect(page).toHaveURL(/#\/?$/);
   const knownWordMetric = page.getByRole("article").filter({ hasText: "已認識詞彙" });
   await expect(knownWordMetric.getByRole("strong")).toHaveText("1");

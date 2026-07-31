@@ -566,8 +566,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   .copy-status { min-height: 18px; margin-top: 3px; font-size: .78rem; }
 }
 
-.back-link { display: inline-block; margin-bottom: 32px; color: var(--navy); font-weight: 800; text-decoration: none; }
-.back-link:hover { color: var(--accent); }
 .material-heading { margin-bottom: 28px; }
 .detail-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(290px, .65fr); gap: 18px; align-items: start; }
 .material-view-switcher { display: none; }

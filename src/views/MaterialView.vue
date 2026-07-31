@@ -281,8 +281,6 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="page-shell">
-    <RouterLink class="back-link" :to="{ name: 'home' }">← 回到素材列表</RouterLink>
-
     <section v-if="loading" class="empty-state" aria-live="polite">
       <h1>載入素材中…</h1>
     </section>

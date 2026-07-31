@@ -69,9 +69,6 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
   }
 
   const animationName = await page.locator('[data-known-word="bear"]')
-    .evaluate((element) => {
-      const glyph = element.querySelector(".known-word__glyph");
-      return glyph ? getComputedStyle(glyph).animationName : "";
-    });
+    .evaluate((element) => getComputedStyle(element).animationName);
   expect(animationName).toBe("none");
 });

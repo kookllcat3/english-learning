@@ -1,26 +1,26 @@
 const DATABASE_NAME = "english-learning";
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 6;
 
 export const STORES = Object.freeze({
-  dictionaryCache: "dictionaryCache",
   materialAssets: "materialAssets",
   materialContents: "materialContents",
   materialTerms: "materialTerms",
   materials: "materials",
   settings: "settings",
   vocabulary: "vocabulary",
+  wordNotes: "wordNotes",
 });
 
 type StoreName = typeof STORES[keyof typeof STORES];
 
 interface StoreRecordMap {
-  dictionaryCache: DictionaryRecord;
   materialAssets: MaterialAssetRecord;
   materialContents: MaterialContentRecord;
   materialTerms: MaterialTermsRecord;
   materials: MaterialRecord;
   settings: SettingRecord;
   vocabulary: VocabularyRecord;
+  wordNotes: WordNoteRecord;
 }
 
 let databasePromise: Promise<IDBDatabase> | undefined;
@@ -60,12 +60,12 @@ function createSchema(database: IDBDatabase): void {
     const materialTerms = database.createObjectStore(STORES.materialTerms, { keyPath: "materialId" });
     materialTerms.createIndex("word", "words", { multiEntry: true });
   }
-  if (!database.objectStoreNames.contains(STORES.dictionaryCache)) {
-    database.createObjectStore(STORES.dictionaryCache, { keyPath: "word" });
-  }
   if (!database.objectStoreNames.contains(STORES.materialAssets)) {
     const materialAssets = database.createObjectStore(STORES.materialAssets, { keyPath: "id" });
     materialAssets.createIndex("materialId", "materialId");
+  }
+  if (!database.objectStoreNames.contains(STORES.wordNotes)) {
+    database.createObjectStore(STORES.wordNotes, { keyPath: "word" });
   }
 }
 
@@ -174,6 +174,7 @@ export async function writeBackupStores({
   materialContents,
   materialTerms,
   vocabulary,
+  wordNotes,
   settings,
 }: BackupStoreRecords): Promise<void> {
   const database = await openDatabase();
@@ -182,6 +183,7 @@ export async function writeBackupStores({
   const assetStore = transaction.objectStore(STORES.materialAssets);
   const vocabularyStore = transaction.objectStore(STORES.vocabulary);
   const settingsStore = transaction.objectStore(STORES.settings);
+  const wordNoteStore = transaction.objectStore(STORES.wordNotes);
   const contentStore = transaction.objectStore(STORES.materialContents);
   const termStore = transaction.objectStore(STORES.materialTerms);
 
@@ -191,12 +193,12 @@ export async function writeBackupStores({
   materialContents.forEach((content) => contentStore.put(content));
   materialTerms.forEach((terms) => termStore.put(terms));
   vocabulary.forEach((record) => vocabularyStore.put(record));
+  wordNotes.forEach((record) => wordNoteStore.put(record));
   settings.forEach((setting) => settingsStore.put(setting));
   await transactionResult(transaction);
 }
 import type {
   BackupStoreRecords,
-  DictionaryRecord,
   MaterialAssetRecord,
   MaterialBundle,
   MaterialContentRecord,
@@ -204,4 +206,5 @@ import type {
   MaterialTermsRecord,
   SettingRecord,
   VocabularyRecord,
+  WordNoteRecord,
 } from "../models/models.js";

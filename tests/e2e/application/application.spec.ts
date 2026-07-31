@@ -51,6 +51,43 @@ test("uses one Vue app and persists learning progress through routed views", asy
   await expect(knownWordMetric.getByRole("strong")).toHaveText("1");
 });
 
+test("formats and persists a Markdown word note", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await editor.fill("large animal");
+  await editor.press("ControlOrMeta+A");
+  await page.getByRole("button", { name: "粗體" }).click();
+  await expect(editor.locator("b, strong")).toHaveText("large animal");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+
+  await page.reload();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(page.getByLabel("單字 Markdown 筆記").locator("strong")).toHaveText("large animal");
+});
+
+test("pins the current word card until explicitly unpinned", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+
+  await page.getByRole("button", { name: "釘選單字卡" }).click();
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).click();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+
+  await page.locator('[data-word="runs"]').dblclick({ force: true });
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await page.getByRole("button", { name: "取消釘選單字卡" }).click();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await page.getByRole("button", { name: "關閉單字卡" }).click();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
+});
+
 test("keeps the legacy material URL compatible", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

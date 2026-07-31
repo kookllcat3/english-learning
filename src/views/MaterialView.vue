@@ -55,8 +55,11 @@ const visibleWordLimit = ref(300);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
 const wordCard = ref<WordCardController | null>(null);
+const activeWord = ref("");
+const wordCardPinned = ref(false);
 let loadSequence = 0;
 let selectionTimer: number | undefined;
+let wordCloseTimer: number | undefined;
 let mediaQuery: MediaQueryList | null = null;
 let unsubscribeFromLearningData: (() => void) | null = null;
 
@@ -153,8 +156,34 @@ async function saveFamiliarityColor(): Promise<void> {
   }
 }
 
-function openWordCard(word: string, rect: DOMRect): void {
+function openWordCard(word: string, rect: DOMRect, key = ""): void {
+  if (wordCardPinned.value) return;
+  window.clearTimeout(wordCloseTimer);
+  activeWord.value = key;
   void wordCard.value?.open(word, rect);
+}
+
+function scheduleWordCardClose(): void {
+  if (!activeWord.value || wordCardPinned.value) return;
+  window.clearTimeout(wordCloseTimer);
+  wordCloseTimer = window.setTimeout(() => {
+    activeWord.value = "";
+    wordCard.value?.close();
+  }, 120);
+}
+
+function keepWordCardOpen(): void {
+  window.clearTimeout(wordCloseTimer);
+}
+
+function closeWordCard(): void {
+  window.clearTimeout(wordCloseTimer);
+  activeWord.value = "";
+}
+
+function setWordCardPinned(pinned: boolean): void {
+  window.clearTimeout(wordCloseTimer);
+  wordCardPinned.value = pinned;
 }
 
 function handleWordSelection(): void {
@@ -186,6 +215,10 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target || familiarityLegend.value?.contains(target)) return;
   familiarityHelpOpen.value = false;
+  if (!wordCardPinned.value && !target.closest(".reading-word, .word-card, .word-item__lookup")) {
+    activeWord.value = "";
+    wordCard.value?.close();
+  }
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -195,7 +228,11 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 function handleVisibilityChange(): void {
-  if (document.visibilityState !== "visible") return;
+  if (document.visibilityState !== "visible") {
+    activeWord.value = "";
+    wordCard.value?.close();
+    return;
+  }
   void refreshKnownWords().catch((error: unknown) => {
     actionError.value = error instanceof Error ? error.message : "無法重新載入單字進度。";
   });
@@ -228,6 +265,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   loadSequence += 1;
   window.clearTimeout(selectionTimer);
+  window.clearTimeout(wordCloseTimer);
   wordCard.value?.close();
   unsubscribeFromLearningData?.();
   mediaQuery?.removeEventListener("change", updateCompactLayout);
@@ -327,6 +365,7 @@ onBeforeUnmount(() => {
             </p>
           </div>
           <MaterialReadingContent
+            :active-word="activeWord"
             :blocks="material.contentBlocks"
             :familiarity-levels="familiarityLevels"
             :known-words="knownWords"
@@ -335,6 +374,8 @@ onBeforeUnmount(() => {
             @dblclick="nextTick(handleWordSelection)"
             @keyup="handleWordSelection"
             @lookup="openWordCard"
+            @activate="openWordCard"
+            @deactivate="scheduleWordCardClose"
           />
         </article>
 
@@ -393,7 +434,18 @@ onBeforeUnmount(() => {
         </aside>
       </div>
 
-      <WordCard ref="wordCard" :known-words="knownWords" @toggle-known="toggleWord" />
+      <WordCard
+        ref="wordCard"
+        :style="readingPanelStyle"
+        :familiarity-levels="familiarityLevels"
+        :known-words="knownWords"
+        :vocabulary-progress="vocabularyProgress"
+        @close="closeWordCard"
+        @enter="keepWordCardOpen"
+        @leave="scheduleWordCardClose"
+        @pin-change="setWordCardPinned"
+        @toggle-known="toggleWord"
+      />
       <AiAssistantDialog :material="material" />
     </template>
   </main>

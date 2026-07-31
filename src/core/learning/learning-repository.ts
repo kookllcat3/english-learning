@@ -22,10 +22,11 @@ import type {
   MaterialRecord,
   SettingRecord,
   VocabularyRecord,
+  WordNoteRecord,
 } from "../models/models.js";
 
 const MAX_MATERIAL_BYTES = 2 * 1024 * 1024;
-const BACKUP_SCHEMA_VERSION = 2;
+const BACKUP_SCHEMA_VERSION = 3;
 const MATERIALS_PER_PAGE = 12;
 
 let materialIndexPromise: Promise<void> | undefined;
@@ -466,10 +467,11 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 export async function createBackup(): Promise<LearningBackup> {
-  const [materials, assets, vocabulary, settings] = await Promise.all([
+  const [materials, assets, vocabulary, wordNotes, settings] = await Promise.all([
     materialsWithContent(),
     readAll(STORES.materialAssets),
     readAll(STORES.vocabulary),
+    readAll(STORES.wordNotes),
     readAll(STORES.settings),
   ]);
   return {
@@ -481,12 +483,13 @@ export async function createBackup(): Promise<LearningBackup> {
       data: await blobToDataUrl(blob),
     }))),
     vocabulary: vocabulary.map(currentVocabularyRecord),
+    wordNotes,
     settings: settings.filter(({ key }) => key !== "familiarityTrackingVersion"),
   };
 }
 
 function validateBackup(backup: LearningBackup): void {
-  if (!backup || ![1, BACKUP_SCHEMA_VERSION].includes(backup.schemaVersion)) {
+  if (!backup || ![1, 2, BACKUP_SCHEMA_VERSION].includes(backup.schemaVersion)) {
     throw new Error("這份備份的版本不受支援。");
   }
   if (!Array.isArray(backup.materials) || !Array.isArray(backup.vocabulary)) {
@@ -494,6 +497,9 @@ function validateBackup(backup: LearningBackup): void {
   }
   if (backup.settings !== undefined && !Array.isArray(backup.settings)) {
     throw new Error("備份的設定資料格式不正確。");
+  }
+  if (backup.wordNotes !== undefined && !Array.isArray(backup.wordNotes)) {
+    throw new Error("備份的單字筆記格式不正確。");
   }
 
   const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -595,6 +601,21 @@ function validateBackup(backup: LearningBackup): void {
     vocabularyWords.add(record.word);
   });
 
+  const noteWords = new Set<string>();
+  (backup.wordNotes ?? []).forEach((note) => {
+    const isValid = isRecord(note)
+      && typeof note.word === "string"
+      && /^[a-z]+(?:'[a-z]+)*$/.test(note.word)
+      && typeof note.markdown === "string"
+      && note.markdown.length <= 20_000
+      && isTimestamp(note.createdAt)
+      && isTimestamp(note.updatedAt);
+    if (!isValid || noteWords.has(note.word)) {
+      throw new Error("備份包含格式不正確或重複的單字筆記。");
+    }
+    noteWords.add(note.word);
+  });
+
   (backup.settings ?? []).forEach((setting) => {
     const isSearchHistory = isRecord(setting)
       && setting.key === "searchHistory"
@@ -636,13 +657,14 @@ export async function previewBackup(backup: LearningBackup) {
 
 export async function importBackup(backup: LearningBackup): Promise<void> {
   validateBackup(backup);
-  const [currentMaterials, currentAssets, currentVocabulary, currentSettings] = await Promise.all([
+  const [currentMaterials, currentAssets, currentVocabulary, currentWordNotes, currentSettings] = await Promise.all([
     materialsWithContent(),
     readAll(STORES.materialAssets),
     readAll(STORES.vocabulary),
+    readAll(STORES.wordNotes),
     readAll(STORES.settings),
   ]);
-  const merge = <T extends MaterialRecord | VocabularyRecord | SettingRecord>(
+  const merge = <T extends MaterialRecord | VocabularyRecord | WordNoteRecord | SettingRecord>(
     current: T[],
     incoming: T[],
     key: keyof T,
@@ -720,6 +742,7 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
       words: bundle.words,
     })),
     vocabulary,
+    wordNotes: merge(currentWordNotes, backup.wordNotes ?? [], "word"),
     settings: merge(
       currentSettings.filter(({ key }) => key !== "familiarityTrackingVersion"),
       (backup.settings ?? []).filter(({ key }) => key !== "familiarityTrackingVersion"),

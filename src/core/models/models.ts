@@ -60,28 +60,17 @@ export interface VocabularyRecord {
   lastSeenAt?: string;
 }
 
+export interface WordNoteRecord {
+  word: string;
+  markdown: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SettingRecord {
   key: string;
   value: unknown;
   updatedAt?: string;
-}
-
-export interface DictionaryDefinition {
-  partOfSpeech: string;
-  definition: string;
-  example: string;
-}
-
-export interface DictionaryRecord {
-  word: string;
-  phonetic: string;
-  audioUrl: string;
-  definitions: DictionaryDefinition[];
-  cachedAt: string;
-}
-
-export interface DictionaryLookupResult extends DictionaryRecord {
-  fromCache: boolean;
 }
 
 export interface MaterialBundle {
@@ -98,6 +87,7 @@ export interface BackupStoreRecords {
   materialContents: MaterialContentRecord[];
   materialTerms: MaterialTermsRecord[];
   vocabulary: VocabularyRecord[];
+  wordNotes: WordNoteRecord[];
   settings: SettingRecord[];
 }
 
@@ -116,6 +106,7 @@ export interface LearningBackup {
   materials: BackupMaterial[];
   materialAssets?: BackupMaterialAsset[];
   vocabulary: VocabularyRecord[];
+  wordNotes?: WordNoteRecord[];
   settings?: SettingRecord[];
 }
 

@@ -6,12 +6,14 @@ import type {
   VocabularyRecord,
 } from "../../../core/models/models.js";
 import {
+  familiarityDelay,
   familiarityLevel,
   type FamiliarityLevel,
 } from "../familiarity.js";
 import MaterialImage from "./MaterialImage.vue";
 
 interface TextSegment {
+  delay?: number;
   label: string;
   level?: FamiliarityLevel;
   materialCount?: number;
@@ -61,6 +63,7 @@ function textSegments(text: string): TextSegment[] {
     const normalizedWord = match[0].replaceAll("’", "'").toLocaleLowerCase("en");
     const materialCount = props.vocabularyProgress.get(normalizedWord)?.materialCount ?? 0;
     segments.push({
+      delay: familiarityDelay(normalizedWord),
       label: match[0],
       level: familiarityLevel(props.familiarityLevels, materialCount),
       materialCount,
@@ -203,7 +206,12 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 '--outline-glow-blur': `${segment.level.glowBlur}px`,
               }"
               tabindex="-1"
-            >{{ segment.label }}</span>
+            ><template v-if="knownWords.has(segment.word)"><span
+              v-for="(character, characterIndex) in segment.label"
+              :key="characterIndex"
+              class="known-word__glyph"
+              :style="{ '--glyph-delay': `${(segment.delay ?? 0) + (characterIndex * 85)}ms` }"
+            >{{ character }}</span></template><template v-else>{{ segment.label }}</template></span>
             <template v-else>{{ segment.label }}</template>
           </template>
         </p>

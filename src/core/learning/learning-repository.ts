@@ -13,6 +13,7 @@ import {
   newerRecord,
 } from "./learning-records.js";
 import { extractUniqueWords, fileNameWithoutExtension, utf8Size } from "../text/text.js";
+import { AI_PROMPT_MAX_LENGTH } from "../settings/settings-repository.js";
 import type {
   BackupMaterial,
   ContentBlock,
@@ -628,12 +629,18 @@ function validateBackup(backup: LearningBackup): void {
       && typeof setting.value === "string"
       && /^#[0-9a-f]{6}$/i.test(setting.value)
       && isTimestamp(setting.updatedAt);
+    const isAiPrompt = isRecord(setting)
+      && setting.key === "aiPrompt"
+      && typeof setting.value === "string"
+      && setting.value.trim().length > 0
+      && setting.value.length <= AI_PROMPT_MAX_LENGTH
+      && isTimestamp(setting.updatedAt);
     // Accepted only so backups made during the former view-count experiment remain importable.
     const isLegacyFamiliarityTrackingVersion = isRecord(setting)
       && setting.key === "familiarityTrackingVersion"
       && Number.isInteger(setting.value)
       && isTimestamp(setting.updatedAt);
-    if (!isSearchHistory && !isFamiliarityColor && !isLegacyFamiliarityTrackingVersion) {
+    if (!isSearchHistory && !isFamiliarityColor && !isAiPrompt && !isLegacyFamiliarityTrackingVersion) {
       throw new Error("備份包含不受支援的設定資料。");
     }
   });

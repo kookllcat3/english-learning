@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { BackupMaterial } from "../../../core/models/models.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 import { usePageActionsStore } from "../../../app/stores/page-actions.js";
+import { getAiPrompt, setAiPrompt } from "../../../core/settings/settings-repository.js";
 
 interface DialogController {
   close(): void;
@@ -44,6 +45,7 @@ const dialog = ref<DialogController | null>(null);
 const prompt = ref(QUICK_PROMPT);
 const status = ref("");
 const statusIsError = ref(false);
+let promptSaveTimer: number | undefined;
 
 const materialCharacters = computed(() => props.material.content.length.toLocaleString());
 const materialSizeMessage = computed(() =>
@@ -66,6 +68,28 @@ function showStatus(message: string, isError = false): void {
   statusIsError.value = isError;
 }
 
+async function restorePrompt(): Promise<void> {
+  try {
+    prompt.value = await getAiPrompt(QUICK_PROMPT);
+  } catch {
+    prompt.value = QUICK_PROMPT;
+  }
+}
+
+function schedulePromptSave(value: string): void {
+  window.clearTimeout(promptSaveTimer);
+  promptSaveTimer = window.setTimeout(() => {
+    void setAiPrompt(value).catch(() => {
+      showStatus("提示詞儲存失敗，請稍後再試。", true);
+    });
+  }, 400);
+}
+
+function restoreDefaultPrompt(): void {
+  prompt.value = QUICK_PROMPT;
+  showStatus("已恢復預設提示詞。");
+}
+
 async function copy(text: string, successMessage: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
@@ -78,11 +102,13 @@ async function copy(text: string, successMessage: string): Promise<void> {
 watch(
   () => pageActions.aiAssistantRequest,
   () => {
-    prompt.value = QUICK_PROMPT;
     showStatus("");
+    void restorePrompt();
     dialog.value?.showModal();
   },
 );
+watch(prompt, (value) => schedulePromptSave(value));
+onBeforeUnmount(() => window.clearTimeout(promptSaveTimer));
 </script>
 
 <template>
@@ -99,13 +125,16 @@ watch(
         <li v-for="step in GUIDE_STEPS" :key="step">{{ step }}</li>
       </ol>
     </section>
-    <label class="field ai-prompt-field">
-      <span>可編輯提示詞</span>
-      <textarea v-model="prompt" rows="10" />
+    <div class="field ai-prompt-field">
+      <span class="ai-prompt-label">
+        <label for="ai-assistant-prompt">可編輯提示詞</label>
+        <button class="text-button" type="button" @click="restoreDefaultPrompt">恢復預設</button>
+      </span>
+      <textarea id="ai-assistant-prompt" v-model="prompt" rows="10" />
       <small :class="{ 'is-warning': props.material.content.length > 50_000 }">
         {{ materialSizeMessage }}
       </small>
-    </label>
+    </div>
     <details class="ai-recovery">
       <summary>AI 忘記或偏離素材時怎麼辦？</summary>
       <p>複製以下提醒貼回同一個對話，要求 AI 重新讀取素材。</p>

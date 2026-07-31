@@ -110,6 +110,19 @@ function togglePinned(): void {
   emit("pinChange", pinned.value);
 }
 
+function keepCardOpen(): void {
+  emit("enter");
+}
+
+function closeCardWhenIdle(): void {
+  if (card.value?.contains(document.activeElement)) return;
+  emit("leave");
+}
+
+function handleCardFocusOut(): void {
+  queueMicrotask(closeCardWhenIdle);
+}
+
 function clampPosition(left: number, top: number): { left: number; top: number } {
   if (!card.value) return { left, top };
   const margin = 12;
@@ -272,8 +285,11 @@ onBeforeUnmount(() => {
     class="word-card"
     :class="{ 'is-dragging': dragging }"
     aria-labelledby="word-card-title"
-    @pointerenter="emit('enter')"
-    @pointerleave="emit('leave')"
+    @pointerenter="keepCardOpen"
+    @pointerleave="closeCardWhenIdle"
+    @pointerdown.stop
+    @focusin="keepCardOpen"
+    @focusout="handleCardFocusOut"
     @pointermove="moveDrag"
     @pointerup="stopDrag"
     @pointercancel="stopDrag"

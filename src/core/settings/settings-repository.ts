@@ -4,6 +4,8 @@ import type { SettingRecord } from "../models/models.js";
 const DEFAULT_FAMILIARITY_COLOR = "#d86b48";
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const SEARCH_HISTORY_LIMIT = 8;
+const AI_PROMPT_KEY = "aiPrompt";
+export const AI_PROMPT_MAX_LENGTH = 20_000;
 
 export async function getFamiliarityColor(): Promise<string> {
   const record = await readOne(STORES.settings, "familiarityColor");
@@ -54,6 +56,25 @@ export async function clearSearchHistory(): Promise<void> {
   await writeOne(STORES.settings, {
     key: "searchHistory",
     value: [],
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function getAiPrompt(defaultPrompt: string): Promise<string> {
+  const record = await readOne(STORES.settings, AI_PROMPT_KEY);
+  return typeof record?.value === "string" && record.value.trim()
+    ? record.value
+    : defaultPrompt;
+}
+
+export async function setAiPrompt(prompt: string): Promise<SettingRecord> {
+  const normalizedPrompt = prompt.trim();
+  if (!normalizedPrompt || normalizedPrompt.length > AI_PROMPT_MAX_LENGTH) {
+    throw new Error("AI 提示詞長度不正確。");
+  }
+  return writeOne(STORES.settings, {
+    key: AI_PROMPT_KEY,
+    value: normalizedPrompt,
     updatedAt: new Date().toISOString(),
   });
 }

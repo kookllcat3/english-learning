@@ -5,23 +5,6 @@ const MAX_IMAGES = 50;
 const RELATIONSHIP_NAMESPACE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
-interface JsZipFile {
-  async(type: "blob"): Promise<Blob>;
-  async(type: "text"): Promise<string>;
-}
-
-interface JsZipArchive {
-  file(path: string): JsZipFile | null;
-}
-
-interface JsZipConstructor {
-  loadAsync(file: Blob): Promise<JsZipArchive>;
-}
-
-declare global {
-  var JSZip: JsZipConstructor | undefined;
-}
-
 interface TextPart {
   type: "text";
   text: string;

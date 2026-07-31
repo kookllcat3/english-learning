@@ -5,6 +5,7 @@ import {
   importBackup,
   previewBackup,
 } from "../../../core/learning/learning-repository.js";
+import { createBackupPackage, readBackupPackage } from "../../../core/backup/backup-package.js";
 import { notifyLearningDataChanged } from "../../../core/learning/learning-sync.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 
@@ -53,10 +54,10 @@ async function exportBackup(): Promise<void> {
   backupStatus.value = "";
   try {
     const backup = await createBackup();
-    const blob = new Blob([`${JSON.stringify(backup, null, 2)}\n`], { type: "application/json" });
+    const blob = await createBackupPackage(backup);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `english-learning-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `english-learning-backup-${new Date().toISOString().slice(0, 10)}.elpkg`;
     link.click();
     URL.revokeObjectURL(link.href);
     backupStatus.value = "備份已下載，請妥善保存。";
@@ -71,7 +72,10 @@ async function importBackupFile(file: File): Promise<void> {
     if (file.size > MAX_BACKUP_BYTES) {
       throw new Error("備份檔案請控制在 100 MB 以內。");
     }
-    const backup = JSON.parse(await file.text());
+    const isJson = file.type === "application/json" || file.name.toLocaleLowerCase().endsWith(".json");
+    const backup = isJson
+      ? JSON.parse(await file.text())
+      : (await readBackupPackage(file)).backup;
     const preview = await previewBackup(backup);
     const summary = [
       `新增素材 ${preview.newMaterials} 份`,
@@ -106,8 +110,8 @@ async function chooseBackupFile(): Promise<void> {
       multiple: false,
       excludeAcceptAllOption: false,
       types: [{
-        description: "英文學習庫 JSON 備份",
-        accept: { "application/json": [".json"] },
+        description: "英文學習庫備份封裝",
+        accept: { "application/zip": [".elpkg"], "application/json": [".json"] },
       }],
     });
     if (handle) await importBackupFile(await handle.getFile());
@@ -150,7 +154,7 @@ async function chooseBackupFile(): Promise<void> {
         <span class="data-action-card__icon" aria-hidden="true">↓</span>
         <div>
           <h3>匯出完整備份</h3>
-          <p>下載一份 JSON，包含所有素材、已認識詞彙與設定。</p>
+          <p>下載一份可持續擴充的備份封裝，包含素材、進度、筆記、設定與圖片。</p>
           <button class="button button--primary" type="button" @click="exportBackup">下載備份</button>
         </div>
       </section>
@@ -158,9 +162,9 @@ async function chooseBackupFile(): Promise<void> {
         <span class="data-action-card__icon" aria-hidden="true">↑</span>
         <div>
           <h3>匯入並合併</h3>
-          <p>選擇先前匯出的 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
+          <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
           <button class="button button--secondary" type="button" @click="chooseBackupFile">選擇備份</button>
-          <input ref="backupFile" type="file" accept=".json,application/json" hidden @change="handleBackupFile">
+          <input ref="backupFile" type="file" accept=".elpkg,.json,application/zip,application/json" hidden @change="handleBackupFile">
         </div>
       </section>
     </div>

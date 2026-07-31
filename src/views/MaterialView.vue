@@ -54,6 +54,9 @@ const actionError = ref("");
 const visibleWordLimit = ref(300);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
+const materialTitleViewport = ref<HTMLElement | null>(null);
+const materialTitleTrack = ref<HTMLElement | null>(null);
+const materialTitleOverflowing = ref(false);
 const wordCard = ref<WordCardController | null>(null);
 const activeWord = ref("");
 const wordCardPinned = ref(false);
@@ -61,6 +64,7 @@ let loadSequence = 0;
 let selectionTimer: number | undefined;
 let wordCloseTimer: number | undefined;
 let mediaQuery: MediaQueryList | null = null;
+let materialTitleResizeObserver: ResizeObserver | null = null;
 let unsubscribeFromLearningData: (() => void) | null = null;
 
 const knownWords = computed(() => new Set(
@@ -157,7 +161,7 @@ async function saveFamiliarityColor(): Promise<void> {
 }
 
 function openWordCard(word: string, rect: DOMRect, key = ""): void {
-  if (wordCardPinned.value) return;
+  if (wordCardPinned.value || document.activeElement?.closest(".word-card")) return;
   window.clearTimeout(wordCloseTimer);
   activeWord.value = key;
   void wordCard.value?.open(word, rect);
@@ -174,6 +178,7 @@ function scheduleWordCardClose(): void {
 
 function keepWordCardOpen(): void {
   window.clearTimeout(wordCloseTimer);
+  window.clearTimeout(selectionTimer);
 }
 
 function closeWordCard(): void {
@@ -187,6 +192,7 @@ function setWordCardPinned(pinned: boolean): void {
 }
 
 function handleWordSelection(): void {
+  if (document.activeElement?.closest(".word-card")) return;
   const selection = window.getSelection();
   const readingContent = document.querySelector(".reading-content");
   if (
@@ -209,6 +215,14 @@ function scheduleSelectionLookup(): void {
 function updateCompactLayout(): void {
   compactLayout.value = mediaQuery?.matches ?? false;
   wordCard.value?.keepInViewport();
+}
+
+function updateMaterialTitleOverflow(): void {
+  const viewport = materialTitleViewport.value;
+  const track = materialTitleTrack.value;
+  const distance = viewport && track ? Math.max(0, track.scrollWidth - viewport.clientWidth) : 0;
+  viewport?.style.setProperty("--title-distance", `${distance}px`);
+  materialTitleOverflowing.value = distance > 0;
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -246,6 +260,10 @@ watch(() => route.params.id, () => void loadMaterialPage());
 watch(searchQuery, () => {
   visibleWordLimit.value = 300;
 });
+watch(material, async () => {
+  await nextTick();
+  updateMaterialTitleOverflow();
+});
 
 onMounted(() => {
   document.body.classList.add("material-page");
@@ -258,6 +276,8 @@ onMounted(() => {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("pageshow", handlePageShow);
   window.addEventListener("resize", updateCompactLayout);
+  materialTitleResizeObserver = new ResizeObserver(updateMaterialTitleOverflow);
+  if (materialTitleViewport.value) materialTitleResizeObserver.observe(materialTitleViewport.value);
   unsubscribeFromLearningData = subscribeToLearningData(() => void refreshKnownWords());
   void loadMaterialPage();
 });
@@ -275,6 +295,8 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("pageshow", handlePageShow);
   window.removeEventListener("resize", updateCompactLayout);
+  materialTitleResizeObserver?.disconnect();
+  materialTitleResizeObserver = null;
   document.body.classList.remove("material-page");
 });
 </script>
@@ -294,7 +316,16 @@ onBeforeUnmount(() => {
     <template v-else>
       <section class="material-heading" aria-labelledby="material-title">
         <p class="eyebrow">Reading material</p>
-        <h1 id="material-title">{{ material.title }}</h1>
+        <h1 id="material-title">
+          <span
+            ref="materialTitleViewport"
+            class="material-title-viewport"
+            :class="{ 'is-overflowing': materialTitleOverflowing }"
+            tabindex="0"
+          >
+            <span ref="materialTitleTrack" class="material-title-track">{{ material.title }}</span>
+          </span>
+        </h1>
         <p v-if="material.description" class="lead">{{ material.description }}</p>
       </section>
 

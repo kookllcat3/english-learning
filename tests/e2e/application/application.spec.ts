@@ -58,6 +58,10 @@ test("formats and persists a Markdown word note", async ({ page }) => {
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
   const editor = page.getByLabel("單字 Markdown 筆記");
+  await editor.click();
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+  await page.locator('[data-word="runs"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
   await editor.fill("large animal");
   await editor.press("ControlOrMeta+A");
   await page.getByRole("button", { name: "粗體" }).click();
@@ -88,6 +92,22 @@ test("pins the current word card until explicitly unpinned", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
 });
 
+test("keeps an edited AI prompt when focus leaves the editor", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
+
+  const promptEditor = page.getByLabel("可編輯提示詞");
+  await promptEditor.fill("我的自訂提示詞");
+  await page.getByRole("heading", { name: "啟用 AI 學習" }).click();
+  await expect(promptEditor).toHaveValue("我的自訂提示詞");
+  await page.waitForTimeout(500);
+
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
+  await expect(page.getByLabel("可編輯提示詞")).toHaveValue("我的自訂提示詞");
+});
+
 test("keeps the legacy material URL compatible", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
@@ -102,6 +122,12 @@ test("keeps the legacy material URL compatible", async ({ page }) => {
 
 test("exports, removes, and restores a complete backup", async ({ page }) => {
   await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
+  await page.getByLabel("可編輯提示詞").fill("備份中的自訂 AI 提示詞");
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
 
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   const downloadPromise = page.waitForEvent("download");
@@ -128,6 +154,9 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
+  await expect(page.getByLabel("可編輯提示詞")).toHaveValue("備份中的自訂 AI 提示詞");
 });
 
 test("reports an invalid backup without changing the library", async ({ page }) => {

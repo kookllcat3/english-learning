@@ -856,7 +856,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   display: flex;
   width: min(380px, calc(100vw - 24px));
   max-height: min(560px, calc(100vh - 24px));
-  padding: 20px;
+  padding: 16px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -869,23 +869,49 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .word-card__heading {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
+  min-height: 36px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
-.word-card.is-dragging { box-shadow: 0 22px 60px rgb(23 32 51 / 30%); }
-.word-card.is-dragging .word-card__heading { cursor: grabbing; }
-.word-card__heading h2 { min-width: 0; margin: 0 6px 0 0; overflow-wrap: anywhere; font-size: 1.55rem; }
-.word-card__actions { display: flex; gap: 2px; }
-.word-card__actions .icon-button,
-.word-card__close {
-  width: 40px;
-  height: 40px;
-  border: 1px solid transparent;
+.word-card__word {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 4px;
+}
+.word-card__word h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  flex: 0 1 auto;
+  font-size: 1.45rem;
+  line-height: 36px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.word-card__actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+.word-card__heading .icon-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
   border-radius: 10px;
+  place-items: center;
+  color: #536077;
+  background: #fbfbfa;
+  font-size: 1rem;
+  line-height: 1;
 }
-.word-card__actions svg {
+.word-card__heading .icon-button svg {
+  display: block;
   width: 18px;
   height: 18px;
   fill: none;
@@ -894,28 +920,35 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   stroke-linejoin: round;
   stroke-width: 1.8;
 }
-.word-card__actions .icon-button:hover,
-.word-card__close:hover { border-color: var(--line); background: #f5f6f8; }
-.word-card__actions .icon-button.is-active {
+.word-card__heading .icon-button:hover,
+.word-card__heading .icon-button:focus-visible {
+  border-color: #c9d0dc;
+  background: white;
+}
+.word-card__heading .icon-button.is-active {
   color: var(--accent);
   border-color: rgb(216 107 72 / 24%);
   background: var(--accent-soft);
 }
-.word-card__close { margin-left: auto; }
+.word-card__heading .icon-button { flex: 0 0 auto; }
 .word-card__familiarity {
   position: relative;
-  align-self: flex-start;
-  margin: 8px 0 14px;
+  flex: 0 0 auto;
   font-size: .78rem;
 }
 .word-card__familiarity > button {
-  padding: 3px 7px;
+  display: inline-grid;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 9px;
   border: 1px solid rgb(var(--familiarity-base-rgb, 216 107 72) / 18%);
-  border-radius: 999px;
+  border-radius: 10px;
   color: rgb(var(--familiarity-base-rgb, 216 107 72));
   background: rgb(var(--familiarity-base-rgb, 216 107 72) / 12%);
+  place-items: center;
   font: inherit;
   font-weight: 800;
+  line-height: 1;
   cursor: pointer;
 }
 .word-card__familiarity > button:hover,
@@ -928,7 +961,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   position: absolute;
   z-index: 2;
   top: calc(100% + 7px);
-  left: 0;
+  right: 0;
   width: min(270px, calc(100vw - 56px));
   padding: 12px;
   border: 1px solid var(--line);
@@ -966,17 +999,17 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .word-note__toolbar {
   display: flex;
   flex: 0 0 auto;
-  gap: 4px;
+  gap: 3px;
   overflow-x: auto;
-  padding: 4px;
+  padding: 2px;
   border: 1px solid var(--line);
   border-radius: 10px 10px 0 0;
   background: #f5f6f8;
 }
 .word-note__toolbar button {
-  min-width: 34px;
-  min-height: 34px;
-  padding: 4px 8px;
+  min-width: 32px;
+  min-height: 30px;
+  padding: 2px 7px;
   border: 0;
   border-radius: 7px;
   color: var(--navy);
@@ -988,10 +1021,11 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .word-note__toolbar-spacer { flex: 1; }
 .word-note__editor {
   width: 100%;
-  min-height: 0;
-  height: 190px;
+  min-height: 88px;
+  height: 120px;
   padding: 12px;
   overflow: auto;
+  resize: none;
   border: 1px solid var(--line);
   border-top: 0;
   border-radius: 0 0 10px 10px;
@@ -1012,7 +1046,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   border-left: 3px solid var(--line);
   color: var(--muted);
 }
-.word-note__status { min-height: 18px; margin-top: 4px; color: var(--muted); text-align: right; }
+.word-note__status { margin-top: 4px; color: var(--muted); text-align: right; }
 .ai-assistant-dialog { width: min(720px, calc(100% - 32px)); max-height: min(860px, calc(100vh - 32px)); }
 .ai-dialog-intro { margin: 16px 0 20px; color: var(--muted); }
 .ai-guide { padding: 16px 18px; border-radius: 12px; background: #f1f4f9; }

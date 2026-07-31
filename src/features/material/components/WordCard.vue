@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { VocabularyRecord } from "../../../core/models/models.js";
 import {
   getWordNote,
@@ -7,14 +7,7 @@ import {
 } from "../../../core/learning/word-note-repository.js";
 import { familiarityLevel, type FamiliarityLevel } from "../familiarity.js";
 import { htmlToMarkdown, renderMarkdown } from "../markdown.js";
-
-interface DragState {
-  pointerId: number;
-  startLeft: number;
-  startTop: number;
-  startX: number;
-  startY: number;
-}
+import { calculateWordCardTop } from "../word-card-position.js";
 
 const props = defineProps<{
   familiarityLevels: FamiliarityLevel[];
@@ -37,13 +30,14 @@ const savedMarkdown = ref("");
 const saveMessage = ref("");
 const familiarityDetailsOpen = ref(false);
 const visible = ref(false);
-const dragged = ref(false);
-const dragging = ref(false);
 const pinned = ref(false);
-let dragState: DragState | null = null;
+const pointerInteractionActive = ref(false);
+let pointerInsideCard = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
 let savedSelection: Range | null = null;
+let anchorRect: DOMRect | null = null;
+let cardResizeObserver: ResizeObserver | null = null;
 
 const isKnown = computed(() => props.knownWords.has(selectedWord.value));
 const materialCount = computed(() =>
@@ -94,10 +88,9 @@ function scheduleSave(): void {
 function close(): void {
   void persistNote();
   window.speechSynthesis?.cancel();
-  dragState = null;
-  dragging.value = false;
   visible.value = false;
   selectedWord.value = "";
+  anchorRect = null;
   if (pinned.value) {
     pinned.value = false;
     emit("pinChange", false);
@@ -111,12 +104,26 @@ function togglePinned(): void {
 }
 
 function keepCardOpen(): void {
+  pointerInsideCard = true;
   emit("enter");
 }
 
 function closeCardWhenIdle(): void {
+  pointerInsideCard = false;
+  if (pointerInteractionActive.value) return;
   if (card.value?.contains(document.activeElement)) return;
   emit("leave");
+}
+
+function beginCardInteraction(event: PointerEvent): void {
+  if (event.button !== 0) return;
+  pointerInteractionActive.value = true;
+  emit("enter");
+}
+
+function finishCardInteraction(): void {
+  pointerInteractionActive.value = false;
+  if (!pointerInsideCard) closeCardWhenIdle();
 }
 
 function handleCardFocusOut(): void {
@@ -144,17 +151,29 @@ function setPosition(left: number, top: number): void {
 
 function positionAt(rect: DOMRect): void {
   if (!card.value) return;
-  const cardRect = card.value.getBoundingClientRect();
+  anchorRect = rect;
   const margin = 12;
-  const top = rect.bottom + 10;
-  const availableHeight = Math.max(210, window.innerHeight - top - margin);
+  const gap = 10;
+  const headerBottom = document.querySelector(".site-header")?.getBoundingClientRect().bottom ?? 0;
+  const minimumTop = Math.max(margin, headerBottom + margin);
+  const viewportHeight = Math.max(210, window.innerHeight - minimumTop - margin);
+  card.value.style.maxHeight = `${Math.min(560, viewportHeight)}px`;
+  const cardRect = card.value.getBoundingClientRect();
+  const top = calculateWordCardTop({
+    cardHeight: cardRect.height,
+    gap,
+    margin,
+    minimumTop,
+    targetBottom: rect.bottom,
+    targetTop: rect.top,
+    viewportHeight: window.innerHeight,
+  });
   const left = Math.min(
     window.innerWidth - cardRect.width - margin,
     Math.max(margin, rect.left + (rect.width - cardRect.width) / 2),
   );
   card.value.style.left = `${left}px`;
   card.value.style.top = `${top}px`;
-  card.value.style.maxHeight = `${availableHeight}px`;
 }
 
 async function open(word: string, rect: DOMRect): Promise<void> {
@@ -165,9 +184,14 @@ async function open(word: string, rect: DOMRect): Promise<void> {
   savedMarkdown.value = "";
   saveMessage.value = "";
   familiarityDetailsOpen.value = false;
-  dragged.value = false;
   visible.value = true;
   await nextTick();
+  if (!cardResizeObserver && card.value) {
+    cardResizeObserver = new ResizeObserver(() => {
+      if (visible.value && anchorRect) positionAt(anchorRect);
+    });
+    cardResizeObserver.observe(card.value);
+  }
   positionAt(rect);
   try {
     const note = await getWordNote(word);
@@ -233,37 +257,6 @@ function pastePlainText(event: ClipboardEvent): void {
   updateMarkdownFromEditor();
 }
 
-function startDrag(event: PointerEvent): void {
-  const target = event.target instanceof Element ? event.target : null;
-  if (!card.value || event.button !== 0 || target?.closest("button")) return;
-  const rect = card.value.getBoundingClientRect();
-  dragState = {
-    pointerId: event.pointerId,
-    startLeft: rect.left,
-    startTop: rect.top,
-    startX: event.clientX,
-    startY: event.clientY,
-  };
-  dragged.value = true;
-  dragging.value = true;
-  card.value.setPointerCapture(event.pointerId);
-}
-
-function moveDrag(event: PointerEvent): void {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  setPosition(
-    dragState.startLeft + event.clientX - dragState.startX,
-    dragState.startTop + event.clientY - dragState.startY,
-  );
-}
-
-function stopDrag(event: PointerEvent): void {
-  if (!card.value || !dragState || event.pointerId !== dragState.pointerId) return;
-  if (card.value.hasPointerCapture(event.pointerId)) card.value.releasePointerCapture(event.pointerId);
-  dragState = null;
-  dragging.value = false;
-}
-
 function keepInViewport(): void {
   if (!visible.value || !card.value) return;
   const rect = card.value.getBoundingClientRect();
@@ -271,10 +264,18 @@ function keepInViewport(): void {
 }
 
 defineExpose({ close, keepInViewport, open });
+onMounted(() => {
+  window.addEventListener("pointerup", finishCardInteraction);
+  window.addEventListener("pointercancel", finishCardInteraction);
+});
 onBeforeUnmount(() => {
   cancelScheduledSave();
   void persistNote();
   window.speechSynthesis?.cancel();
+  cardResizeObserver?.disconnect();
+  cardResizeObserver = null;
+  window.removeEventListener("pointerup", finishCardInteraction);
+  window.removeEventListener("pointercancel", finishCardInteraction);
 });
 </script>
 
@@ -283,28 +284,24 @@ onBeforeUnmount(() => {
     v-show="visible"
     ref="card"
     class="word-card"
-    :class="{ 'is-dragging': dragging }"
     aria-labelledby="word-card-title"
     @pointerenter="keepCardOpen"
     @pointerleave="closeCardWhenIdle"
-    @pointerdown.stop
+    @pointerdown.stop="beginCardInteraction"
     @focusin="keepCardOpen"
     @focusout="handleCardFocusOut"
-    @pointermove="moveDrag"
-    @pointerup="stopDrag"
-    @pointercancel="stopDrag"
   >
-    <div class="word-card__heading" @pointerdown="startDrag">
-      <h2 id="word-card-title" lang="en">{{ selectedWord }}</h2>
-      <div class="word-card__actions">
-        <button class="icon-button" type="button" aria-label="播放單字發音" title="發音" @click="speak">
+    <div class="word-card__heading">
+      <div class="word-card__word">
+        <h2 id="word-card-title" lang="en">{{ selectedWord }}</h2>
+        <button class="icon-button word-card__pronounce" type="button" aria-label="播放單字發音" title="播放發音" @click="speak">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 10v4h3l4 3V7l-4 3H5Z" />
             <path d="M16 9.5a4 4 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10" />
           </svg>
         </button>
         <button
-          class="icon-button"
+          class="icon-button word-card__known"
           type="button"
           :class="{ 'is-active': isKnown }"
           :aria-label="isKnown ? '標記為不認識' : '標記為已認識'"
@@ -314,6 +311,42 @@ onBeforeUnmount(() => {
         >
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
         </button>
+      </div>
+      <div class="word-card__actions">
+        <div
+          class="word-card__familiarity"
+          @mouseenter="familiarityDetailsOpen = true"
+          @mouseleave="familiarityDetailsOpen = false"
+        >
+          <button
+            type="button"
+            :aria-expanded="familiarityDetailsOpen"
+            aria-label="查看熟悉度升級進度"
+            @focus="familiarityDetailsOpen = true"
+            @blur="familiarityDetailsOpen = false"
+            @click="familiarityDetailsOpen = true"
+          >
+            Lv.{{ currentLevel.level }}
+          </button>
+          <div v-show="familiarityDetailsOpen" class="familiarity-progress" role="tooltip">
+            <div class="familiarity-progress__heading">
+              <strong>熟悉度 Lv.{{ currentLevel.level }}</strong>
+              <span v-if="nextLevel">{{ materialCount }} / {{ nextLevel.minMaterials }}</span>
+              <span v-else>MAX</span>
+            </div>
+            <div
+              class="familiarity-progress__track"
+              role="progressbar"
+              :aria-valuenow="levelProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span :style="{ width: `${levelProgress}%` }" />
+            </div>
+            <p v-if="nextLevel">再於 {{ remainingMaterials }} 份素材標記認識即可升到 Lv.{{ nextLevel.level }}</p>
+            <p v-else>已達目前最高熟悉度等級</p>
+          </div>
+        </div>
         <button
           class="icon-button"
           type="button"
@@ -328,42 +361,6 @@ onBeforeUnmount(() => {
             <path d="M12 14v6" />
           </svg>
         </button>
-      </div>
-      <button class="icon-button word-card__close" type="button" aria-label="關閉單字卡" title="關閉" @click="close">×</button>
-    </div>
-
-    <div
-      class="word-card__familiarity"
-      @mouseenter="familiarityDetailsOpen = true"
-      @mouseleave="familiarityDetailsOpen = false"
-    >
-      <button
-        type="button"
-        :aria-expanded="familiarityDetailsOpen"
-        aria-label="查看熟悉度升級進度"
-        @focus="familiarityDetailsOpen = true"
-        @blur="familiarityDetailsOpen = false"
-        @click="familiarityDetailsOpen = true"
-      >
-        Lv.{{ currentLevel.level }}
-      </button>
-      <div v-show="familiarityDetailsOpen" class="familiarity-progress" role="tooltip">
-        <div class="familiarity-progress__heading">
-          <strong>熟悉度 Lv.{{ currentLevel.level }}</strong>
-          <span v-if="nextLevel">{{ materialCount }} / {{ nextLevel.minMaterials }}</span>
-          <span v-else>MAX</span>
-        </div>
-        <div
-          class="familiarity-progress__track"
-          role="progressbar"
-          :aria-valuenow="levelProgress"
-          aria-valuemin="0"
-          aria-valuemax="100"
-        >
-          <span :style="{ width: `${levelProgress}%` }" />
-        </div>
-        <p v-if="nextLevel">再於 {{ remainingMaterials }} 份素材標記認識即可升到 Lv.{{ nextLevel.level }}</p>
-        <p v-else>已達目前最高熟悉度等級</p>
       </div>
     </div>
 
@@ -389,7 +386,7 @@ onBeforeUnmount(() => {
         @paste="pastePlainText"
         @blur="persistNote"
       />
-      <small class="word-note__status" role="status">{{ saveMessage }}</small>
+      <small v-if="saveMessage" class="word-note__status" role="status">{{ saveMessage }}</small>
     </div>
   </aside>
 </template>

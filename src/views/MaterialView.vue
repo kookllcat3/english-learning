@@ -397,7 +397,6 @@ onBeforeUnmount(() => {
             :active-word="activeWord"
             :blocks="material.contentBlocks"
             :familiarity-levels="familiarityLevels"
-            :known-words="knownWords"
             :vocabulary-progress="vocabularyProgress"
             @mouseup="handleWordSelection"
             @dblclick="nextTick(handleWordSelection)"

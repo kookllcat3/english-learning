@@ -13,13 +13,17 @@ function alphabeticWord(index: number): string {
   return `word${word}`;
 }
 
-async function createMaterial(page: Page): Promise<void> {
+async function createMaterial(
+  page: Page,
+  title = materialTitle,
+  content = materialContent,
+): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill(materialTitle);
-  await page.getByLabel("直接貼上文字").fill(materialContent);
+  await page.getByLabel("素材名稱（選填）").fill(title);
+  await page.getByLabel("直接貼上文字").fill(content);
   await page.getByRole("button", { name: "儲存素材" }).click();
-  await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
 }
 
 test("uses one Vue app and persists learning progress through routed views", async ({ page }) => {
@@ -51,6 +55,31 @@ test("uses one Vue app and persists learning progress through routed views", asy
   await expect(knownWordMetric.getByRole("strong")).toHaveText("1");
 });
 
+test("shows global familiarity in an unread material", async ({ page }) => {
+  const learnedMaterialTitle = "Familiarity source";
+  const unreadMaterialTitle = "Unread material";
+  await createMaterial(page, learnedMaterialTitle, "A bear sleeps.");
+
+  const learnedMaterialCard = page.getByRole("article").filter({ hasText: learnedMaterialTitle });
+  await learnedMaterialCard.getByRole("link", { name: "開始閱讀" }).click();
+  if ((page.viewportSize()?.width ?? 0) <= 720) {
+    await page.getByRole("button", { name: "素材詞彙" }).click();
+  }
+  await page.getByRole("checkbox", { name: /bear/ }).check();
+  await expect(page.locator('[data-word="bear"]').first()).toHaveAttribute(
+    "data-familiarity-level",
+    "1",
+  );
+
+  await createMaterial(page, unreadMaterialTitle, "The bear wakes.");
+  const unreadMaterialCard = page.getByRole("article").filter({ hasText: unreadMaterialTitle });
+  await unreadMaterialCard.getByRole("link", { name: "開始閱讀" }).click();
+
+  const unreadBear = page.locator('[data-word="bear"]').first();
+  await expect(unreadBear).toHaveClass(/known-word/);
+  await expect(unreadBear.locator(".known-word__glyph")).toHaveCount(4);
+});
+
 test("formats and persists a Markdown word note", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
@@ -66,6 +95,20 @@ test("formats and persists a Markdown word note", async ({ page }) => {
   const rightHeaderActions = page.locator(".word-card__actions").getByRole("button");
   await expect(rightHeaderActions.nth(0)).toHaveAccessibleName("查看熟悉度升級進度");
   await expect(rightHeaderActions.nth(1)).toHaveAccessibleName("釘選單字卡");
+  await expect(rightHeaderActions.nth(0)).toHaveCSS("color", "rgb(32, 37, 54)");
+  await expect(rightHeaderActions.nth(0)).toHaveCSS("background-color", "rgb(251, 251, 250)");
+  await expect.poll(async () => Number(await rightHeaderActions.nth(0).evaluate((button) =>
+    button.style.getPropertyValue("--familiarity-level-background-opacity")))).toBe(0);
+  await leftHeaderActions.nth(1).click();
+  await expect(rightHeaderActions.nth(0)).toHaveText("Lv.1");
+  await expect(rightHeaderActions.nth(0)).toHaveClass(/has-familiarity-level/);
+  await expect(rightHeaderActions.nth(0)).toHaveCSS(
+    "background-color",
+    "rgba(216, 107, 72, 0.18)",
+  );
+  await expect.poll(async () => Number(await rightHeaderActions.nth(0).evaluate((button) =>
+    button.style.getPropertyValue("--familiarity-level-background-opacity")))).toBe(0.18);
+  await expect(rightHeaderActions.nth(0)).toHaveCSS("animation-name", "none");
   for (const control of await page.locator(".word-card__heading button").all()) {
     await expect(control).toHaveCSS("height", "36px");
   }

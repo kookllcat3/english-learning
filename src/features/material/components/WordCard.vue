@@ -56,6 +56,9 @@ const levelProgress = computed(() => {
 });
 const remainingMaterials = computed(() =>
   Math.max(0, (nextLevel.value?.minMaterials ?? materialCount.value) - materialCount.value));
+const familiarityIndicatorStyle = computed(() => ({
+  "--familiarity-level-background-opacity": String(currentLevel.value.outlineOpacity),
+}));
 
 function cancelScheduledSave(): void {
   window.clearTimeout(saveTimer);
@@ -320,6 +323,8 @@ onBeforeUnmount(() => {
         >
           <button
             type="button"
+            :class="{ 'has-familiarity-level': currentLevel.level > 0 }"
+            :style="familiarityIndicatorStyle"
             :aria-expanded="familiarityDetailsOpen"
             aria-label="查看熟悉度升級進度"
             @focus="familiarityDetailsOpen = true"

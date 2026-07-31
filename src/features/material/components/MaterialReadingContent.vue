@@ -39,7 +39,6 @@ const props = defineProps<{
   activeWord: string;
   blocks: ContentBlock[];
   familiarityLevels: FamiliarityLevel[];
-  knownWords: Set<string>;
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
@@ -52,6 +51,10 @@ let touchStart: { pointerId: number; x: number; y: number } | null = null;
 
 function paragraphs(block: TextContentBlock): string[] {
   return block.text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+}
+
+function hasFamiliarity(segment: TextSegment): boolean {
+  return (segment.level?.level ?? 0) > 0;
 }
 
 function textSegments(text: string): TextSegment[] {
@@ -192,7 +195,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
               class="reading-word"
               :class="{
                 'is-active': activeWord === `${paragraph.key}-${segmentIndex}`,
-                'known-word': knownWords.has(segment.word),
+                'known-word': hasFamiliarity(segment),
               }"
               :data-known-word="segment.word"
               :data-word="segment.word"
@@ -206,7 +209,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 '--outline-glow-blur': `${segment.level.glowBlur}px`,
               }"
               tabindex="-1"
-            ><template v-if="knownWords.has(segment.word)"><span
+            ><template v-if="hasFamiliarity(segment)"><span
               v-for="(character, characterIndex) in segment.label"
               :key="characterIndex"
               class="known-word__glyph"

@@ -612,12 +612,14 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   display: block;
 }
 .reading-content .reading-line.translation-mask {
-  position: relative;
-  color: transparent;
-  border-radius: 5px;
-  background: var(--card);
-  box-shadow: 0 0 0 1px rgb(230 227 219 / 70%);
-  text-shadow: none;
+  --translation-blur-radius: 5px;
+  filter: blur(var(--translation-blur-radius));
+  user-select: none;
+}
+@media (max-width: 720px) {
+  .reading-content .reading-line.translation-mask {
+    --translation-blur-radius: 3px;
+  }
 }
 .reading-content ::selection { color: #17233a; background: #ffe19e; }
 .reading-figure { margin: 24px auto; text-align: center; }

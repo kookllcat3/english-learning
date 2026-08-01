@@ -281,7 +281,6 @@ function handleWordKeydown(event: KeyboardEvent): void {
             >{{ character }}</span></template><template v-else>{{ segment.label }}</template></span>
             <span
               v-else
-              :class="{ 'translation-mask': props.hideTranslations && segment.isTranslation }"
             >{{ segment.label }}</span>
             </template>
             </span>

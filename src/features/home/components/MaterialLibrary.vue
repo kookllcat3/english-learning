@@ -325,13 +325,21 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="content-section" aria-labelledby="materials-title">
+  <section class="content-section" aria-label="素材列表">
     <div class="section-heading">
       <div class="library-heading">
         <p class="eyebrow">Library</p>
-        <h2 id="materials-title">素材列表</h2>
         <p class="library-count">{{ libraryCount }}</p>
       </div>
+      <button
+        class="add-material-button add-material-button--inline"
+        type="button"
+        aria-label="新增素材"
+        title="新增素材"
+        @click="openAddDialog"
+      >
+        <span aria-hidden="true">+</span>
+      </button>
     </div>
 
     <div class="library-tools">
@@ -496,15 +504,6 @@ onUnmounted(() => {
       </button>
     </nav>
 
-    <button
-      class="add-material-button add-material-button--floating"
-      type="button"
-      aria-label="新增素材"
-      title="新增素材"
-      @click="openAddDialog"
-    >
-      <span aria-hidden="true">+</span>
-    </button>
   </section>
 
   <BaseDialog

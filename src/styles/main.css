@@ -915,6 +915,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   display: flex;
   width: min(380px, calc(100vw - 24px));
   max-height: min(560px, calc(100vh - 24px));
+  max-height: min(560px, calc(100dvh - 24px));
   padding: 16px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1041,7 +1042,11 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   color: var(--muted);
 }
 .word-note__status { margin-top: 4px; color: var(--muted); text-align: right; }
-.ai-assistant-dialog { width: min(720px, calc(100% - 32px)); max-height: min(860px, calc(100vh - 32px)); }
+.ai-assistant-dialog {
+  width: min(720px, calc(100% - 32px));
+  max-height: min(860px, calc(100vh - 32px));
+  max-height: min(860px, calc(100dvh - 32px));
+}
 .ai-dialog-intro { margin: 16px 0 20px; color: var(--muted); }
 .ai-guide { padding: 16px 18px; border-radius: 12px; background: #f1f4f9; }
 .ai-guide ol { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 22px; color: #4d586f; font-size: .86rem; }

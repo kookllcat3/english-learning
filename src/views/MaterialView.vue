@@ -53,7 +53,7 @@ const vocabularyProgress = ref(new Map<string, VocabularyRecord>());
 const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const familiarityColor = ref("#d86b48");
 const activeView = ref<MaterialViewMode>("reading");
-const compactLayout = ref(false);
+const compactLayout = ref(true);
 const searchQuery = ref("");
 const loading = ref(true);
 const errorMessage = ref("");
@@ -71,7 +71,6 @@ let loadSequence = 0;
 let selectionTimer: number | undefined;
 let wordCloseTimer: number | undefined;
 let wordHoverTimer: number | undefined;
-let mediaQuery: MediaQueryList | null = null;
 let materialTitleResizeObserver: ResizeObserver | null = null;
 
 const knownWords = computed(() => new Set(
@@ -236,11 +235,6 @@ function scheduleSelectionLookup(): void {
   selectionTimer = window.setTimeout(handleWordSelection, WORD_SELECTION_DELAY_MS);
 }
 
-function updateCompactLayout(): void {
-  compactLayout.value = mediaQuery?.matches ?? false;
-  wordCard.value?.keepInViewport();
-}
-
 function updateMaterialTitleOverflow(): void {
   const viewport = materialTitleViewport.value;
   const track = materialTitleTrack.value;
@@ -292,13 +286,9 @@ watch(material, async () => {
 
 onMounted(() => {
   document.body.classList.add("material-page");
-  mediaQuery = window.matchMedia("(max-width: 720px)");
-  updateCompactLayout();
-  mediaQuery.addEventListener("change", updateCompactLayout);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("selectionchange", scheduleSelectionLookup);
   document.addEventListener("keydown", handleKeydown);
-  window.addEventListener("resize", updateCompactLayout);
   materialTitleResizeObserver = new ResizeObserver(updateMaterialTitleOverflow);
   if (materialTitleViewport.value) materialTitleResizeObserver.observe(materialTitleViewport.value);
   void loadMaterialPage();
@@ -310,11 +300,9 @@ onBeforeUnmount(() => {
   window.clearTimeout(wordCloseTimer);
   window.clearTimeout(wordHoverTimer);
   wordCard.value?.close();
-  mediaQuery?.removeEventListener("change", updateCompactLayout);
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   document.removeEventListener("selectionchange", scheduleSelectionLookup);
   document.removeEventListener("keydown", handleKeydown);
-  window.removeEventListener("resize", updateCompactLayout);
   materialTitleResizeObserver?.disconnect();
   materialTitleResizeObserver = null;
   document.body.classList.remove("material-page");
@@ -436,7 +424,6 @@ onBeforeUnmount(() => {
               <p>已認識 <span>{{ knownCount }}</span> / <span>{{ materialWords.length }}</span> 個</p>
             </div>
           </div>
-          <p class="muted">勾選你在這份素材中確定認識的詞彙；每份素材會分開記錄。</p>
           <label class="word-search">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="6.5" />

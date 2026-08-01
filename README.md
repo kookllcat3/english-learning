@@ -95,7 +95,17 @@ npm start
 
 ## 部署
 
-網站可以部署到 GitHub Pages 或其他靜態網站服務。先執行：
+公開倉庫使用 GitHub Actions 自動部署到 GitHub Pages：
+
+- pull request 合併前會執行型別檢查、單元測試與正式建置，但不會部署。
+- `main` 更新或從 Actions 手動執行 workflow 時，通過相同檢查後會發布 `dist/`。
+- 部署使用 GitHub Pages artifact，不需要 `gh-pages` 分支，也不會使用 Firebase。
+
+第一次啟用時，請在 GitHub repository 的 **Settings → Pages → Build and deployment**
+將 Source 設為 **GitHub Actions**。後續由
+`.github/workflows/deploy-pages.yml` 自動處理。
+
+若要部署到其他靜態網站服務，先執行：
 
 ```bash
 npm run build
@@ -118,6 +128,7 @@ dist/
 
 ```text
 english-learning/
+├─ .github/workflows/deploy-pages.yml
 ├─ assets/
 │  └─ config/familiarity-levels.json
 ├─ scripts/start.ps1

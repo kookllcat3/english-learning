@@ -31,9 +31,7 @@ test("keeps startup and large-list interaction within the performance baseline",
 
   const interactionStart = Date.now();
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
   await expect(page.getByRole("checkbox")).toHaveCount(300);
   const largeMaterialInteraction = Date.now() - interactionStart;
   expect(largeMaterialInteraction).toBeLessThan(MAX_LARGE_MATERIAL_INTERACTION_MS);

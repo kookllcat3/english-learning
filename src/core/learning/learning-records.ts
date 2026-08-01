@@ -1,3 +1,5 @@
+import type { VocabularyRecord } from "../models/models.js";
+
 export interface TimestampedRecord {
   createdAt?: string;
   updatedAt?: string;
@@ -18,6 +20,35 @@ export function materialWithLearningProgress<
     knownWords,
     updatedAt,
   } as T;
+}
+
+export function synchronizeVocabularyRecords(
+  records: VocabularyRecord[],
+  learnedWords: Set<string>,
+  updatedAt: string,
+): VocabularyRecord[] {
+  const recordsByWord = new Map(records.map((record) => [record.word, record]));
+  learnedWords.forEach((word) => {
+    if (recordsByWord.has(word)) return;
+    recordsByWord.set(word, {
+      word,
+      learned: true,
+      learnedAt: updatedAt,
+      createdAt: updatedAt,
+      updatedAt,
+    });
+  });
+
+  return [...recordsByWord.values()].map((record) => {
+    const learned = learnedWords.has(record.word);
+    const learningChanged = record.learned !== learned;
+    return {
+      ...record,
+      learned,
+      learnedAt: learned ? record.learnedAt ?? updatedAt : null,
+      updatedAt: learningChanged ? updatedAt : record.updatedAt,
+    };
+  });
 }
 
 export function mergeNewerRecords<T extends TimestampedRecord, K extends keyof T>(

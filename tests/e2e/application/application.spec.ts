@@ -34,18 +34,14 @@ test("uses one Vue app and persists learning progress through routed views", asy
   await expect(page).toHaveURL(/#\/materials\/.+/);
   await expect(page.getByRole("heading", { name: materialTitle, level: 1 })).toBeVisible();
 
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
 
   const bearCheckbox = page.getByRole("checkbox", { name: /bear/ });
   await bearCheckbox.check();
   await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
 
   await page.reload();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
   await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
   await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
 
@@ -62,9 +58,7 @@ test("shows global familiarity in an unread material", async ({ page }) => {
 
   const learnedMaterialCard = page.getByRole("article").filter({ hasText: learnedMaterialTitle });
   await learnedMaterialCard.getByRole("link", { name: "開始閱讀" }).click();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
   await page.getByRole("checkbox", { name: /bear/ }).check();
   await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
 
@@ -123,6 +117,41 @@ test("formats and persists a Markdown word note", async ({ page }) => {
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
   await expect(page.getByLabel("單字 Markdown 筆記").locator("strong")).toHaveText("large animal");
+});
+
+test("keeps a word note draft visible when IndexedDB persistence fails", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.locator('[data-word="bear"]').first().hover();
+
+  await page.evaluate(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    const state = window as typeof window & { restoreWordNotePut?: () => void };
+    state.restoreWordNotePut = () => {
+      IDBObjectStore.prototype.put = originalPut;
+    };
+    IDBObjectStore.prototype.put = function put(value, key) {
+      if (this.name === "wordNotes") throw new DOMException("Simulated write failure", "UnknownError");
+      return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+    };
+  });
+
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await editor.fill("recover this note");
+  await expect(page.getByRole("status")).toContainText("草稿仍保留在此分頁");
+  await page.locator('[data-word="runs"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(editor).toContainText("recover this note");
+
+  await page.evaluate(() => {
+    const state = window as typeof window & { restoreWordNotePut?: () => void };
+    state.restoreWordNotePut?.();
+  });
+  await editor.fill("recover this note safely");
+  await page.waitForTimeout(800);
+  await page.reload();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("recover this note safely");
 });
 
 test("keeps the word card open while a pointer interaction is active", async ({ page }) => {
@@ -400,9 +429,7 @@ test("bounds the rendered vocabulary list for large materials", async ({ page })
   await page.getByRole("button", { name: "儲存素材" }).click();
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
 
   await expect(page.getByRole("checkbox")).toHaveCount(300);
   await page.getByRole("button", { name: /顯示更多/ }).click();

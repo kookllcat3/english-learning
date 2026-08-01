@@ -12,6 +12,7 @@ import {
 import {
   materialWithLearningProgress,
   mergeNewerRecords,
+  synchronizeVocabularyRecords,
 } from "./learning-records.js";
 import {
   extractUniqueWords,
@@ -676,11 +677,7 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
   }
   const learnedWords = new Set(bundles.flatMap((bundle) => bundle.metadata.knownWords));
   const timestamp = new Date().toISOString();
-  vocabulary = vocabulary.map((record) => ({
-    ...record,
-    learned: learnedWords.has(record.word),
-    learnedAt: learnedWords.has(record.word) ? record.learnedAt ?? timestamp : null,
-  }));
+  vocabulary = synchronizeVocabularyRecords(vocabulary, learnedWords, timestamp);
   await writeBackupStores({
     materials: bundles.map((bundle) => bundle.metadata),
     materialAssets: mergedAssets,

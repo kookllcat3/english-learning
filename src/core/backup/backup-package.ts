@@ -1,5 +1,11 @@
 import type { LearningBackup } from "../models/models.js";
 import { loadJsZip } from "../services/jszip-loader.js";
+import {
+  ArchiveReadBudget,
+  assertArchiveResourceLimits,
+  assertPackageArchiveSize,
+  type ArchiveEntrySize,
+} from "./backup-package-limits.js";
 
 const PACKAGE_FORMAT = "english-learning-package";
 const PACKAGE_VERSION = 1;
@@ -10,8 +16,6 @@ const DATA_FILES = [
   "data/settings.json",
   "data/material-assets.json",
 ] as const;
-const MAX_PACKAGE_ENTRIES = 10_000;
-
 interface PackageManifest {
   format: string;
   formatVersion: number;
@@ -71,10 +75,64 @@ function requiredPackageFile(archive: JsZipArchive, path: string): JsZipFile {
   return file;
 }
 
-async function readString(file: JsZipFile): Promise<string> {
-  const value = await file.async("text");
-  if (typeof value !== "string") throw new Error("備份文字檔格式不正確。");
-  return value;
+function archiveEntrySize(path: string, file: JsZipFile): ArchiveEntrySize {
+  return {
+    compressedSize: file._data?.compressedSize ?? Number.NaN,
+    directory: file.dir,
+    path,
+    uncompressedSize: file._data?.uncompressedSize ?? Number.NaN,
+  };
+}
+
+function readBoundedFile(
+  file: JsZipFile,
+  path: string,
+  budget: ArchiveReadBudget,
+): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const expectedSize = file._data?.uncompressedSize;
+    if (typeof expectedSize !== "number" || !Number.isSafeInteger(expectedSize) || expectedSize < 0) {
+      reject(new Error(`備份檔案大小超出安全範圍：${path}`));
+      return;
+    }
+    const bytes = new Uint8Array(expectedSize);
+    const stream = file.internalStream("uint8array");
+    let fileBytes = 0;
+    let settled = false;
+
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      stream.pause();
+      reject(error);
+    };
+
+    stream.on("data", (chunk) => {
+      try {
+        const nextFileBytes = budget.consume(path, fileBytes, chunk.byteLength);
+        if (nextFileBytes > bytes.byteLength) throw new Error(`備份檔案驗證失敗：${path}`);
+        bytes.set(chunk, fileBytes);
+        fileBytes = nextFileBytes;
+      } catch (error) {
+        fail(error);
+      }
+    });
+    stream.on("error", fail);
+    stream.on("end", () => {
+      if (settled) return;
+      if (fileBytes !== bytes.byteLength) {
+        fail(new Error(`備份檔案驗證失敗：${path}`));
+        return;
+      }
+      settled = true;
+      resolve(bytes);
+    });
+    stream.resume();
+  });
+}
+
+function decodeJson(bytes: Uint8Array): unknown {
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 export async function createBackupPackage(backup: LearningBackup): Promise<Blob> {
@@ -124,16 +182,25 @@ export async function createBackupPackage(backup: LearningBackup): Promise<Blob>
 }
 
 export async function readBackupPackage(file: Blob): Promise<BackupPackagePreview> {
+  assertPackageArchiveSize(file.size);
   const Zip = await loadZip();
-  const archive = await Zip.loadAsync(file, { checkCRC32: true });
+  const archive = await Zip.loadAsync(file);
   const archivePaths = Object.keys(archive.files);
+  assertArchiveResourceLimits(
+    Object.entries(archive.files).map(([path, entry]) => archiveEntrySize(path, entry)),
+  );
   const paths = Object.entries(archive.files)
     .filter(([, entry]) => !entry.dir)
     .map(([path]) => path);
-  if (paths.length > MAX_PACKAGE_ENTRIES || archivePaths.some((path) => !safePath(path))) {
+  if (archivePaths.some((path) => !safePath(path))) {
     throw new Error("備份封裝檔案清單不安全。");
   }
-  const manifest = JSON.parse(await readString(requiredPackageFile(archive, "manifest.json"))) as PackageManifest;
+  const readBudget = new ArchiveReadBudget();
+  const manifest = decodeJson(await readBoundedFile(
+    requiredPackageFile(archive, "manifest.json"),
+    "manifest.json",
+    readBudget,
+  )) as PackageManifest;
   if (manifest.format !== PACKAGE_FORMAT || manifest.formatVersion !== PACKAGE_VERSION) {
     throw new Error("不支援的備份封裝版本。");
   }
@@ -145,31 +212,41 @@ export async function readBackupPackage(file: Blob): Promise<BackupPackagePrevie
   if (manifest.files.some((item) => !Number.isSafeInteger(item.size) || item.size < 0)) {
     throw new Error("備份檔案大小不正確。");
   }
-  const checksums = JSON.parse(await readString(requiredPackageFile(archive, "checksums.json"))) as PackageChecksums;
+  const checksums = decodeJson(await readBoundedFile(
+    requiredPackageFile(archive, "checksums.json"),
+    "checksums.json",
+    readBudget,
+  )) as PackageChecksums;
   if (checksums.algorithm !== "SHA-256" || !checksums.files) throw new Error("備份 checksum 格式不正確。");
   if (Object.keys(checksums.files).some((path) => !declaredPaths.has(path))) {
     throw new Error("備份 checksum 清單不正確。");
   }
+  const verifiedFiles = new Map<string, Uint8Array>();
   for (const entry of manifest.files) {
     const fileEntry = requiredPackageFile(archive, entry.path);
-    const bytes = await fileEntry.async("uint8array") as Uint8Array;
+    const bytes = await readBoundedFile(fileEntry, entry.path, readBudget);
     if (bytes.byteLength !== entry.size || checksums.files[entry.path] !== await sha256(bytes)) {
       throw new Error(`備份檔案驗證失敗：${entry.path}`);
     }
+    verifiedFiles.set(entry.path, bytes);
   }
-  const decode = (text: string): unknown => JSON.parse(text);
+  const verifiedFile = (path: string): Uint8Array => {
+    const bytes = verifiedFiles.get(path);
+    if (!bytes) throw new Error(`備份缺少已驗證檔案：${path}`);
+    return bytes;
+  };
   const backup: LearningBackup = {
     schemaVersion: manifest.schemaVersion,
     exportedAt: manifest.exportedAt,
-    materials: decode(await readString(requiredPackageFile(archive, DATA_FILES[0]))) as LearningBackup["materials"],
-    vocabulary: decode(await readString(requiredPackageFile(archive, DATA_FILES[1]))) as LearningBackup["vocabulary"],
-    wordNotes: decode(await readString(requiredPackageFile(archive, DATA_FILES[2]))) as LearningBackup["wordNotes"],
-    settings: decode(await readString(requiredPackageFile(archive, DATA_FILES[3]))) as LearningBackup["settings"],
+    materials: decodeJson(verifiedFile(DATA_FILES[0])) as LearningBackup["materials"],
+    vocabulary: decodeJson(verifiedFile(DATA_FILES[1])) as LearningBackup["vocabulary"],
+    wordNotes: decodeJson(verifiedFile(DATA_FILES[2])) as LearningBackup["wordNotes"],
+    settings: decodeJson(verifiedFile(DATA_FILES[3])) as LearningBackup["settings"],
     materialAssets: [],
   };
-  const assetMetadata = decode(await readString(requiredPackageFile(archive, DATA_FILES[4]))) as Array<Omit<NonNullable<LearningBackup["materialAssets"]>[number], "data">>;
+  const assetMetadata = decodeJson(verifiedFile(DATA_FILES[4])) as Array<Omit<NonNullable<LearningBackup["materialAssets"]>[number], "data">>;
   for (const asset of manifest.files.filter((entry) => entry.type === "asset")) {
-    const bytes = await requiredPackageFile(archive, asset.path).async("uint8array") as Uint8Array;
+    const bytes = verifiedFile(asset.path);
     const id = asset.path.slice("assets/".length, -".webp".length);
     const metadata = assetMetadata.find((item) => item.id === id);
     if (!metadata) throw new Error(`找不到圖片資產 metadata：${id}`);

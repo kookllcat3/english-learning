@@ -19,6 +19,13 @@ async function expectNoAccessibilityViolations(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
+async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+}
+
 test("home and shared dialogs meet the automated accessibility baseline", async ({ page }) => {
   await page.goto("/");
   await expectNoAccessibilityViolations(page);
@@ -43,30 +50,26 @@ test("reading view meets accessibility and narrow-layout baselines", async ({ pa
   await expect(page.getByRole("heading", { name: "無障礙測試素材", level: 1 })).toBeVisible();
 
   await expectNoAccessibilityViolations(page);
-  const hasHorizontalOverflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > window.innerWidth,
-  );
-  expect(hasHorizontalOverflow).toBe(false);
+  await expectNoHorizontalOverflow(page);
   const readingScrollMetrics = await page.locator(".reading-content").evaluate((element) => ({
     clientHeight: element.clientHeight,
     overflowY: getComputedStyle(element).overflowY,
     scrollHeight: element.scrollHeight,
   }));
-  expect(readingScrollMetrics.overflowY).toBe("auto");
-  expect(readingScrollMetrics.scrollHeight).toBeGreaterThan(readingScrollMetrics.clientHeight);
+  expect(readingScrollMetrics.overflowY).toBe("visible");
+  expect(readingScrollMetrics.scrollHeight).toBe(readingScrollMetrics.clientHeight);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(
+    page.viewportSize()?.height ?? 0,
+  );
 });
 
 test("reduced motion disables familiarity animations", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await createAccessibleMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
   await page.getByRole("checkbox", { name: /bear/ }).check();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "閱讀內容" }).click();
-  }
+  await page.getByRole("button", { name: "閱讀內容" }).click();
 
   const animationName = await page.locator('[data-known-word="bear"]')
     .evaluate((element) => {
@@ -74,4 +77,39 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
       return glyph ? getComputedStyle(glyph).animationName : "";
     });
   expect(animationName).toBe("none");
+});
+
+test("primary pages and data dialog remain responsive at supported breakpoints", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "Run the viewport matrix once.");
+  await createAccessibleMaterial(page);
+
+  const viewports = [
+    { width: 360, height: 800 },
+    { width: 390, height: 844 },
+    { width: 768, height: 1024 },
+    { width: 1024, height: 768 },
+    { width: 1440, height: 900 },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expectNoHorizontalOverflow(page);
+
+    await page.getByRole("button", { name: "開啟資料管理" }).click();
+    const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+    await expect(dataDialog).toBeVisible();
+    const dialogBox = await dataDialog.boundingBox();
+    expect(dialogBox).not.toBeNull();
+    expect(dialogBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((dialogBox?.x ?? 0) + (dialogBox?.width ?? 0)).toBeLessThanOrEqual(viewport.width);
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("link", { name: "開始閱讀" }).click();
+    await expectNoHorizontalOverflow(page);
+    await page.getByRole("button", { name: "素材詞彙" }).click();
+    await expectNoHorizontalOverflow(page);
+  }
 });

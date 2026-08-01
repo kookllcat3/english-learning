@@ -26,9 +26,7 @@ test("keeps local learning progress writable while offline", async ({ page, cont
   await createMaterial(page, "離線素材", "A bear sleeps.");
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("heading", { name: "離線素材", level: 1 })).toBeVisible();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
   const bearCheckbox = page.getByRole("checkbox", { name: /bear/ });
   await expect(bearCheckbox).toBeVisible();
 
@@ -41,9 +39,7 @@ test("keeps local learning progress writable while offline", async ({ page, cont
   }
 
   await page.reload();
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    await page.getByRole("button", { name: "素材詞彙" }).click();
-  }
+  await page.getByRole("button", { name: "素材詞彙" }).click();
   await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
 });
 

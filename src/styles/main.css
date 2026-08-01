@@ -244,8 +244,8 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   cursor: pointer;
 }
 .history-heading button:hover { color: var(--danger); }
-#search-history-list { display: grid; gap: 4px; }
-#search-history-list button {
+#search-history-panel { display: grid; gap: 4px; }
+#search-history-panel button {
   width: 100%;
   padding: 8px 10px;
   overflow: hidden;
@@ -258,7 +258,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   white-space: nowrap;
   cursor: pointer;
 }
-#search-history-list button:hover { background: var(--paper); }
+#search-history-panel button:hover { background: var(--paper); }
 .history-empty { margin: 18px 0 8px; color: var(--muted); font-size: .84rem; text-align: center; }
 .sr-only {
   position: absolute;
@@ -631,11 +631,9 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   pointer-events: none;
   place-items: center;
   transform: translate(-50%, -50%) translateY(-2px);
-  visibility: hidden;
   transition:
     opacity 140ms ease,
     transform 140ms ease,
-    visibility 0s linear 140ms,
     background-color 140ms ease;
 }
 .translation-visibility-toggle svg {
@@ -652,10 +650,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%);
-  visibility: visible;
-  transition-delay: 600ms;
 }
-.translation-visibility-toggle:focus-visible { transition-delay: 0s; }
 .translation-visibility-toggle:hover,
 .translation-visibility-toggle:focus-visible {
   border-color: var(--accent-soft);
@@ -671,12 +666,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   user-select: none;
 }
 @media (max-width: 720px) {
-  .translation-visibility-toggle {
-    opacity: .82;
-    pointer-events: auto;
-    transform: translate(-50%, -50%);
-    visibility: visible;
-  }
   .reading-content .reading-line.translation-mask {
     --translation-blur-radius: 3px;
   }
@@ -1077,33 +1066,22 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 
 @media (min-width: 721px) {
   .material-page .page-shell { padding-bottom: 10px; }
-  .material-page .detail-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(290px, .65fr);
-  }
+  .material-page .detail-layout { display: block; }
   .material-page .detail-layout > .panel {
-    display: flex;
-    height: max(440px, calc(100dvh - 108px));
+    display: block;
+    height: auto;
     min-height: 0;
-    flex-direction: column;
-    overflow: hidden;
+    margin-bottom: 14px;
+    overflow: visible;
   }
+  .material-page .detail-layout > .panel[hidden] { display: none; }
   .material-page .reading-panel .reading-content {
     min-height: 0;
-    flex: 1;
-    padding-right: 6px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+    padding-right: 0;
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
   .material-page .vocabulary-panel { position: relative; top: auto; }
-  .material-page .vocabulary-panel .word-list {
-    min-height: 0;
-    max-height: none;
-    flex: 1;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
 }
 
 @media (max-width: 720px) {
@@ -1142,74 +1120,24 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   }
   .detail-layout > .panel {
     position: relative;
-    display: flex;
-    height: max(440px, calc(100dvh - 172px));
-    width: calc(100% - 20px);
-    margin-inline: 10px;
+    display: block;
+    height: auto;
+    width: 100%;
+    margin: 0 0 14px;
     min-width: 0;
     min-height: 0;
-    flex-direction: column;
-    overflow: hidden;
-    contain: layout style;
+    overflow: visible;
+    contain: none;
   }
   .detail-layout > .panel[hidden] { display: none; }
   .reading-panel .reading-content {
     min-height: 0;
-    flex: 1;
-    padding-right: 6px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+    padding-right: 0;
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
   .vocabulary-panel { position: relative; top: auto; }
-  .vocabulary-panel .word-list {
-    min-height: 0;
-    max-height: none;
-    flex: 1;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
   .material-page .page-shell { padding-bottom: 10px; }
-}
-
-/* Reading and vocabulary share one page flow at every viewport size. */
-@media (min-width: 721px) {
-  .material-page .detail-layout { display: block; }
-  .material-page .detail-layout > .panel {
-    display: block;
-    height: auto;
-    min-height: 0;
-    overflow: visible;
-    margin-bottom: 14px;
-  }
-  .material-page .detail-layout > .panel[hidden] { display: none; }
-  .material-page .reading-panel .reading-content {
-    min-height: 0;
-    padding-right: 0;
-    overflow: visible;
-    scrollbar-gutter: auto;
-  }
-  .material-page .vocabulary-panel { position: relative; top: auto; }
-  .material-page .vocabulary-panel .word-list {
-    max-height: min(60vh, 620px);
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-  }
-}
-
-@media (max-width: 720px) {
-  .material-page .detail-layout > .panel {
-    height: auto;
-    width: 100%;
-    margin: 0 0 14px;
-    overflow: visible;
-    contain: none;
-  }
-  .material-page .reading-panel .reading-content {
-    padding-right: 0;
-    overflow: visible;
-    scrollbar-gutter: auto;
-  }
 }
 
 .material-page .vocabulary-panel .word-list {

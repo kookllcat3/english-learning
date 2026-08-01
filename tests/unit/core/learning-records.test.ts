@@ -3,6 +3,7 @@ import {
   materialWithLearningProgress,
   mergeNewerRecords,
   newerRecord,
+  synchronizeVocabularyRecords,
 } from "../../../src/core/learning/learning-records.js";
 
 describe("learning record conflict resolution", () => {
@@ -54,5 +55,30 @@ describe("learning record conflict resolution", () => {
       knownWords: ["animal", "bear"],
       updatedAt,
     });
+  });
+
+  it("creates vocabulary records for known words missing from an imported backup", () => {
+    const updatedAt = "2026-07-29T11:00:00.000Z";
+
+    expect(synchronizeVocabularyRecords([], new Set(["bear"]), updatedAt)).toEqual([{
+      word: "bear",
+      learned: true,
+      learnedAt: updatedAt,
+      createdAt: updatedAt,
+      updatedAt,
+    }]);
+  });
+
+  it("keeps vocabulary learned state aligned with all material records", () => {
+    const updatedAt = "2026-07-29T11:00:00.000Z";
+    const records = [
+      { word: "bear", learned: false, learnedAt: null },
+      { word: "fox", learned: true, learnedAt: "2026-07-28T11:00:00.000Z" },
+    ];
+
+    expect(synchronizeVocabularyRecords(records, new Set(["bear"]), updatedAt)).toEqual([
+      { word: "bear", learned: true, learnedAt: updatedAt, updatedAt },
+      { word: "fox", learned: false, learnedAt: null, updatedAt },
+    ]);
   });
 });

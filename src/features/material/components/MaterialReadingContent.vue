@@ -224,7 +224,6 @@ function activateWordElement(target: EventTarget | null): void {
 }
 
 function handlePointerOver(event: PointerEvent): void {
-  scheduleTranslationControl(event);
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
@@ -234,7 +233,6 @@ function handlePointerOver(event: PointerEvent): void {
 }
 
 function handlePointerOut(event: PointerEvent): void {
-  hideTranslationControl(event);
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
@@ -251,6 +249,19 @@ function finishTouch(event: PointerEvent): void {
   const moved = Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y);
   touchStart = null;
   if (moved <= 8) {
+    const translationLine = event.target instanceof Element
+      ? event.target.closest<HTMLElement>(".reading-line-wrap.is-translation")
+      : null;
+    const translationButton = event.target instanceof Element
+      ? event.target.closest(".translation-visibility-toggle")
+      : null;
+    if (translationLine && !translationButton) {
+      clearTranslationControlTimer();
+      handleTranslationPointerMove(event);
+      visibleTranslationControlLine.value = translationLine.dataset.translationLine ?? "";
+      return;
+    }
+    if (!translationButton) visibleTranslationControlLine.value = "";
     const element = wordElement(event.target);
     const word = element?.dataset.word;
     const key = element?.dataset.wordKey;

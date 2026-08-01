@@ -32,9 +32,9 @@ let pointerInsideCard = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
 let savedSelection: Range | null = null;
+const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
 const {
   clearAnchor,
-  keepInViewport: keepPositionInViewport,
   positionAt,
 } = useWordCardPosition(card);
 
@@ -45,32 +45,66 @@ function cancelScheduledSave(): void {
   saveTimer = undefined;
 }
 
-async function persistNote(): Promise<void> {
+function draftKey(word: string): string {
+  return `${NOTE_DRAFT_PREFIX}${encodeURIComponent(word)}`;
+}
+
+function preserveDraft(word: string, value: string): void {
+  try {
+    sessionStorage.setItem(draftKey(word), value);
+  } catch {
+    // IndexedDB remains the primary store; an unavailable session store only removes crash recovery.
+  }
+}
+
+function readDraft(word: string): string | null {
+  try {
+    return sessionStorage.getItem(draftKey(word));
+  } catch {
+    return null;
+  }
+}
+
+function discardSavedDraft(word: string, value: string): void {
+  try {
+    if (sessionStorage.getItem(draftKey(word)) === value) sessionStorage.removeItem(draftKey(word));
+  } catch {
+    // An unavailable session store does not invalidate the completed IndexedDB write.
+  }
+}
+
+async function persistNote(): Promise<boolean> {
   cancelScheduledSave();
-  if (!selectedWord.value || markdown.value === savedMarkdown.value) return;
+  if (!selectedWord.value || markdown.value === savedMarkdown.value) return true;
   const word = selectedWord.value;
   const value = markdown.value;
   saveMessage.value = "儲存中…";
   try {
     await saveWordNote(word, value);
-    if (word !== selectedWord.value || value !== markdown.value) return;
+    discardSavedDraft(word, value);
+    if (word !== selectedWord.value || value !== markdown.value) return true;
     savedMarkdown.value = value;
     saveMessage.value = "已儲存";
+    return true;
   } catch (error) {
-    if (word !== selectedWord.value) return;
-    saveMessage.value = errorMessage(error, "單字筆記儲存失敗。");
+    preserveDraft(word, value);
+    if (word === selectedWord.value) {
+      saveMessage.value = `${errorMessage(error, "單字筆記儲存失敗。")} 草稿仍保留在此分頁。`;
+    }
+    return false;
   }
 }
 
 function scheduleSave(): void {
   saveMessage.value = "尚未儲存";
+  if (selectedWord.value) preserveDraft(selectedWord.value, markdown.value);
   cancelScheduledSave();
   saveTimer = window.setTimeout(() => void persistNote(), 500);
 }
 
-function close(): void {
-  noteSequence += 1;
-  void persistNote();
+async function requestClose(): Promise<void> {
+  const sequence = ++noteSequence;
+  if (!await persistNote() || sequence !== noteSequence) return;
   window.speechSynthesis?.cancel();
   visible.value = false;
   selectedWord.value = "";
@@ -80,6 +114,10 @@ function close(): void {
     emit("pinChange", false);
   }
   emit("close");
+}
+
+function close(): void {
+  void requestClose();
 }
 
 function togglePinned(): void {
@@ -122,7 +160,7 @@ function handleCardFocusOut(): void {
 
 async function open(word: string, rect: DOMRect, shouldPin = false): Promise<void> {
   const sequence = ++noteSequence;
-  await persistNote();
+  if (!await persistNote()) return;
   if (sequence !== noteSequence) return;
   selectedWord.value = word;
   pinned.value = shouldPin;
@@ -136,8 +174,10 @@ async function open(word: string, rect: DOMRect, shouldPin = false): Promise<voi
   try {
     const note = await getWordNote(word);
     if (sequence !== noteSequence || word !== selectedWord.value) return;
-    markdown.value = note?.markdown ?? "";
-    savedMarkdown.value = markdown.value;
+    savedMarkdown.value = note?.markdown ?? "";
+    const draft = readDraft(word);
+    markdown.value = draft ?? savedMarkdown.value;
+    saveMessage.value = draft === null ? "" : "尚未儲存的草稿已復原";
     await nextTick();
     if (editor.value) editor.value.innerHTML = renderMarkdown(markdown.value);
   } catch {
@@ -197,10 +237,6 @@ function pastePlainText(event: ClipboardEvent): void {
   updateMarkdownFromEditor();
 }
 
-function keepInViewport(): void {
-  if (visible.value) keepPositionInViewport();
-}
-
 function pinWhenWordIsSelected(): void {
   if (!card.value || !visible.value) return;
   const selection = window.getSelection();
@@ -214,7 +250,7 @@ function pinWhenWordIsSelected(): void {
   pin();
 }
 
-defineExpose({ close, keepInViewport, open, pin });
+defineExpose({ close, open, pin });
 onMounted(() => {
   window.addEventListener("pointerup", finishCardInteraction);
   window.addEventListener("pointercancel", finishCardInteraction);
@@ -222,7 +258,10 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   cancelScheduledSave();
-  void persistNote();
+  if (selectedWord.value && markdown.value !== savedMarkdown.value) {
+    preserveDraft(selectedWord.value, markdown.value);
+    void persistNote();
+  }
   window.speechSynthesis?.cancel();
   window.removeEventListener("pointerup", finishCardInteraction);
   window.removeEventListener("pointercancel", finishCardInteraction);

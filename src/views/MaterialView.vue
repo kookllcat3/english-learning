@@ -37,7 +37,6 @@ type MaterialViewMode = "reading" | "vocabulary";
 
 interface WordCardController {
   close(): void;
-  keepInViewport(): void;
   open(word: string, rect: DOMRect, shouldPin?: boolean): Promise<void>;
 }
 
@@ -53,7 +52,6 @@ const vocabularyProgress = ref(new Map<string, VocabularyRecord>());
 const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const familiarityColor = ref("#d86b48");
 const activeView = ref<MaterialViewMode>("reading");
-const compactLayout = ref(true);
 const searchQuery = ref("");
 const loading = ref(true);
 const errorMessage = ref("");
@@ -333,7 +331,7 @@ onBeforeUnmount(() => {
 
         <article
           class="panel reading-panel"
-          :hidden="compactLayout && activeView !== 'reading'"
+          :hidden="activeView !== 'reading'"
           :style="readingPanelStyle"
         >
           <div class="panel__heading">
@@ -386,7 +384,7 @@ onBeforeUnmount(() => {
 
         <aside
           class="panel vocabulary-panel"
-          :hidden="compactLayout && activeView !== 'vocabulary'"
+          :hidden="activeView !== 'vocabulary'"
         >
           <div class="panel__heading">
             <div>

@@ -8,7 +8,6 @@ const MINIMUM_VIEWPORT_HEIGHT = 210;
 
 export function useWordCardPosition(card: Ref<HTMLElement | null>): {
   clearAnchor: () => void;
-  keepInViewport: () => void;
   positionAt: (rect: DOMRect) => void;
 } {
   let anchorRect: DOMRect | null = null;
@@ -77,13 +76,6 @@ export function useWordCardPosition(card: Ref<HTMLElement | null>): {
     setPosition(left, top);
   }
 
-  function keepInViewport(): void {
-    const element = card.value;
-    if (!element) return;
-    const rect = element.getBoundingClientRect();
-    setPosition(rect.left, rect.top);
-  }
-
   function clearAnchor(): void {
     anchorRect = null;
   }
@@ -93,5 +85,5 @@ export function useWordCardPosition(card: Ref<HTMLElement | null>): {
     resizeObserver = null;
   });
 
-  return { clearAnchor, keepInViewport, positionAt };
+  return { clearAnchor, positionAt };
 }

@@ -156,7 +156,6 @@ async function readMaterialFile(file: File): Promise<ImportedMaterial> {
 
   if (isText) return { content: await file.text(), contentBlocks: undefined, assets: [] };
   if (isDocx) {
-    await import("../../../vendor/jszip/jszip.min.js");
     const { importDocx } = await import("../../../core/importers/docx-importer.js");
     return importDocx(file, (status: string) => {
       addMessage.value = status;

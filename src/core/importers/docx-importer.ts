@@ -1,3 +1,5 @@
+import { loadJsZip } from "../services/jszip-loader.js";
+
 const MAX_DOCX_BYTES = 30 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 1920;
@@ -191,11 +193,11 @@ export async function importDocx(
   onProgress: (status: string) => void = () => {},
 ): Promise<ImportedDocx> {
   if (file.size > MAX_DOCX_BYTES) throw new Error("DOCX 原檔不可超過 30 MB。");
-  if (!globalThis.JSZip) throw new Error("DOCX 解析元件未載入。");
+  const jsZip = await loadJsZip();
   onProgress("讀取 DOCX…");
   let zip: JsZipArchive;
   try {
-    zip = await globalThis.JSZip.loadAsync(file);
+    zip = await jsZip.loadAsync(file);
   } catch {
     throw new Error("DOCX 已損壞、受密碼保護或不是有效的 DOCX。");
   }

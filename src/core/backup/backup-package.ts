@@ -1,4 +1,5 @@
 import type { LearningBackup } from "../models/models.js";
+import { loadJsZip } from "../services/jszip-loader.js";
 
 const PACKAGE_FORMAT = "english-learning-package";
 const PACKAGE_VERSION = 1;
@@ -33,9 +34,7 @@ export interface BackupPackagePreview {
 }
 
 async function loadZip(): Promise<JsZipConstructor> {
-  if (!globalThis.JSZip) await import("../../vendor/jszip/jszip.min.js");
-  if (!globalThis.JSZip) throw new Error("備份壓縮元件未載入。");
-  return globalThis.JSZip;
+  return loadJsZip();
 }
 
 function jsonText(value: unknown): string {

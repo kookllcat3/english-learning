@@ -615,8 +615,8 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .translation-visibility-toggle {
   position: absolute;
   z-index: 1;
-  top: .35em;
-  right: 0;
+  top: var(--translation-control-y, 20px);
+  left: var(--translation-control-x, calc(100% - 14px));
   display: inline-grid;
   width: 28px;
   height: 28px;
@@ -630,7 +630,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   opacity: 0;
   pointer-events: none;
   place-items: center;
-  transform: translateY(-2px);
+  transform: translate(-50%, -50%) translateY(-2px);
   visibility: hidden;
   transition:
     opacity 140ms ease,
@@ -647,12 +647,11 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   stroke-linejoin: round;
   stroke-width: 1.8;
 }
-.reading-line-wrap:hover > .translation-visibility-toggle,
-.reading-line-wrap:focus-within > .translation-visibility-toggle,
+.reading-line-wrap.translation-control-visible > .translation-visibility-toggle,
 .translation-visibility-toggle:focus-visible {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0);
+  transform: translate(-50%, -50%);
   visibility: visible;
   transition-delay: 600ms;
 }
@@ -675,7 +674,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   .translation-visibility-toggle {
     opacity: .82;
     pointer-events: auto;
-    transform: translateY(0);
+    transform: translate(-50%, -50%);
     visibility: visible;
   }
   .reading-content .reading-line.translation-mask {

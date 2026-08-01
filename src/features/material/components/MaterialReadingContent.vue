@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import type {
   ContentBlock,
   TextContentBlock,
@@ -57,7 +57,10 @@ const emit = defineEmits<{
   lookup: [word: string, rect: DOMRect];
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
+let translationControlTimer: number | undefined;
 const hiddenTranslationLines = ref(new Set<string>());
+const visibleTranslationControlLine = ref("");
+const TRANSLATION_CONTROL_DELAY_MS = 600;
 
 function paragraphs(block: TextContentBlock): string[] {
   return block.text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
@@ -156,11 +159,57 @@ function isTranslationHidden(lineKey: string): boolean {
   return hiddenTranslationLines.value.has(lineKey);
 }
 
-function toggleTranslation(lineKey: string): void {
+function toggleTranslation(lineKey: string, event: MouseEvent): void {
   const nextHiddenLines = new Set(hiddenTranslationLines.value);
   if (nextHiddenLines.has(lineKey)) nextHiddenLines.delete(lineKey);
   else nextHiddenLines.add(lineKey);
   hiddenTranslationLines.value = nextHiddenLines;
+  if (event.detail > 0 && event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.blur();
+  }
+}
+
+function handleTranslationPointerMove(event: PointerEvent): void {
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLElement>(".reading-line-wrap.is-translation")
+    : null;
+  if (!target) return;
+  const bounds = target.getBoundingClientRect();
+  const buttonSize = 28;
+  const x = Math.min(Math.max(event.clientX - bounds.left, buttonSize / 2), bounds.width - buttonSize / 2);
+  const y = Math.min(Math.max(event.clientY - bounds.top, buttonSize / 2), bounds.height - buttonSize / 2);
+  target.style.setProperty("--translation-control-x", `${x}px`);
+  target.style.setProperty("--translation-control-y", `${y}px`);
+}
+
+function clearTranslationControlTimer(): void {
+  window.clearTimeout(translationControlTimer);
+  translationControlTimer = undefined;
+}
+
+function scheduleTranslationControl(event: PointerEvent): void {
+  if (event.pointerType === "touch") return;
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLElement>(".reading-line-wrap.is-translation")
+    : null;
+  if (!target || target.contains(event.relatedTarget as Node | null)) return;
+  const lineKey = target.dataset.translationLine;
+  if (!lineKey) return;
+  clearTranslationControlTimer();
+  visibleTranslationControlLine.value = "";
+  translationControlTimer = window.setTimeout(() => {
+    visibleTranslationControlLine.value = lineKey;
+    translationControlTimer = undefined;
+  }, TRANSLATION_CONTROL_DELAY_MS);
+}
+
+function hideTranslationControl(event: PointerEvent): void {
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLElement>(".reading-line-wrap.is-translation")
+    : null;
+  if (target && target.contains(event.relatedTarget as Node | null)) return;
+  clearTranslationControlTimer();
+  visibleTranslationControlLine.value = "";
 }
 
 function wordElement(target: EventTarget | null): HTMLElement | null {
@@ -175,6 +224,7 @@ function activateWordElement(target: EventTarget | null): void {
 }
 
 function handlePointerOver(event: PointerEvent): void {
+  scheduleTranslationControl(event);
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
@@ -184,6 +234,7 @@ function handlePointerOver(event: PointerEvent): void {
 }
 
 function handlePointerOut(event: PointerEvent): void {
+  hideTranslationControl(event);
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
@@ -236,6 +287,8 @@ function handleWordKeydown(event: KeyboardEvent): void {
   words[nextIndex].focus();
   event.preventDefault();
 }
+
+onBeforeUnmount(clearTranslationControlTimer);
 </script>
 
 <template>
@@ -247,6 +300,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
     tabindex="0"
     @pointerover="handlePointerOver"
     @pointerout="handlePointerOut"
+    @pointermove="handleTranslationPointerMove"
     @pointerdown="beginTouch"
     @pointerup="finishTouch"
     @pointercancel="touchStart = null"
@@ -263,7 +317,16 @@ function handleWordKeydown(event: KeyboardEvent): void {
           data-reading-paragraph
         >
           <template v-for="line in paragraph.lines" :key="line.key">
-            <span class="reading-line-wrap" :class="{ 'is-translation': line.isTranslation }">
+            <span
+              class="reading-line-wrap"
+              :class="{
+                'is-translation': line.isTranslation,
+                'translation-control-visible': visibleTranslationControlLine === line.key,
+              }"
+              :data-translation-line="line.isTranslation ? line.key : undefined"
+              @pointerenter="scheduleTranslationControl"
+              @pointerleave="hideTranslationControl"
+            >
             <button
               v-if="line.isTranslation"
               class="translation-visibility-toggle"
@@ -271,7 +334,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :aria-label="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
               :aria-pressed="isTranslationHidden(line.key)"
               :title="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
-              @click.stop="toggleTranslation(line.key)"
+              @click.stop="toggleTranslation(line.key, $event)"
             >
               <svg v-if="isTranslationHidden(line.key)" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M3 3 21 21" />

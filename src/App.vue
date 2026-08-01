@@ -17,6 +17,7 @@ const onMaterialPage = computed(() => route.name === "material");
       英文<span>學習庫</span>
     </RouterLink>
     <nav class="header-actions" aria-label="網站工具">
+      <DataManagement />
       <template v-if="onMaterialPage">
         <button
           id="open-ai-assistant"
@@ -33,7 +34,6 @@ const onMaterialPage = computed(() => route.name === "material");
         </button>
       </template>
       <template v-else>
-        <DataManagement />
         <MaterialGuide />
       </template>
     </nav>

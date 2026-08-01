@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type {
   ContentBlock,
   TextContentBlock,
@@ -48,7 +48,6 @@ const props = defineProps<{
   activeWord: string;
   blocks: ContentBlock[];
   familiarityLevels: FamiliarityLevel[];
-  hideTranslations: boolean;
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
@@ -58,6 +57,7 @@ const emit = defineEmits<{
   lookup: [word: string, rect: DOMRect];
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
+const hiddenTranslationLines = ref(new Set<string>());
 
 function paragraphs(block: TextContentBlock): string[] {
   return block.text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
@@ -150,6 +150,17 @@ function presentationFor(segment: TextSegment): WordPresentation | undefined {
 
 function hasFamiliarity(segment: TextSegment): boolean {
   return (presentationFor(segment)?.level.level ?? 0) > 0;
+}
+
+function isTranslationHidden(lineKey: string): boolean {
+  return hiddenTranslationLines.value.has(lineKey);
+}
+
+function toggleTranslation(lineKey: string): void {
+  const nextHiddenLines = new Set(hiddenTranslationLines.value);
+  if (nextHiddenLines.has(lineKey)) nextHiddenLines.delete(lineKey);
+  else nextHiddenLines.add(lineKey);
+  hiddenTranslationLines.value = nextHiddenLines;
 }
 
 function wordElement(target: EventTarget | null): HTMLElement | null {
@@ -252,9 +263,28 @@ function handleWordKeydown(event: KeyboardEvent): void {
           data-reading-paragraph
         >
           <template v-for="line in paragraph.lines" :key="line.key">
+            <span class="reading-line-wrap" :class="{ 'is-translation': line.isTranslation }">
+            <button
+              v-if="line.isTranslation"
+              class="translation-visibility-toggle"
+              type="button"
+              :aria-label="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
+              :aria-pressed="isTranslationHidden(line.key)"
+              :title="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
+              @click.stop="toggleTranslation(line.key)"
+            >
+              <svg v-if="isTranslationHidden(line.key)" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M3 3 21 21" />
+                <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A11.8 11.8 0 0 1 12 5c5 0 8.5 3.5 10 7a14 14 0 0 1-3.1 4.8M6.2 6.2A13.8 13.8 0 0 0 2 12c1.5 3.5 5 7 10 7a11.8 11.8 0 0 0 2.1-.2" />
+              </svg>
+              <svg v-else aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M2 12c1.5-3.5 5-7 10-7s8.5 3.5 10 7c-1.5 3.5-5 7-10 7S3.5 15.5 2 12Z" />
+                <circle cx="12" cy="12" r="2.5" />
+              </svg>
+            </button>
             <span
               class="reading-line"
-              :class="{ 'translation-mask': props.hideTranslations && line.isTranslation }"
+              :class="{ 'translation-mask': line.isTranslation && isTranslationHidden(line.key) }"
             >
             <template
               v-for="(segment, segmentIndex) in line.segments"
@@ -283,6 +313,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
               v-else
             >{{ segment.label }}</span>
             </template>
+            </span>
             </span>
           </template>
         </p>

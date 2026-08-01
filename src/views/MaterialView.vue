@@ -43,7 +43,7 @@ interface WordCardController {
 
 const INITIAL_VISIBLE_WORD_LIMIT = 300;
 const WORD_CARD_CLOSE_DELAY_MS = 120;
-const WORD_CARD_HOVER_DELAY_MS = 1000;
+const WORD_CARD_HOVER_DELAY_MS = 600;
 const WORD_SELECTION_DELAY_MS = 220;
 
 const route = useRoute();
@@ -52,7 +52,6 @@ const materialWords = ref<string[]>([]);
 const vocabularyProgress = ref(new Map<string, VocabularyRecord>());
 const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const familiarityColor = ref("#d86b48");
-const hideTranslations = ref(false);
 const activeView = ref<MaterialViewMode>("reading");
 const compactLayout = ref(true);
 const searchQuery = ref("");
@@ -341,14 +340,6 @@ onBeforeUnmount(() => {
             <h2>素材內容</h2>
             <p ref="familiarityLegend" class="familiarity-legend">
               <button
-                class="text-button translation-toggle"
-                type="button"
-                :aria-pressed="hideTranslations"
-                @click="hideTranslations = !hideTranslations"
-              >
-                {{ hideTranslations ? "顯示中文" : "隱藏中文" }}
-              </button>
-              <button
                 class="familiarity-help"
                 type="button"
                 aria-describedby="familiarity-tooltip"
@@ -383,7 +374,6 @@ onBeforeUnmount(() => {
             :active-word="activeWord"
             :blocks="material.contentBlocks"
             :familiarity-levels="familiarityLevels"
-            :hide-translations="hideTranslations"
             :vocabulary-progress="vocabularyProgress"
             @mouseup="handleWordSelection"
             @dblclick="nextTick(handleWordSelection)"

@@ -15,6 +15,7 @@ import MaterialImage from "./MaterialImage.vue";
 
 interface TextSegment {
   delay?: number;
+  isTranslation: boolean;
   label: string;
   word?: string;
 }
@@ -28,7 +29,11 @@ interface RenderedTextBlock {
   key: string;
   paragraphs: Array<{
     key: string;
-    segments: TextSegment[];
+    lines: Array<{
+      isTranslation: boolean;
+      key: string;
+      segments: TextSegment[];
+    }>;
   }>;
   type: "text";
 }
@@ -43,6 +48,7 @@ const props = defineProps<{
   activeWord: string;
   blocks: ContentBlock[];
   familiarityLevels: FamiliarityLevel[];
+  hideTranslations: boolean;
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
@@ -57,21 +63,40 @@ function paragraphs(block: TextContentBlock): string[] {
   return block.text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
+function appendPlainTextSegments(text: string, segments: TextSegment[]): void {
+  if (!text) return;
+  let start = 0;
+  let translation = /[\u3400-\u9fff]/u.test(text[0]);
+  for (let index = 1; index < text.length; index += 1) {
+    const nextTranslation = /[\u3400-\u9fff]/u.test(text[index]);
+    if (nextTranslation === translation) continue;
+    segments.push({ isTranslation: translation, label: text.slice(start, index) });
+    start = index;
+    translation = nextTranslation;
+  }
+  segments.push({ isTranslation: translation, label: text.slice(start) });
+}
+
 function textSegments(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   const wordPattern = /[a-z]+(?:['’][a-z]+)*/gi;
   let cursor = 0;
   for (const match of text.matchAll(wordPattern)) {
-    if (match.index > cursor) segments.push({ label: text.slice(cursor, match.index) });
+    if (match.index > cursor) {
+      appendPlainTextSegments(text.slice(cursor, match.index), segments);
+    }
     const normalizedWord = normalizeWord(match[0]);
     segments.push({
       delay: familiarityDelay(normalizedWord),
+      isTranslation: false,
       label: match[0],
       word: normalizedWord,
     });
     cursor = match.index + match[0].length;
   }
-  if (cursor < text.length) segments.push({ label: text.slice(cursor) });
+  if (cursor < text.length) {
+    appendPlainTextSegments(text.slice(cursor), segments);
+  }
   return segments;
 }
 
@@ -86,7 +111,11 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
         type: "text",
         paragraphs: paragraphs(block).map((paragraph, paragraphIndex) => ({
           key: `${key}-${paragraphIndex}`,
-          segments: textSegments(paragraph),
+          lines: paragraph.split("\n").map((line, lineIndex) => ({
+            isTranslation: /[\u3400-\u9fff]/u.test(line),
+            key: `${key}-${paragraphIndex}-${lineIndex}`,
+            segments: textSegments(line),
+          })),
         })),
       };
     }));
@@ -96,7 +125,7 @@ const wordPresentations = computed(() => {
   renderedBlocks.value.forEach((block) => {
     if (block.type !== "text") return;
     block.paragraphs.forEach((paragraph) => {
-      paragraph.segments.forEach((segment) => {
+      paragraph.lines.forEach((line) => line.segments.forEach((segment) => {
         if (!segment.word || presentations.has(segment.word)) return;
         const materialCount = props.vocabularyProgress.get(segment.word)?.materialCount ?? 0;
         const level = familiarityLevel(props.familiarityLevels, materialCount);
@@ -109,7 +138,7 @@ const wordPresentations = computed(() => {
             "--outline-glow-blur": `${level.glowBlur}px`,
           },
         });
-      });
+      }));
     });
   });
   return presentations;
@@ -222,20 +251,25 @@ function handleWordKeydown(event: KeyboardEvent): void {
           :key="paragraph.key"
           data-reading-paragraph
         >
-          <template
-            v-for="(segment, segmentIndex) in paragraph.segments"
-            :key="segmentIndex"
-          >
+          <template v-for="line in paragraph.lines" :key="line.key">
+            <span
+              class="reading-line"
+              :class="{ 'translation-mask': props.hideTranslations && line.isTranslation }"
+            >
+            <template
+              v-for="(segment, segmentIndex) in line.segments"
+              :key="segmentIndex"
+            >
             <span
               v-if="segment.word"
               class="reading-word"
               :class="{
-                'is-active': activeWord === `${paragraph.key}-${segmentIndex}`,
+                'is-active': activeWord === `${line.key}-${segmentIndex}`,
                 'known-word': hasFamiliarity(segment),
               }"
               :data-known-word="segment.word"
               :data-word="segment.word"
-              :data-word-key="`${paragraph.key}-${segmentIndex}`"
+              :data-word-key="`${line.key}-${segmentIndex}`"
               :data-known-label="segment.label"
               :style="presentationFor(segment)?.style"
               tabindex="-1"
@@ -245,7 +279,12 @@ function handleWordKeydown(event: KeyboardEvent): void {
               class="known-word__glyph"
               :style="{ '--glyph-delay': `${(segment.delay ?? 0) + (characterIndex * 85)}ms` }"
             >{{ character }}</span></template><template v-else>{{ segment.label }}</template></span>
-            <template v-else>{{ segment.label }}</template>
+            <span
+              v-else
+              :class="{ 'translation-mask': props.hideTranslations && segment.isTranslation }"
+            >{{ segment.label }}</span>
+            </template>
+            </span>
           </template>
         </p>
       </template>

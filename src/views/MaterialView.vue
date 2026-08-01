@@ -52,6 +52,7 @@ const materialWords = ref<string[]>([]);
 const vocabularyProgress = ref(new Map<string, VocabularyRecord>());
 const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const familiarityColor = ref("#d86b48");
+const hideTranslations = ref(false);
 const activeView = ref<MaterialViewMode>("reading");
 const compactLayout = ref(true);
 const searchQuery = ref("");
@@ -61,9 +62,6 @@ const actionError = ref("");
 const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
-const materialTitleViewport = ref<HTMLElement | null>(null);
-const materialTitleTrack = ref<HTMLElement | null>(null);
-const materialTitleOverflowing = ref(false);
 const wordCard = ref<WordCardController | null>(null);
 const activeWord = ref("");
 const wordCardPinned = ref(false);
@@ -71,7 +69,6 @@ let loadSequence = 0;
 let selectionTimer: number | undefined;
 let wordCloseTimer: number | undefined;
 let wordHoverTimer: number | undefined;
-let materialTitleResizeObserver: ResizeObserver | null = null;
 
 const knownWords = computed(() => new Set(
   [...vocabularyProgress.value.values()]
@@ -235,14 +232,6 @@ function scheduleSelectionLookup(): void {
   selectionTimer = window.setTimeout(handleWordSelection, WORD_SELECTION_DELAY_MS);
 }
 
-function updateMaterialTitleOverflow(): void {
-  const viewport = materialTitleViewport.value;
-  const track = materialTitleTrack.value;
-  const distance = viewport && track ? Math.max(0, track.scrollWidth - viewport.clientWidth) : 0;
-  viewport?.style.setProperty("--title-distance", `${distance}px`);
-  materialTitleOverflowing.value = distance > 0;
-}
-
 function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target || familiarityLegend.value?.contains(target)) return;
@@ -279,18 +268,11 @@ watch(() => route.params.id, () => void loadMaterialPage());
 watch(searchQuery, () => {
   visibleWordLimit.value = INITIAL_VISIBLE_WORD_LIMIT;
 });
-watch(material, async () => {
-  await nextTick();
-  updateMaterialTitleOverflow();
-});
-
 onMounted(() => {
   document.body.classList.add("material-page");
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("selectionchange", scheduleSelectionLookup);
   document.addEventListener("keydown", handleKeydown);
-  materialTitleResizeObserver = new ResizeObserver(updateMaterialTitleOverflow);
-  if (materialTitleViewport.value) materialTitleResizeObserver.observe(materialTitleViewport.value);
   void loadMaterialPage();
 });
 
@@ -303,8 +285,6 @@ onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   document.removeEventListener("selectionchange", scheduleSelectionLookup);
   document.removeEventListener("keydown", handleKeydown);
-  materialTitleResizeObserver?.disconnect();
-  materialTitleResizeObserver = null;
   document.body.classList.remove("material-page");
 });
 </script>
@@ -324,16 +304,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <section class="material-heading" aria-labelledby="material-title">
         <p class="eyebrow">Reading material</p>
-        <h1 id="material-title">
-          <span
-            ref="materialTitleViewport"
-            class="material-title-viewport"
-            :class="{ 'is-overflowing': materialTitleOverflowing }"
-            tabindex="0"
-          >
-            <span ref="materialTitleTrack" class="material-title-track">{{ material.title }}</span>
-          </span>
-        </h1>
+        <h1 id="material-title" :title="material.title">{{ material.title }}</h1>
         <p v-if="material.description" class="lead">{{ material.description }}</p>
       </section>
 
@@ -370,6 +341,14 @@ onBeforeUnmount(() => {
             <h2>素材內容</h2>
             <p ref="familiarityLegend" class="familiarity-legend">
               <button
+                class="text-button translation-toggle"
+                type="button"
+                :aria-pressed="hideTranslations"
+                @click="hideTranslations = !hideTranslations"
+              >
+                {{ hideTranslations ? "顯示中文" : "隱藏中文" }}
+              </button>
+              <button
                 class="familiarity-help"
                 type="button"
                 aria-describedby="familiarity-tooltip"
@@ -404,6 +383,7 @@ onBeforeUnmount(() => {
             :active-word="activeWord"
             :blocks="material.contentBlocks"
             :familiarity-levels="familiarityLevels"
+            :hide-translations="hideTranslations"
             :vocabulary-progress="vocabularyProgress"
             @mouseup="handleWordSelection"
             @dblclick="nextTick(handleWordSelection)"

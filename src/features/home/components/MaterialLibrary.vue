@@ -227,7 +227,6 @@ async function loadDashboard(page = pagination.value.currentPage): Promise<void>
     materials.value = dashboard.materials;
     pagination.value = dashboard.pagination;
     dashboardStore.update({
-      milestone: dashboard.milestone,
       statistics: dashboard.statistics,
     });
   } catch (error) {
@@ -328,7 +327,7 @@ onUnmounted(() => {
 <template>
   <section class="content-section" aria-labelledby="materials-title">
     <div class="section-heading">
-      <div>
+      <div class="library-heading">
         <p class="eyebrow">Library</p>
         <h2 id="materials-title">素材列表</h2>
         <p class="library-count">{{ libraryCount }}</p>
@@ -449,6 +448,7 @@ onUnmounted(() => {
           class="material-card__title-button"
           type="button"
           :aria-label="`重新命名 ${material.title}`"
+          :title="material.title"
           @click="openEditDialog(material)"
         >
           <h2>{{ material.title }}</h2>

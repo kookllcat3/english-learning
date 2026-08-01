@@ -122,6 +122,5 @@ export interface CreateMaterialInput {
 export interface DashboardStatistics {
   materialCount: number;
   knownWordCount: number;
-  completedMaterialCount: number;
   averageCompletion: number;
 }

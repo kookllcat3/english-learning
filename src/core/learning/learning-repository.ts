@@ -25,7 +25,6 @@ import type {
   BackupMaterial,
   ContentBlock,
   CreateMaterialInput,
-  DashboardStatistics,
   LearningBackup,
   MaterialRecord,
   VocabularyRecord,
@@ -315,41 +314,6 @@ export async function setWordsKnown(
   await writeLearningProgress([updatedMaterial], vocabulary);
 }
 
-function milestoneFor({
-  materialCount,
-  knownWordCount,
-  completedMaterialCount,
-}: DashboardStatistics) {
-  if (materialCount === 0) {
-    return {
-      title: "第一個里程碑正在等你",
-      message: "加入第一份英文素材，替自己的學習歷程留下起點。",
-      nextGoal: "下一步：新增 1 份素材",
-    };
-  }
-
-  const thresholds = [10, 25, 50, 100, 250, 500, 1000];
-  const nextThreshold = thresholds.find((threshold) => knownWordCount < threshold);
-  if (knownWordCount === 0) {
-    return {
-      title: "素材已經準備好了",
-      message: "從一個真正認識的單字開始，進度就會慢慢累積。",
-      nextGoal: "下一步：認識 10 個單字",
-    };
-  }
-
-  const completedMessage = completedMaterialCount > 0
-    ? `，並完成了 ${completedMaterialCount} 份素材`
-    : "";
-  return {
-    title: `你已累積 ${knownWordCount} 個認識的單字`,
-    message: `每一次勾選都會留下紀錄${completedMessage}。這些小進步正在變成你的英文底氣。`,
-    nextGoal: nextThreshold
-      ? `下一個詞彙里程碑：${nextThreshold} 個`
-      : "你已跨過 1,000 個詞彙，繼續建立自己的素材旅程。",
-  };
-}
-
 function materialCompletion(material: MaterialRecord): number {
   return material.wordCount === 0 ? 0 : material.knownCount / material.wordCount;
 }
@@ -387,9 +351,6 @@ export async function getDashboard(
   const pageCount = Math.max(1, Math.ceil(filteredCount / MATERIALS_PER_PAGE));
   const currentPage = Math.min(Math.max(1, page), pageCount);
   const start = (currentPage - 1) * MATERIALS_PER_PAGE;
-  const completedMaterialCount = materials.filter(
-    (material) => material.wordCount > 0 && material.knownCount === material.wordCount,
-  ).length;
   const totalProgress = materials.reduce(
     (sum, material) => sum + materialCompletion(material),
     0,
@@ -397,7 +358,6 @@ export async function getDashboard(
   const statistics = {
     materialCount,
     knownWordCount: knownWords.size,
-    completedMaterialCount,
     averageCompletion: materialCount === 0 ? 0 : totalProgress / materialCount,
   };
   return {
@@ -406,7 +366,6 @@ export async function getDashboard(
       completion: materialCompletion(material),
     })),
     statistics,
-    milestone: milestoneFor(statistics),
     pagination: {
       currentPage,
       pageCount,

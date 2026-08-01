@@ -7,8 +7,6 @@ const {
   averageCompletion,
   knownWordCount,
   materialCount,
-  milestoneNextGoal,
-  milestoneTitle,
 } = storeToRefs(dashboardStore);
 </script>
 
@@ -30,16 +28,4 @@ const {
     </article>
   </section>
 
-  <section class="milestone-card" aria-labelledby="milestone-title">
-    <div class="milestone-card__icon" aria-hidden="true">
-      ✦
-    </div>
-    <div>
-      <p class="eyebrow">Your milestone</p>
-      <h2 id="milestone-title">
-        {{ milestoneTitle }}
-      </h2>
-      <strong>{{ milestoneNextGoal }}</strong>
-    </div>
-  </section>
 </template>

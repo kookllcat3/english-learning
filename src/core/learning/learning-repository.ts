@@ -6,6 +6,7 @@ import {
   readOne,
   writeBackupStores,
   writeLearningProgress,
+  writeMaterialKnowledgeMigration,
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
@@ -14,9 +15,12 @@ import {
   mergeNewerRecords,
   synchronizeVocabularyRecords,
 } from "./learning-records.js";
-import { normalizedReadingParagraphKey } from "./reading-position.js";
 import {
-  extractUniqueWords,
+  hasReadingParagraphKey,
+  normalizedReadingParagraphKey,
+} from "./reading-position.js";
+import { sourceWordsForBlocks } from "./reading-content.js";
+import {
   fileNameWithoutExtension,
   isValidWord,
   normalizeWord,
@@ -35,6 +39,8 @@ import type {
 const MAX_MATERIAL_BYTES = 2 * 1024 * 1024;
 const BACKUP_SCHEMA_VERSION = 3;
 const MATERIALS_PER_PAGE = 12;
+const READING_CONTENT_CLASSIFICATION_KEY = "readingContentClassificationVersion";
+const READING_CONTENT_CLASSIFICATION_VERSION = 1;
 
 export type MaterialSort = "newest" | "oldest" | "progress" | "title";
 
@@ -95,7 +101,7 @@ function hasValidReadingParagraphReference(material: Record<string, unknown>): b
   const contentBlocks = material.contentBlocks;
   if (contentBlocks !== undefined && !Array.isArray(contentBlocks)) return false;
   const blocks = normalizedBlocks(material.content, contentBlocks as ContentBlock[] | undefined);
-  return normalizedReadingParagraphKey(value, blocks) === value;
+  return typeof value === "string" && hasReadingParagraphKey(value, blocks);
 }
 
 async function readKnownWords(): Promise<Set<string>> {
@@ -114,11 +120,12 @@ async function ensureMaterialIndex(): Promise<void> {
       if (legacyMaterials.length === 0) return;
       const knownWords = await readKnownWords();
       const bundles = legacyMaterials.map((material) => {
-        const words = extractUniqueWords(material.content);
+        const contentBlocks = textBlocks(material.content);
+        const words = sourceWordsForBlocks(contentBlocks);
         return {
           metadata: metadataFor(material, words, knownWords),
           content: material.content,
-          contentBlocks: textBlocks(material.content),
+          contentBlocks,
           words,
         };
       });
@@ -135,21 +142,56 @@ async function ensureMaterialKnowledge(): Promise<void> {
   await ensureMaterialIndex();
   if (!materialKnowledgePromise) {
     materialKnowledgePromise = (async () => {
-      const materials = await readAll(STORES.materials);
-      const legacyMaterials = materials.filter((material) => !Array.isArray(material.knownWords));
-      if (legacyMaterials.length === 0) return;
-      const [knownWords, termRecords] = await Promise.all([
-        readKnownWords(),
-        readAll(STORES.materialTerms),
-      ]);
-      const termsByMaterial = new Map(
-        termRecords.map((record) => [record.materialId, record.words]),
+      const classificationSetting = await readOne(
+        STORES.settings,
+        READING_CONTENT_CLASSIFICATION_KEY,
       );
-      const migrated = legacyMaterials.map((material) => {
-        const words = termsByMaterial.get(material.id) ?? [];
-        return metadataFor(material, words, knownWords);
+      if (classificationSetting?.value === READING_CONTENT_CLASSIFICATION_VERSION) return;
+      const [materials, contents, vocabulary] = await Promise.all([
+        readAll(STORES.materials),
+        readAll(STORES.materialContents),
+        readAll(STORES.vocabulary),
+      ]);
+      const legacyKnownWords = new Set(
+        vocabulary.filter((record) => record.learned).map((record) => record.word),
+      );
+      const contentByMaterial = new Map(contents.map((record) => [record.materialId, record]));
+      const blocksByMaterial = new Map<string, ContentBlock[]>();
+      const materialTerms = materials.map((material) => {
+        const storedContent = contentByMaterial.get(material.id);
+        const blocks = normalizedBlocks(
+          storedContent?.content ?? "",
+          storedContent?.contentBlocks,
+        );
+        blocksByMaterial.set(material.id, blocks);
+        return { materialId: material.id, words: sourceWordsForBlocks(blocks) };
       });
-      await writeLearningProgress(migrated, []);
+      const wordsByMaterial = new Map(
+        materialTerms.map((record) => [record.materialId, record.words]),
+      );
+      const migratedMaterials = materials.map((material) => metadataFor(
+        {
+          ...material,
+          readingParagraphKey: normalizedReadingParagraphKey(
+            material.readingParagraphKey,
+            blocksByMaterial.get(material.id) ?? [],
+          ),
+        },
+        wordsByMaterial.get(material.id) ?? [],
+        new Set(Array.isArray(material.knownWords) ? material.knownWords : legacyKnownWords),
+      ));
+      const learnedWords = new Set(migratedMaterials.flatMap((material) => material.knownWords));
+      const timestamp = new Date().toISOString();
+      await writeMaterialKnowledgeMigration(
+        migratedMaterials,
+        materialTerms,
+        synchronizeVocabularyRecords(vocabulary, learnedWords, timestamp),
+        {
+          key: READING_CONTENT_CLASSIFICATION_KEY,
+          value: READING_CONTENT_CLASSIFICATION_VERSION,
+          updatedAt: timestamp,
+        },
+      );
     })().catch((error) => {
       materialKnowledgePromise = undefined;
       throw error;
@@ -194,7 +236,8 @@ export async function createMaterial({
   await ensureMaterialKnowledge();
   validateMaterialContent(content);
   const timestamp = new Date().toISOString();
-  const words = extractUniqueWords(content);
+  const normalizedContentBlocks = normalizedBlocks(content, contentBlocks);
+  const words = sourceWordsForBlocks(normalizedContentBlocks);
   const material = {
     id: crypto.randomUUID(),
     title: requiredMaterialTitle(title, fileName),
@@ -208,7 +251,7 @@ export async function createMaterial({
   await writeMaterialBundles([{
     metadata: material,
     content,
-    contentBlocks: normalizedBlocks(content, contentBlocks),
+    contentBlocks: normalizedContentBlocks,
     assets: assets.map((asset) => ({ ...asset, materialId: material.id })),
     words,
   }]);
@@ -482,7 +525,10 @@ export async function createBackup(): Promise<LearningBackup> {
     }))),
     vocabulary: vocabulary.map(currentVocabularyRecord),
     wordNotes,
-    settings: settings.filter(({ key }) => key !== "familiarityTrackingVersion"),
+    settings: settings.filter(({ key }) => ![
+      "familiarityTrackingVersion",
+      READING_CONTENT_CLASSIFICATION_KEY,
+    ].includes(key)),
   };
 }
 
@@ -677,14 +723,21 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
   const mergedMaterials = mergeNewerRecords(currentMaterials, backup.materials, "id");
   const bundles = mergedMaterials.map((material) => {
     validateMaterialContent(material.content);
-    const words = extractUniqueWords(material.content);
+    const contentBlocks = normalizedBlocks(material.content, material.contentBlocks);
+    const words = sourceWordsForBlocks(contentBlocks);
     const knownWords = new Set(
       Array.isArray(material.knownWords) ? material.knownWords : legacyKnownWords,
     );
     return {
-      metadata: metadataFor(material, words, knownWords),
+      metadata: metadataFor({
+        ...material,
+        readingParagraphKey: normalizedReadingParagraphKey(
+          material.readingParagraphKey,
+          contentBlocks,
+        ),
+      }, words, knownWords),
       content: material.content,
-      contentBlocks: normalizedBlocks(material.content, material.contentBlocks),
+      contentBlocks,
       words,
     };
   });
@@ -734,7 +787,10 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
     wordNotes: mergeNewerRecords(currentWordNotes, backup.wordNotes ?? [], "word"),
     settings: mergeNewerRecords(
       currentSettings.filter(({ key }) => key !== "familiarityTrackingVersion"),
-      (backup.settings ?? []).filter(({ key }) => key !== "familiarityTrackingVersion"),
+      (backup.settings ?? []).filter(({ key }) => ![
+        "familiarityTrackingVersion",
+        READING_CONTENT_CLASSIFICATION_KEY,
+      ].includes(key)),
       "key",
     ),
   });

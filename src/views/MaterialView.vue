@@ -21,7 +21,8 @@ import {
 import {
   notifyLearningDataChanged,
 } from "../core/learning/learning-sync.js";
-import { extractUniqueWords, isValidWord, normalizeWord } from "../core/text/text.js";
+import { isValidWord, normalizeWord } from "../core/text/text.js";
+import { sourceWordsForBlocks } from "../core/learning/reading-content.js";
 import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
 import { errorMessage as getErrorMessage } from "../shared/errors.js";
 import { useLearningDataRefresh } from "../app/composables/use-learning-data-refresh.js";
@@ -130,7 +131,7 @@ async function loadMaterialPage(): Promise<void> {
     familiarityColor.value = color;
     familiarityLevels.value = levels;
     currentParagraphKey.value = loadedMaterial.readingParagraphKey ?? null;
-    materialWords.value = extractUniqueWords(loadedMaterial.content);
+    materialWords.value = sourceWordsForBlocks(loadedMaterial.contentBlocks);
     document.title = `${loadedMaterial.title}｜英文學習庫`;
   } catch {
     if (sequence !== loadSequence) return;

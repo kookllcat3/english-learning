@@ -1,28 +1,25 @@
 import type { ContentBlock } from "../models/models.js";
+import {
+  classifyReadingContent,
+  readingParagraphKey,
+  splitReadingParagraphs,
+} from "./reading-content.js";
 
-export function splitReadingParagraphs(text: string): string[] {
-  return text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
-}
+export { readingParagraphKey, splitReadingParagraphs } from "./reading-content.js";
 
-export function readingParagraphKey(
-  blockOrder: number,
-  blockIndex: number,
-  paragraphIndex: number,
-): string {
-  return `${blockOrder}-${blockIndex}-${paragraphIndex}`;
+export function hasReadingParagraphKey(value: string, blocks: ContentBlock[]): boolean {
+  return [...blocks]
+    .sort((first, second) => first.order - second.order)
+    .some((block, blockIndex) => block.type === "text"
+      && splitReadingParagraphs(block.text).some((_paragraph, paragraphIndex) => (
+        readingParagraphKey(block.order, blockIndex, paragraphIndex) === value
+      )));
 }
 
 export function readingParagraphKeys(blocks: ContentBlock[]): Set<string> {
-  const keys = new Set<string>();
-  [...blocks]
-    .sort((first, second) => first.order - second.order)
-    .forEach((block, blockIndex) => {
-      if (block.type !== "text") return;
-      splitReadingParagraphs(block.text).forEach((_paragraph, paragraphIndex) => {
-        keys.add(readingParagraphKey(block.order, blockIndex, paragraphIndex));
-      });
-    });
-  return keys;
+  return new Set(classifyReadingContent(blocks)
+    .filter((section) => section.type === "text" && section.role === "source")
+    .map((section) => section.key));
 }
 
 export function normalizedReadingParagraphKey(

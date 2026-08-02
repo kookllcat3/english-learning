@@ -196,6 +196,34 @@ export async function writeLearningProgress(
   await transactionResult(transaction);
 }
 
+export async function writeMaterialKnowledgeMigration(
+  materials: MaterialRecord[],
+  materialTerms: MaterialTermsRecord[],
+  vocabulary: VocabularyRecord[],
+  setting: SettingRecord,
+): Promise<void> {
+  const database = await openDatabase();
+  const transaction = database.transaction(
+    [STORES.materials, STORES.materialTerms, STORES.vocabulary, STORES.settings],
+    "readwrite",
+  );
+  const completion = transactionResult(transaction);
+  const materialStore = transaction.objectStore(STORES.materials);
+  const termStore = transaction.objectStore(STORES.materialTerms);
+  const vocabularyStore = transaction.objectStore(STORES.vocabulary);
+  try {
+    materials.forEach((material) => materialStore.put(material));
+    materialTerms.forEach((terms) => termStore.put(terms));
+    vocabulary.forEach((record) => vocabularyStore.put(record));
+    transaction.objectStore(STORES.settings).put(setting);
+  } catch (error) {
+    transaction.abort();
+    await completion.catch(() => undefined);
+    throw error;
+  }
+  await completion;
+}
+
 export async function writeBackupStores({
   materials,
   materialAssets = [],

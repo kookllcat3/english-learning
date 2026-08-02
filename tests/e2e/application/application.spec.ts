@@ -304,6 +304,192 @@ test("marks paragraph words and keeps one reading position", async ({ page }) =>
   await expect(reloadedMarkers.nth(1)).toHaveAttribute("aria-pressed", "true");
 });
 
+test("classifies structured reading content and repairs polluted learning data", async ({ page }) => {
+  const id = "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a27";
+  const timestamp = "2026-08-02T08:00:00.000Z";
+  const blocks = [
+    { type: "text", order: 0, text: "A1 ENGLISH · 30 UNITS" },
+    { type: "text", order: 1, text: "Meet the Animals" },
+    { type: "text", order: 2, text: "01 Bird 鳥類" },
+    { type: "text", order: 3, text: "EN Birds can fly." },
+    { type: "text", order: 4, text: "中 birds 是鳥類。" },
+    { type: "text", order: 5, text: "WORD POWER: avian 鳥類的" },
+  ];
+  const content = blocks.map((block) => block.text).join("\n");
+
+  await page.goto("/");
+  await expect(page.getByText("目前沒有素材")).toBeVisible();
+  await page.evaluate(async ({ blocks: storedBlocks, content: storedContent, id: materialId, timestamp: storedTimestamp }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction(
+      ["materials", "materialContents", "materialTerms", "vocabulary", "wordNotes", "settings"],
+      "readwrite",
+    );
+    transaction.objectStore("materials").put({
+      id: materialId,
+      title: "Structured animal lesson",
+      description: "",
+      createdAt: storedTimestamp,
+      updatedAt: storedTimestamp,
+      wordCount: 11,
+      knownCount: 3,
+      knownWords: ["avian", "birds", "en"],
+      readingParagraphKey: "0-0-0",
+    });
+    transaction.objectStore("materialContents").put({
+      materialId,
+      content: storedContent,
+      contentBlocks: storedBlocks,
+    });
+    transaction.objectStore("materialTerms").put({
+      materialId,
+      words: ["a", "avian", "birds", "en", "fly", "power", "word"],
+    });
+    ["avian", "birds", "en"].forEach((word) => transaction.objectStore("vocabulary").put({
+      word,
+      learned: true,
+      learnedAt: storedTimestamp,
+      createdAt: storedTimestamp,
+      updatedAt: storedTimestamp,
+    }));
+    transaction.objectStore("wordNotes").put({
+      word: "avian",
+      markdown: "keep this note",
+      createdAt: storedTimestamp,
+      updatedAt: storedTimestamp,
+    });
+    transaction.objectStore("settings").delete("readingContentClassificationVersion");
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
+      transaction.addEventListener("error", () => reject(transaction.error), { once: true });
+    });
+    database.close();
+  }, { blocks, content, id, timestamp });
+
+  await page.addInitScript((materialId) => {
+    if (sessionStorage.getItem("simulateClassificationMigrationFailure") !== "true") return;
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function put(value, key) {
+      if (
+        this.name === "materialTerms"
+        && value?.materialId === materialId
+      ) {
+        throw new DOMException("Simulated migration failure", "UnknownError");
+      }
+      return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+    };
+  }, id);
+  await page.evaluate(() => {
+    sessionStorage.setItem("simulateClassificationMigrationFailure", "true");
+  });
+  await page.reload();
+  const failedMigration = await page.evaluate(async (materialId) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction(
+      ["materials", "materialTerms", "vocabulary", "settings"],
+      "readonly",
+    );
+    const read = <T>(store: string, key: IDBValidKey) => new Promise<T | undefined>((resolve, reject) => {
+      const request = transaction.objectStore(store).get(key);
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const [material, terms, avian, setting] = await Promise.all([
+      read<{ knownWords: string[] }>("materials", materialId),
+      read<{ words: string[] }>("materialTerms", materialId),
+      read<{ learned: boolean }>("vocabulary", "avian"),
+      read<{ value: number }>("settings", "readingContentClassificationVersion"),
+    ]);
+    database.close();
+    return {
+      knownWords: material?.knownWords,
+      terms: terms?.words,
+      avianLearned: avian?.learned,
+      version: setting?.value,
+    };
+  }, id);
+  expect(failedMigration).toEqual({
+    knownWords: ["avian", "birds", "en"],
+    terms: ["a", "avian", "birds", "en", "fly", "power", "word"],
+    avianLearned: true,
+    version: undefined,
+  });
+  await page.evaluate(() => {
+    sessionStorage.removeItem("simulateClassificationMigrationFailure");
+  });
+  await page.reload();
+  const card = page.getByRole("article").filter({ hasText: "Structured animal lesson" });
+  await expect(card).toContainText("1 / 3");
+  await card.getByRole("link", { name: "開始閱讀" }).click();
+
+  const readingGroup = page.locator("[data-reading-paragraph]");
+  await expect(readingGroup).toHaveCount(1);
+  await expect(readingGroup).toContainText("EN Birds can fly.");
+  await expect(readingGroup).toContainText("中 birds 是鳥類。");
+  await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(1);
+  await expect(page.locator(".reading-line-wrap.is-translation")).toHaveCount(1);
+  await expect(page.locator('[data-word="birds"]')).toHaveCount(1);
+  await expect(page.locator('[data-word="en"]')).toHaveCount(0);
+  await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
+
+  const migrated = await page.evaluate(async (materialId) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction(
+      ["materials", "materialTerms", "vocabulary", "wordNotes", "settings"],
+      "readonly",
+    );
+    const read = <T>(store: string, key: IDBValidKey) => new Promise<T>((resolve, reject) => {
+      const request = transaction.objectStore(store).get(key);
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const [material, terms, avian, en, note, setting] = await Promise.all([
+      read<{ knownWords: string[]; readingParagraphKey: string | null; wordCount: number }>("materials", materialId),
+      read<{ words: string[] }>("materialTerms", materialId),
+      read<{ learned: boolean }>("vocabulary", "avian"),
+      read<{ learned: boolean }>("vocabulary", "en"),
+      read<{ markdown: string }>("wordNotes", "avian"),
+      read<{ value: number }>("settings", "readingContentClassificationVersion"),
+    ]);
+    database.close();
+    return {
+      material: {
+        knownWords: material.knownWords,
+        readingParagraphKey: material.readingParagraphKey,
+        wordCount: material.wordCount,
+      },
+      terms: { words: terms.words },
+      avian: { learned: avian.learned },
+      en: { learned: en.learned },
+      note: { markdown: note.markdown },
+      setting: { value: setting.value },
+    };
+  }, id);
+  expect(migrated).toEqual({
+    material: { knownWords: ["birds"], readingParagraphKey: null, wordCount: 3 },
+    terms: { words: ["birds", "can", "fly"] },
+    avian: { learned: false },
+    en: { learned: false },
+    note: { markdown: "keep this note" },
+    setting: { value: 1 },
+  });
+});
+
 test("offers a return action whenever a reading position is marked", async ({ page }) => {
   const paragraphs = Array.from(
     { length: 24 },
@@ -540,6 +726,51 @@ test("rejects a backup whose reading position does not exist", async ({ page }) 
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Invalid reading position" })).toHaveCount(0);
+});
+
+test("clears a legacy reading marker that points to a newly classified heading", async ({ page }) => {
+  const timestamp = "2026-08-02T08:00:00.000Z";
+  await page.goto("/");
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "legacy-heading-marker.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 3,
+      exportedAt: timestamp,
+      materials: [{
+        id: "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a27",
+        title: "Legacy heading marker",
+        description: "",
+        content: "Meet the Animals\nA lion sleeps.",
+        contentBlocks: [
+          { type: "text", text: "Meet the Animals", order: 0 },
+          { type: "text", text: "A lion sleeps.", order: 1 },
+        ],
+        knownWords: [],
+        readingParagraphKey: "0-0-0",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      vocabulary: [],
+      wordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await page.getByRole("article")
+    .filter({ hasText: "Legacy heading marker" })
+    .getByRole("link", { name: "開始閱讀" })
+    .click();
+
+  await expect(page.locator("[data-reading-paragraph]")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }))
+    .toHaveAttribute("aria-pressed", "false");
 });
 
 test("imports a schema version 1 backup with legacy learning progress", async ({ page }) => {

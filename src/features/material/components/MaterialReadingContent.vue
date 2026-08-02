@@ -5,9 +5,10 @@ import type {
   VocabularyRecord,
 } from "../../../core/models/models.js";
 import {
-  readingParagraphKey,
-  splitReadingParagraphs,
-} from "../../../core/learning/reading-position.js";
+  classifyReadingContent,
+  type ReadingTextLine,
+  type ReadingTextRole,
+} from "../../../core/learning/reading-content.js";
 import { normalizeWord } from "../../../core/text/text.js";
 import {
   familiarityDelay,
@@ -18,7 +19,6 @@ import MaterialImage from "./MaterialImage.vue";
 
 interface TextSegment {
   delay?: number;
-  isTranslation: boolean;
   label: string;
   word?: string;
 }
@@ -38,6 +38,7 @@ interface RenderedTextBlock {
       key: string;
       segments: TextSegment[];
     }>;
+    role: ReadingTextRole;
     words: string[];
   }>;
   type: "text";
@@ -67,70 +68,55 @@ const emit = defineEmits<{
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const hiddenTranslationLines = ref(new Set<string>());
 
-function appendPlainTextSegments(text: string, segments: TextSegment[]): void {
-  if (!text) return;
-  let start = 0;
-  let translation = /[\u3400-\u9fff]/u.test(text[0]);
-  for (let index = 1; index < text.length; index += 1) {
-    const nextTranslation = /[\u3400-\u9fff]/u.test(text[index]);
-    if (nextTranslation === translation) continue;
-    segments.push({ isTranslation: translation, label: text.slice(start, index) });
-    start = index;
-    translation = nextTranslation;
-  }
-  segments.push({ isTranslation: translation, label: text.slice(start) });
-}
-
 function textSegments(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   const wordPattern = /[a-z]+(?:['’][a-z]+)*/gi;
   let cursor = 0;
   for (const match of text.matchAll(wordPattern)) {
-    if (match.index > cursor) {
-      appendPlainTextSegments(text.slice(cursor, match.index), segments);
-    }
+    if (match.index > cursor) segments.push({ label: text.slice(cursor, match.index) });
     const normalizedWord = normalizeWord(match[0]);
     segments.push({
       delay: familiarityDelay(normalizedWord),
-      isTranslation: false,
       label: match[0],
       word: normalizedWord,
     });
     cursor = match.index + match[0].length;
   }
-  if (cursor < text.length) {
-    appendPlainTextSegments(text.slice(cursor), segments);
-  }
+  if (cursor < text.length) segments.push({ label: text.slice(cursor) });
   return segments;
 }
 
+function lineSegments(line: ReadingTextLine): TextSegment[] {
+  if (line.role !== "source") {
+    return [{ label: line.text }];
+  }
+  const prefix = line.text.slice(0, line.interactiveTextStart);
+  return [
+    ...(prefix ? [{ label: prefix }] : []),
+    ...textSegments(line.text.slice(line.interactiveTextStart)),
+  ];
+}
+
 const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>(() =>
-  [...props.blocks]
-    .sort((first, second) => first.order - second.order)
-    .map((block, blockIndex) => {
-      const key = `${block.order}-${blockIndex}`;
-      if (block.type === "image") return { block, key, type: "image" };
-      return {
-        key,
-        type: "text",
-        paragraphs: splitReadingParagraphs(block.text).map((paragraph, paragraphIndex) => {
-          const paragraphKey = readingParagraphKey(block.order, blockIndex, paragraphIndex);
-          const lines = paragraph.split("\n").map((line, lineIndex) => ({
-            isTranslation: /[\u3400-\u9fff]/u.test(line),
-            key: `${paragraphKey}-${lineIndex}`,
-            segments: textSegments(line),
-          }));
-          const originalLines = lines.filter((line) => !line.isTranslation);
-          return {
-            key: paragraphKey,
-            lastOriginalLineKey: originalLines.at(-1)?.key,
-            lines,
-            words: [...new Set(originalLines.flatMap((line) =>
-              line.segments.flatMap((segment) => segment.word ? [segment.word] : [])))],
-          };
-        }),
-      };
-    }));
+  classifyReadingContent(props.blocks).map((section) => {
+    if (section.type === "image") return section;
+    return {
+      key: section.key,
+      type: "text",
+      paragraphs: [{
+        key: section.key,
+        lastOriginalLineKey: [...section.lines].reverse()
+          .find((line) => line.role === "source")?.key,
+        lines: section.lines.map((line) => ({
+          isTranslation: line.role === "translation",
+          key: line.key,
+          segments: lineSegments(line),
+        })),
+        role: section.role,
+        words: section.words,
+      }],
+    };
+  }));
 
 const wordPresentations = computed(() => {
   const presentations = new Map<string, WordPresentation>();
@@ -294,9 +280,9 @@ function handleWordKeydown(event: KeyboardEvent): void {
         <p
           v-for="paragraph in block.paragraphs"
           :key="paragraph.key"
-          :class="{ 'is-reading-position': currentParagraphKey === paragraph.key }"
-          data-reading-paragraph
-          :data-paragraph-key="paragraph.key"
+          :class="{ 'is-reading-position': paragraph.role === 'source' && currentParagraphKey === paragraph.key }"
+          :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
+          :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
           <template v-for="line in paragraph.lines" :key="line.key">
             <span

@@ -279,11 +279,8 @@ test("unpins a pinned word card before its natural outside close", async ({ page
   const nextWord = page.locator('.reading-word:not([data-word="bear"])').first();
   const nextWordText = await nextWord.getAttribute("data-word");
   if (!nextWordText) throw new Error("next reading word not found");
-  await nextWord.dispatchEvent("pointerdown", {
-    button: 0,
-    pointerId: 93,
-    pointerType: "mouse",
-  });
+  await nextWord.click();
+  await page.waitForTimeout(200);
   await expect(page.getByRole("heading", { name: nextWordText, level: 2 })).toBeVisible();
   await expect(pinButton).toHaveAttribute("aria-pressed", "false");
 });

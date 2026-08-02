@@ -186,6 +186,8 @@ function scheduleWordCardClose(): void {
   if (wordCardPinned.value) return;
   window.clearTimeout(wordCloseTimer);
   wordCloseTimer = window.setTimeout(() => {
+    const focusedWord = document.activeElement?.closest<HTMLElement>(".reading-word");
+    if (wordCardPinned.value || focusedWord?.dataset.wordKey === activeWord.value) return;
     activeWord.value = "";
     wordCard.value?.close();
   }, WORD_CARD_CLOSE_DELAY_MS);

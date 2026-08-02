@@ -201,6 +201,8 @@ function handlePointerOut(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
+  const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+  if (nextElement?.closest(".word-card")) return;
   emit("deactivate");
 }
 

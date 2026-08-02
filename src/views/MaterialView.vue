@@ -38,6 +38,7 @@ type MaterialViewMode = "reading" | "vocabulary";
 interface WordCardController {
   close(): void;
   open(word: string, rect: DOMRect, shouldPin?: boolean): Promise<void>;
+  unpin(): void;
 }
 
 const INITIAL_VISIBLE_WORD_LIMIT = 300;
@@ -182,7 +183,7 @@ function openWordCard(
 
 function scheduleWordCardClose(): void {
   window.clearTimeout(wordHoverTimer);
-  if (!activeWord.value || wordCardPinned.value) return;
+  if (wordCardPinned.value) return;
   window.clearTimeout(wordCloseTimer);
   wordCloseTimer = window.setTimeout(() => {
     activeWord.value = "";
@@ -231,12 +232,23 @@ function scheduleSelectionLookup(): void {
 
 function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
-  if (!target || familiarityLegend.value?.contains(target)) return;
-  familiarityHelpOpen.value = false;
-  if (!wordCardPinned.value && !target.closest(".reading-word, .word-card, .word-item__lookup")) {
-    activeWord.value = "";
-    wordCard.value?.close();
+  if (!target) return;
+  if (!familiarityLegend.value?.contains(target)) familiarityHelpOpen.value = false;
+  if (target.closest(".word-card")) return;
+  if (wordCardPinned.value) {
+    wordCard.value?.unpin();
+    const readingWord = target.closest<HTMLElement>(".reading-word");
+    const word = readingWord?.dataset.word;
+    const key = readingWord?.dataset.wordKey;
+    if (readingWord && word && key) {
+      openWordCard(word, readingWord.getBoundingClientRect(), key);
+      return;
+    }
+    if (target.closest(".word-item__lookup")) return;
+    scheduleWordCardClose();
+    return;
   }
+  if (!target.closest(".reading-word, .word-item__lookup")) wordCard.value?.close();
 }
 
 function handleKeydown(event: KeyboardEvent): void {

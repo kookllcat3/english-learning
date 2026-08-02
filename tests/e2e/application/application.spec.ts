@@ -242,22 +242,50 @@ test("pins the word card when its word is selected", async ({ page }) => {
   await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("pins the current word card until explicitly unpinned", async ({ page }) => {
+test("unpins a pinned word card before its natural outside close", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
 
   await page.getByRole("button", { name: "釘選單字卡" }).click();
-  await page.getByRole("heading", { name: materialTitle, level: 1 }).click();
-  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
-
-  await page.locator('[data-word="runs"]').dblclick({ force: true });
-  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
-  await page.getByRole("button", { name: "取消釘選單字卡" }).click();
-  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
-  await page.getByRole("heading", { name: materialTitle, level: 1 }).click();
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).dispatchEvent("pointerdown", {
+    button: 0,
+    pointerId: 91,
+    pointerType: "mouse",
+  });
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
+
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+
+  await page.getByRole("button", { name: "釘選單字卡" }).click();
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).dispatchEvent("pointerdown", {
+    button: 0,
+    pointerId: 92,
+    pointerType: "touch",
+  });
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
+
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  const pinButton = page.locator(".word-card__actions .icon-button");
+  await pinButton.click();
+  const nextWord = page.locator('.reading-word:not([data-word="bear"])').first();
+  const nextWordText = await nextWord.getAttribute("data-word");
+  if (!nextWordText) throw new Error("next reading word not found");
+  await nextWord.dispatchEvent("pointerdown", {
+    button: 0,
+    pointerId: 93,
+    pointerType: "mouse",
+  });
+  await expect(page.getByRole("heading", { name: nextWordText, level: 2 })).toBeVisible();
+  await expect(pinButton).toHaveAttribute("aria-pressed", "false");
 });
 
 test("keeps an edited AI prompt when focus leaves the editor", async ({ page }) => {

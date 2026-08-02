@@ -120,14 +120,23 @@ function close(): void {
 }
 
 function togglePinned(): void {
-  pinned.value = !pinned.value;
-  emit("pinChange", pinned.value);
+  if (pinned.value) {
+    unpin();
+    return;
+  }
+  pin();
 }
 
 function pin(): void {
   if (pinned.value) return;
   pinned.value = true;
   emit("pinChange", true);
+}
+
+function unpin(): void {
+  if (!pinned.value) return;
+  pinned.value = false;
+  emit("pinChange", false);
 }
 
 function keepCardOpen(): void {
@@ -219,7 +228,7 @@ function pinWhenWordIsSelected(): void {
   pin();
 }
 
-defineExpose({ close, open, pin });
+defineExpose({ close, open, pin, unpin });
 onMounted(() => {
   window.addEventListener("pointerup", finishCardInteraction);
   window.addEventListener("pointercancel", finishCardInteraction);

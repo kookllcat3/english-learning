@@ -71,7 +71,7 @@ test("shows global familiarity in an unread material", async ({ page }) => {
   await expect(unreadBear.locator(".known-word__glyph")).toHaveCount(4);
 });
 
-test("formats and persists a Markdown word note", async ({ page }) => {
+test("persists a word note without showing formatting controls", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
@@ -97,9 +97,7 @@ test("formats and persists a Markdown word note", async ({ page }) => {
     await expect(control).toHaveCSS("place-items", "center");
   }
   await expect(page.getByRole("button", { name: "關閉單字卡" })).toHaveCount(0);
-  const noteToolbar = page.getByRole("toolbar", { name: "Markdown 格式工具列" });
-  await expect(noteToolbar).toHaveCSS("padding-top", "2px");
-  await expect(noteToolbar.getByRole("button").first()).toHaveCSS("min-height", "30px");
+  await expect(page.getByRole("toolbar", { name: "Markdown 格式工具列" })).toHaveCount(0);
   const editor = page.getByLabel("單字 Markdown 筆記");
   await expect(editor).toHaveCSS("resize", "none");
   await expect(editor).toHaveCSS("overflow-y", "auto");
@@ -108,15 +106,12 @@ test("formats and persists a Markdown word note", async ({ page }) => {
   await page.locator('[data-word="runs"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
   await editor.fill("large animal");
-  await editor.press("ControlOrMeta+A");
-  await page.getByRole("button", { name: "粗體" }).click();
-  await expect(editor.locator("b, strong")).toHaveText("large animal");
   await expect(page.getByRole("status")).toHaveText("已儲存");
 
   await page.reload();
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
-  await expect(page.getByLabel("單字 Markdown 筆記").locator("strong")).toHaveText("large animal");
+  await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("large animal");
 });
 
 test("keeps a word note draft visible when IndexedDB persistence fails", async ({ page }) => {

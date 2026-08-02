@@ -31,7 +31,6 @@ const pointerInteractionActive = ref(false);
 let pointerInsideCard = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
-let savedSelection: Range | null = null;
 const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
 const {
   clearAnchor,
@@ -200,36 +199,6 @@ function updateMarkdownFromEditor(): void {
   scheduleSave();
 }
 
-function runEditorCommand(command: string, value?: string): void {
-  if (!editor.value) return;
-  editor.value.focus();
-  if (savedSelection) {
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(savedSelection);
-  }
-  document.execCommand(command, false, value);
-  savedSelection = null;
-  updateMarkdownFromEditor();
-}
-
-function rememberEditorSelection(): void {
-  const selection = window.getSelection();
-  if (
-    !editor.value
-    || !selection
-    || selection.rangeCount === 0
-    || !editor.value.contains(selection.getRangeAt(0).commonAncestorContainer)
-  ) return;
-  savedSelection = selection.getRangeAt(0).cloneRange();
-}
-
-function createLink(): void {
-  const url = window.prompt("輸入連結網址（https://）");
-  if (!url) return;
-  runEditorCommand("createLink", url);
-}
-
 function pastePlainText(event: ClipboardEvent): void {
   event.preventDefault();
   const text = event.clipboardData?.getData("text/plain") ?? "";
@@ -321,15 +290,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="word-note">
-      <div class="word-note__toolbar" role="toolbar" aria-label="Markdown 格式工具列">
-        <button type="button" title="粗體" aria-label="粗體" @mousedown.prevent="rememberEditorSelection" @click="runEditorCommand('bold')"><strong>B</strong></button>
-        <button type="button" title="斜體" aria-label="斜體" @mousedown.prevent="rememberEditorSelection" @click="runEditorCommand('italic')"><em>I</em></button>
-        <button type="button" title="標題" aria-label="標題" @mousedown.prevent="rememberEditorSelection" @click="runEditorCommand('formatBlock', 'h3')">H</button>
-        <button type="button" title="項目清單" aria-label="項目清單" @mousedown.prevent="rememberEditorSelection" @click="runEditorCommand('insertUnorderedList')">•</button>
-        <button type="button" title="編號清單" aria-label="編號清單" @mousedown.prevent="rememberEditorSelection" @click="runEditorCommand('insertOrderedList')">1.</button>
-        <button type="button" title="引用" aria-label="引用" @mousedown.prevent="rememberEditorSelection" @click="runEditorCommand('formatBlock', 'blockquote')">❯</button>
-        <button type="button" title="連結" aria-label="連結" @mousedown.prevent="rememberEditorSelection" @click="createLink">↗</button>
-      </div>
       <div
         ref="editor"
         class="word-note__editor"

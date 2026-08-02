@@ -15,14 +15,21 @@ export default defineConfig({
   projects: [
     {
       name: "chromium-desktop",
+      testIgnore: /touch-interactions\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "chromium-narrow",
+      testIgnore: /touch-interactions\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },
       },
+    },
+    {
+      name: "chromium-touch",
+      testMatch: /touch-interactions\.spec\.ts/,
+      use: { ...devices["Pixel 5"] },
     },
   ],
   webServer: {

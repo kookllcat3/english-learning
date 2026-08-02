@@ -93,26 +93,8 @@ async function handleBackupFile(event: Event): Promise<void> {
   event.target.value = "";
 }
 
-async function chooseBackupFile(): Promise<void> {
-  if (typeof window.showOpenFilePicker !== "function") {
-    backupFile.value?.click();
-    return;
-  }
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      multiple: false,
-      excludeAcceptAllOption: false,
-      types: [{
-        description: "英文學習庫備份封裝",
-        accept: { "application/zip": [".elpkg"], "application/json": [".json"] },
-      }],
-    });
-    if (handle) await importBackupFile(await handle.getFile());
-  } catch (error) {
-    if (!(error instanceof DOMException && error.name === "AbortError")) {
-      backupStatus.value = `無法開啟備份檔案：${errorMessage(error)}`;
-    }
-  }
+function chooseBackupFile(): void {
+  backupFile.value?.click();
 }
 </script>
 
@@ -157,7 +139,7 @@ async function chooseBackupFile(): Promise<void> {
           <h3>匯入並合併</h3>
           <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
           <button class="button button--secondary" type="button" @click="chooseBackupFile">選擇備份</button>
-          <input ref="backupFile" type="file" accept=".elpkg,.json,application/zip,application/json" hidden @change="handleBackupFile">
+          <input ref="backupFile" type="file" hidden @change="handleBackupFile">
         </div>
       </section>
     </div>

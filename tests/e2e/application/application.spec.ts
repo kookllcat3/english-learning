@@ -193,6 +193,35 @@ test("pins a word card opened from a text selection", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
 });
 
+test("keeps translation text selectable while preserving its blur control", async ({ page }) => {
+  const title = "Translation selection";
+  await createMaterial(page, title, "An original sentence.\n中文翻譯內容。");
+  const materialCard = page.getByRole("article").filter({ hasText: title });
+  await materialCard.getByRole("link").click();
+
+  const translationLine = page.locator(".reading-line-wrap.is-translation").first();
+  const translationText = translationLine.locator(".reading-line");
+  const toggle = translationLine.locator(".translation-visibility-toggle");
+  const textBounds = await translationText.boundingBox();
+  if (!textBounds) throw new Error("translation line is not visible");
+
+  const selectionY = textBounds.y + (textBounds.height / 2);
+  await expect(toggle).toHaveCSS("pointer-events", "auto");
+
+  await page.mouse.move(textBounds.x + 2, selectionY);
+  await page.mouse.down();
+  await page.mouse.move(textBounds.x + textBounds.width - 2, selectionY, { steps: 8 });
+  await page.mouse.up();
+
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toContain("中文翻譯內容");
+  await expect(toggle).toHaveCSS("pointer-events", "auto");
+
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await toggle.click();
+  await expect(translationText).toHaveClass(/translation-mask/);
+});
+
 test("pins the word card when its word is selected", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
@@ -286,7 +315,7 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
 
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   page.once("dialog", (dialog) => dialog.accept());
-  await page.locator('input[type="file"][accept*="application/json"]')
+  await page.locator('.data-management-dialog input[type="file"]')
     .setInputFiles(backupPath as string);
 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
@@ -302,7 +331,7 @@ test("reports an invalid backup without changing the library", async ({ page }) 
   await createMaterial(page);
   await page.getByRole("button", { name: "開啟資料管理" }).click();
 
-  await page.locator('input[type="file"][accept*="application/json"]').setInputFiles({
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
     name: "invalid-backup.json",
     mimeType: "application/json",
     buffer: Buffer.from("{invalid json", "utf8"),
@@ -337,7 +366,7 @@ test("imports a schema version 1 backup with legacy learning progress", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   page.once("dialog", (dialog) => dialog.accept());
-  await page.locator('input[type="file"][accept*="application/json"]').setInputFiles({
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
     name: "legacy-backup.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(legacyBackup), "utf8"),
@@ -370,7 +399,7 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   page.once("dialog", (dialog) => dialog.accept());
-  await page.locator('input[type="file"][accept*="application/json"]').setInputFiles({
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
     name: "sorting-backup.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({

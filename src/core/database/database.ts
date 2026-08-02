@@ -38,6 +38,10 @@ interface StoreRecordMap {
 
 let databasePromise: Promise<IDBDatabase> | undefined;
 
+interface TransactionFailureState {
+  error: DOMException | null;
+}
+
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     request.addEventListener("success", () => resolve(request.result), { once: true });
@@ -49,6 +53,7 @@ function transactionResult(
   transaction: IDBTransaction,
   timeoutMs = 0,
   failureMessage = "資料庫交易失敗，資料未寫入。",
+  failureState?: TransactionFailureState,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -61,7 +66,7 @@ function transactionResult(
       else resolve();
     };
     const transactionError = (): Error => {
-      const cause = transaction.error;
+      const cause = failureState?.error ?? transaction.error;
       if (!cause) return new Error(failureMessage);
       const name = typeof cause.name === "string" ? cause.name.trim() : "";
       const message = typeof cause.message === "string" ? cause.message.trim() : "";
@@ -275,6 +280,12 @@ export async function writeBackupStores({
 }: BackupStoreRecords): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(Object.values(STORES), "readwrite");
+  const failureState: TransactionFailureState = { error: null };
+  const trackRequest = <T>(request: IDBRequest<T>): void => {
+    request.addEventListener("error", () => {
+      failureState.error = request.error;
+    }, { once: true });
+  };
   const materialStore = transaction.objectStore(STORES.materials);
   const assetStore = transaction.objectStore(STORES.materialAssets);
   const vocabularyStore = transaction.objectStore(STORES.vocabulary);
@@ -283,17 +294,18 @@ export async function writeBackupStores({
   const contentStore = transaction.objectStore(STORES.materialContents);
   const termStore = transaction.objectStore(STORES.materialTerms);
 
-  materials.forEach((material) => materialStore.put(material));
-  assetStore.clear();
-  materialAssets.forEach((asset) => assetStore.put(asset));
-  materialContents.forEach((content) => contentStore.put(content));
-  materialTerms.forEach((terms) => termStore.put(terms));
-  vocabulary.forEach((record) => vocabularyStore.put(record));
-  wordNotes.forEach((record) => wordNoteStore.put(record));
-  settings.forEach((setting) => settingsStore.put(setting));
+  materials.forEach((material) => trackRequest(materialStore.put(material)));
+  trackRequest(assetStore.clear());
+  materialAssets.forEach((asset) => trackRequest(assetStore.put(asset)));
+  materialContents.forEach((content) => trackRequest(contentStore.put(content)));
+  materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
+  vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
+  wordNotes.forEach((record) => trackRequest(wordNoteStore.put(record)));
+  settings.forEach((setting) => trackRequest(settingsStore.put(setting)));
   await transactionResult(
     transaction,
     BACKUP_TRANSACTION_TIMEOUT_MS,
     "資料庫交易失敗，匯入資料未寫入。請重試或檢查瀏覽器儲存空間。",
+    failureState,
   );
 }

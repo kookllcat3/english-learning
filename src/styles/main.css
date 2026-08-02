@@ -428,25 +428,10 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 }
 .data-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .data-action-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: white;
-}
-.data-action-card__icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  border-radius: 10px;
-  place-items: center;
-  color: #126b42;
-  background: #e3f6ec;
-  font-size: 1.2rem;
-  font-weight: 850;
 }
 .data-action-card h3 { margin: 0 0 4px; font-size: 1rem; }
 .data-action-card p { min-height: 68px; margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
@@ -615,11 +600,6 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .text-button:focus-visible { outline: 3px solid rgb(216 107 72 / 18%); outline-offset: 2px; }
 .reading-content { font: 1.08rem/1.85 Georgia, "Times New Roman", serif; overflow-wrap: anywhere; user-select: text; }
 .reading-content p { margin: 0 0 1.2em; white-space: pre-wrap; }
-.reading-content .reading-line-wrap.is-reading-position {
-  border-radius: 4px;
-  background: linear-gradient(90deg, rgb(83 58 130 / 10%), transparent 72%);
-  box-shadow: -4px 0 0 #533a82;
-}
 .reading-content > p,
 .reading-content > .reading-figure {
   content-visibility: auto;
@@ -671,8 +651,8 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 }
 .reading-paragraph-control:hover,
 .reading-paragraph-control:focus-visible {
-  color: rgb(var(--familiarity-base-rgb));
-  background: rgb(var(--familiarity-base-rgb) / 10%);
+  color: var(--ink);
+  background: rgb(32 45 70 / 8%);
   outline: none;
 }
 .reading-paragraph-control.is-active {
@@ -681,11 +661,11 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   outline: none;
 }
 .reading-paragraph-control:focus-visible {
-  box-shadow: 0 0 0 3px rgb(var(--familiarity-base-rgb) / 18%);
+  box-shadow: 0 0 0 3px rgb(32 45 70 / 18%);
 }
 .reading-paragraph-control:disabled {
-  color: rgb(var(--familiarity-base-rgb));
-  background: rgb(var(--familiarity-base-rgb) / 8%);
+  color: var(--muted);
+  background: rgb(32 45 70 / 6%);
   cursor: default;
   opacity: .62;
 }

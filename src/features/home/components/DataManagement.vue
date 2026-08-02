@@ -152,7 +152,6 @@ function chooseBackupFile(): void {
 
     <div class="data-actions">
       <section class="data-action-card">
-        <span class="data-action-card__icon" aria-hidden="true">↓</span>
         <div>
           <h3>匯出完整備份</h3>
           <p>下載一份可持續擴充的備份封裝，包含素材、進度、筆記、設定與圖片。</p>
@@ -160,7 +159,6 @@ function chooseBackupFile(): void {
         </div>
       </section>
       <section class="data-action-card">
-        <span class="data-action-card__icon" aria-hidden="true">↑</span>
         <div>
           <h3>匯入並合併</h3>
           <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>

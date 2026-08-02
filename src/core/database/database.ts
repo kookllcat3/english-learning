@@ -60,10 +60,21 @@ function transactionResult(
       if (error) reject(error);
       else resolve();
     };
-    const transactionError = (): Error =>
-      transaction.error instanceof Error
-        ? transaction.error
-        : new Error(failureMessage);
+    const transactionError = (): Error => {
+      const cause = transaction.error;
+      if (!cause) return new Error(failureMessage);
+      const name = typeof cause.name === "string" ? cause.name.trim() : "";
+      const message = typeof cause.message === "string" ? cause.message.trim() : "";
+      const hint = name === "QuotaExceededError"
+        ? "瀏覽器儲存空間不足，請清理此網站的儲存空間後重試。"
+        : name === "UnknownError"
+          ? "瀏覽器未能完成 IndexedDB 寫入，可能與圖片 Blob 或 Safari 儲存限制有關。"
+          : name === "DataError"
+            ? "資料庫拒絕了匯入資料格式。"
+            : "";
+      const detail = [message, name && `(${name})`].filter(Boolean).join(" ");
+      return new Error(`${failureMessage} ${hint || detail}`.trim());
+    };
 
     transaction.addEventListener("complete", () => finish(), { once: true });
     transaction.addEventListener("abort", () => finish(transactionError()), { once: true });

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const materialTitle = "Playwright 動物短文";
 const materialContent = "A bear runs. The bear sleeps.";
+const validWebpBase64 = "UklGRjoAAABXRUJQVlA4IC4AAADwAQCdASoBAAEAAUAmJaACdLoB+AAEgwAA/vS+7/56ZrzB/k5/8pV4LG5vgAAA";
 
 function alphabeticWord(index: number): string {
   let value = index;
@@ -765,11 +766,7 @@ test("skips an unsupported image material and imports the remaining backup", asy
           height: 1,
           alt: "",
           caption: "",
-          data: `data:image/webp;base64,${Buffer.concat([
-            Buffer.from("RIFF"),
-            Buffer.alloc(4),
-            Buffer.from("WEBP"),
-          ]).toString("base64")}`,
+          data: `data:image/webp;base64,${validWebpBase64}`,
         },
       ],
       vocabulary: [],
@@ -783,13 +780,23 @@ test("skips an unsupported image material and imports the remaining backup", asy
   await expect(page.getByText("Supported text material")).toBeVisible();
   await expect(page.getByText("Supported image material")).toBeVisible();
   await expect(page.getByText("Unsupported image material")).toHaveCount(0);
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  const supportedCard = page.getByRole("article").filter({ hasText: "Supported image material" });
+  await supportedCard.getByRole("link", { name: "開始閱讀" }).click();
+  const image = page.locator(".reading-figure img");
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((element) => {
+    const imageElement = element as HTMLImageElement;
+    return [imageElement.complete, imageElement.naturalWidth, imageElement.naturalHeight];
+  })).toEqual([true, 1, 1]);
 });
 
-test("rejects a backup whose reading position does not exist", async ({ page }) => {
+test("skips a material whose reading position does not exist", async ({ page }) => {
   const timestamp = "2026-08-02T08:00:00.000Z";
   await createMaterial(page);
   await page.getByRole("button", { name: "開啟資料管理" }).click();
 
+  page.once("dialog", (dialog) => dialog.accept());
   await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
     name: "orphaned-reading-position.json",
     mimeType: "application/json",
@@ -813,7 +820,7 @@ test("rejects a backup whose reading position does not exist", async ({ page }) 
   });
 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
-  await expect(dataDialog.getByRole("alert")).toContainText("素材資料");
+  await expect(dataDialog.getByRole("status")).toBeVisible();
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Invalid reading position" })).toHaveCount(0);

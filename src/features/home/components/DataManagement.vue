@@ -98,7 +98,7 @@ async function importBackupFile(file: File): Promise<void> {
     }
 
     backupStatus.value = "正在寫入資料庫，請不要關閉頁面…";
-    const result = await importBackup(backup);
+    const result = await importBackup(preview.plan);
     notifyLearningDataChanged("backup");
     backupStatus.value = result.skippedMaterials.length > 0
       ? `備份已匯入；已略過不支援素材 ${result.skippedMaterials.length} 份。`

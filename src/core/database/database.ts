@@ -12,6 +12,7 @@ import type {
 
 const DATABASE_NAME = "english-learning";
 const DATABASE_VERSION = 6;
+const BACKUP_TRANSACTION_TIMEOUT_MS = 60_000;
 
 export const STORES = Object.freeze({
   materialAssets: "materialAssets",
@@ -44,11 +45,39 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-function transactionResult(transaction: IDBTransaction): Promise<void> {
+function transactionResult(
+  transaction: IDBTransaction,
+  timeoutMs = 0,
+  failureMessage = "資料庫交易失敗，資料未寫入。",
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    transaction.addEventListener("complete", () => resolve(), { once: true });
-    transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
-    transaction.addEventListener("error", () => reject(transaction.error), { once: true });
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      if (error) reject(error);
+      else resolve();
+    };
+    const transactionError = (): Error =>
+      transaction.error instanceof Error
+        ? transaction.error
+        : new Error(failureMessage);
+
+    transaction.addEventListener("complete", () => finish(), { once: true });
+    transaction.addEventListener("abort", () => finish(transactionError()), { once: true });
+    transaction.addEventListener("error", () => finish(transactionError()), { once: true });
+    if (timeoutMs > 0) {
+      timeoutId = setTimeout(() => {
+        finish(new Error("資料庫寫入逾時，匯入已取消；原有資料未變更。"));
+        try {
+          transaction.abort();
+        } catch {
+          // The transaction may have completed while the timeout was firing.
+        }
+      }, timeoutMs);
+    }
   });
 }
 
@@ -251,5 +280,9 @@ export async function writeBackupStores({
   vocabulary.forEach((record) => vocabularyStore.put(record));
   wordNotes.forEach((record) => wordNoteStore.put(record));
   settings.forEach((setting) => settingsStore.put(setting));
-  await transactionResult(transaction);
+  await transactionResult(
+    transaction,
+    BACKUP_TRANSACTION_TIMEOUT_MS,
+    "資料庫交易失敗，匯入資料未寫入。請重試或檢查瀏覽器儲存空間。",
+  );
 }

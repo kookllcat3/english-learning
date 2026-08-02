@@ -12,9 +12,12 @@ import type { DialogController } from "../../../shared/components/base-dialog.js
 import { errorMessage } from "../../../shared/errors.js";
 
 const MAX_BACKUP_BYTES = 100 * 1024 * 1024;
+type BackupStatusKind = "idle" | "pending" | "success" | "error";
 
 const backupFile = ref<HTMLInputElement | null>(null);
 const backupStatus = ref("");
+const backupStatusKind = ref<BackupStatusKind>("idle");
+const isBackupBusy = ref(false);
 const dialog = ref<DialogController | null>(null);
 const storageUsage = ref("正在估算目前網站使用的儲存空間…");
 
@@ -39,12 +42,15 @@ async function estimateStorage(): Promise<void> {
 
 function openDialog(): void {
   backupStatus.value = "";
+  backupStatusKind.value = "idle";
   dialog.value?.showModal();
   void estimateStorage();
 }
 
 async function exportBackup(): Promise<void> {
   backupStatus.value = "";
+  backupStatusKind.value = "idle";
+  isBackupBusy.value = true;
   try {
     const backup = await createBackup();
     const blob = await createBackupPackage(backup);
@@ -54,13 +60,19 @@ async function exportBackup(): Promise<void> {
     link.click();
     URL.revokeObjectURL(link.href);
     backupStatus.value = "備份已下載，請妥善保存。";
+    backupStatusKind.value = "success";
   } catch (error) {
-    backupStatus.value = errorMessage(error);
+    backupStatus.value = `備份匯出失敗：${errorMessage(error)}`;
+    backupStatusKind.value = "error";
+  } finally {
+    isBackupBusy.value = false;
   }
 }
 
 async function importBackupFile(file: File): Promise<void> {
-  backupStatus.value = "";
+  backupStatus.value = "正在讀取並驗證備份…";
+  backupStatusKind.value = "pending";
+  isBackupBusy.value = true;
   try {
     if (file.size > MAX_BACKUP_BYTES) {
       throw new Error("備份檔案請控制在 100 MB 以內。");
@@ -76,13 +88,22 @@ async function importBackupFile(file: File): Promise<void> {
       `新增詞彙 ${preview.newWords} 筆`,
       `更新詞彙 ${preview.updatedWords} 筆`,
     ].join("、");
-    if (!window.confirm(`即將匯入備份：${summary}。要繼續嗎？`)) return;
+    if (!window.confirm(`即將匯入備份：${summary}。要繼續嗎？`)) {
+      backupStatus.value = "已取消匯入。";
+      backupStatusKind.value = "idle";
+      return;
+    }
 
+    backupStatus.value = "正在寫入資料庫，請不要關閉頁面…";
     await importBackup(backup);
     notifyLearningDataChanged("backup");
     backupStatus.value = "備份已匯入。";
+    backupStatusKind.value = "success";
   } catch (error) {
-    backupStatus.value = errorMessage(error);
+    backupStatus.value = `備份匯入失敗：${errorMessage(error)}`;
+    backupStatusKind.value = "error";
+  } finally {
+    isBackupBusy.value = false;
   }
 }
 
@@ -130,7 +151,7 @@ function chooseBackupFile(): void {
         <div>
           <h3>匯出完整備份</h3>
           <p>下載一份可持續擴充的備份封裝，包含素材、進度、筆記、設定與圖片。</p>
-          <button class="button button--primary" type="button" @click="exportBackup">下載備份</button>
+          <button class="button button--primary" type="button" :disabled="isBackupBusy" @click="exportBackup">下載備份</button>
         </div>
       </section>
       <section class="data-action-card">
@@ -138,8 +159,8 @@ function chooseBackupFile(): void {
         <div>
           <h3>匯入並合併</h3>
           <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
-          <button class="button button--secondary" type="button" @click="chooseBackupFile">選擇備份</button>
-          <input ref="backupFile" type="file" hidden @change="handleBackupFile">
+          <button class="button button--secondary" type="button" :disabled="isBackupBusy" @click="chooseBackupFile">選擇備份</button>
+          <input ref="backupFile" type="file" hidden :disabled="isBackupBusy" @change="handleBackupFile">
         </div>
       </section>
     </div>
@@ -148,6 +169,13 @@ function chooseBackupFile(): void {
       <strong>大量資料提醒</strong>
       <p>首頁只載入輕量摘要並每頁顯示 12 份，不會讀取所有素材全文。單份素材上限 2 MB；只有完整備份接近數百 MB 時，匯入與匯出可能暫時占用較多記憶體。</p>
     </aside>
-    <p class="backup-status" role="status">{{ backupStatus }}</p>
+    <p
+      v-if="backupStatus"
+      class="backup-status"
+      :class="`backup-status--${backupStatusKind}`"
+      :role="backupStatusKind === 'error' ? 'alert' : 'status'"
+    >
+      {{ backupStatus }}
+    </p>
   </BaseDialog>
 </template>

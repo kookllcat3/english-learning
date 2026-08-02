@@ -270,7 +270,20 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   white-space: nowrap;
   border: 0;
 }
-.backup-status { min-height: 24px; margin: 12px 0 0; color: #18794e; font-size: .88rem; }
+.backup-status {
+  min-height: 24px;
+  margin: 12px 0 0;
+  color: #18794e;
+  font-size: .88rem;
+}
+.backup-status--pending { color: var(--muted); }
+.backup-status--error {
+  padding: 10px 12px;
+  border: 1px solid #e4a4a0;
+  border-radius: 8px;
+  color: #a32921;
+  background: #fff4f2;
+}
 .material-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

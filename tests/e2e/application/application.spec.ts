@@ -511,7 +511,10 @@ test("offers a return action whenever a reading position is marked", async ({ pa
   await lastMarker.scrollIntoViewIfNeeded();
   await lastMarker.click();
   await expect(lastMarker).toHaveClass(/is-active/);
-  await expect(lastParagraph).toHaveClass(/is-reading-position/);
+  await expect(lastParagraph.locator(".reading-line-wrap").first())
+    .toHaveClass(/is-reading-position/);
+  await expect(lastParagraph.locator(".reading-line-wrap.is-translation"))
+    .not.toHaveClass(/is-reading-position/);
   await expect(returnAction).toBeVisible();
   expect(await returnAction.evaluate((button) => Boolean(button.closest(".panel__heading")))).toBe(true);
 
@@ -526,7 +529,8 @@ test("offers a return action whenever a reading position is marked", async ({ pa
 
   await lastMarker.click();
   await expect(lastMarker).toHaveAttribute("aria-pressed", "false");
-  await expect(lastParagraph).not.toHaveClass(/is-reading-position/);
+  await expect(lastParagraph.locator(".reading-line-wrap").first())
+    .not.toHaveClass(/is-reading-position/);
   await expect(returnAction).toBeHidden();
 });
 

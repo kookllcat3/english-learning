@@ -34,6 +34,7 @@ interface RenderedTextBlock {
     key: string;
     lastOriginalLineKey?: string;
     lines: Array<{
+      isSource: boolean;
       isTranslation: boolean;
       key: string;
       segments: TextSegment[];
@@ -108,6 +109,7 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
         lastOriginalLineKey: [...section.lines].reverse()
           .find((line) => line.role === "source")?.key,
         lines: section.lines.map((line) => ({
+          isSource: line.role === "source",
           isTranslation: line.role === "translation",
           key: line.key,
           segments: lineSegments(line),
@@ -280,14 +282,16 @@ function handleWordKeydown(event: KeyboardEvent): void {
         <p
           v-for="paragraph in block.paragraphs"
           :key="paragraph.key"
-          :class="{ 'is-reading-position': paragraph.role === 'source' && currentParagraphKey === paragraph.key }"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
           <template v-for="line in paragraph.lines" :key="line.key">
             <span
               class="reading-line-wrap"
-              :class="{ 'is-translation': line.isTranslation }"
+              :class="{
+                'is-reading-position': line.isSource && currentParagraphKey === paragraph.key,
+                'is-translation': line.isTranslation,
+              }"
               :data-translation-line="line.isTranslation ? line.key : undefined"
             >
             <span

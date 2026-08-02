@@ -23,6 +23,7 @@ export interface MaterialRecord {
   wordCount: number;
   knownCount: number;
   knownWords: string[];
+  readingParagraphKey?: string | null;
   content?: string;
   contentBlocks?: ContentBlock[];
 }

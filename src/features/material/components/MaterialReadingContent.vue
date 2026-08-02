@@ -29,11 +29,13 @@ interface RenderedTextBlock {
   key: string;
   paragraphs: Array<{
     key: string;
+    lastOriginalLineKey?: string;
     lines: Array<{
       isTranslation: boolean;
       key: string;
       segments: TextSegment[];
     }>;
+    words: string[];
   }>;
   type: "text";
 }
@@ -47,6 +49,7 @@ interface RenderedImageBlock {
 const props = defineProps<{
   activeWord: string;
   blocks: ContentBlock[];
+  currentParagraphKey: string | null;
   familiarityLevels: FamiliarityLevel[];
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
@@ -54,7 +57,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
   deactivate: [];
+  learnParagraph: [words: string[]];
   lookup: [word: string, rect: DOMRect];
+  toggleReadingParagraph: [paragraphKey: string];
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const hiddenTranslationLines = ref(new Set<string>());
@@ -109,14 +114,21 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
       return {
         key,
         type: "text",
-        paragraphs: paragraphs(block).map((paragraph, paragraphIndex) => ({
-          key: `${key}-${paragraphIndex}`,
-          lines: paragraph.split("\n").map((line, lineIndex) => ({
+        paragraphs: paragraphs(block).map((paragraph, paragraphIndex) => {
+          const lines = paragraph.split("\n").map((line, lineIndex) => ({
             isTranslation: /[\u3400-\u9fff]/u.test(line),
             key: `${key}-${paragraphIndex}-${lineIndex}`,
             segments: textSegments(line),
-          })),
-        })),
+          }));
+          const originalLines = lines.filter((line) => !line.isTranslation);
+          return {
+            key: `${key}-${paragraphIndex}`,
+            lastOriginalLineKey: originalLines.at(-1)?.key,
+            lines,
+            words: [...new Set(originalLines.flatMap((line) =>
+              line.segments.flatMap((segment) => segment.word ? [segment.word] : [])))],
+          };
+        }),
       };
     }));
 
@@ -150,6 +162,10 @@ function presentationFor(segment: TextSegment): WordPresentation | undefined {
 
 function hasFamiliarity(segment: TextSegment): boolean {
   return (presentationFor(segment)?.level.level ?? 0) > 0;
+}
+
+function isParagraphKnown(words: string[]): boolean {
+  return words.length > 0 && words.every((word) => props.vocabularyProgress.get(word)?.learned);
 }
 
 function isTranslationHidden(lineKey: string): boolean {
@@ -240,6 +256,7 @@ function handleFocusOut(event: FocusEvent): void {
 
 function handleWordKeydown(event: KeyboardEvent): void {
   if (!["ArrowLeft", "ArrowRight", "Enter"].includes(event.key)) return;
+  if (!wordElement(event.target)) return;
   const container = event.currentTarget;
   if (!(container instanceof HTMLElement)) return;
   const words = [...container.querySelectorAll<HTMLElement>(".reading-word")];
@@ -277,7 +294,9 @@ function handleWordKeydown(event: KeyboardEvent): void {
         <p
           v-for="paragraph in block.paragraphs"
           :key="paragraph.key"
+          :class="{ 'is-reading-position': currentParagraphKey === paragraph.key }"
           data-reading-paragraph
+          :data-paragraph-key="paragraph.key"
         >
           <template v-for="line in paragraph.lines" :key="line.key">
             <span
@@ -316,6 +335,40 @@ function handleWordKeydown(event: KeyboardEvent): void {
               v-else
             >{{ segment.label }}</span>
             </template>
+            </span>
+            <span
+              v-if="line.key === paragraph.lastOriginalLineKey && paragraph.words.length > 0"
+              class="reading-paragraph-controls"
+              role="group"
+              aria-label="段落閱讀操作"
+            >
+              <button
+                class="reading-paragraph-control"
+                type="button"
+                aria-label="將本段單字標記為認識"
+                title="將本段單字標記為認識"
+                :disabled="isParagraphKnown(paragraph.words)"
+                @pointerdown.stop
+                @click.stop="emit('learnParagraph', paragraph.words)"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+              </button>
+              <button
+                class="reading-paragraph-control"
+                :class="{ 'is-active': currentParagraphKey === paragraph.key }"
+                type="button"
+                aria-label="標記目前閱讀段落"
+                title="標記目前閱讀段落"
+                :aria-pressed="currentParagraphKey === paragraph.key"
+                @pointerdown.stop
+                @click.stop="emit('toggleReadingParagraph', paragraph.key)"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M6 4h12v16l-6-4-6 4V4Z" />
+                </svg>
+              </button>
             </span>
             <span v-if="line.isTranslation" class="translation-control-anchor">
               <button

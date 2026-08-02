@@ -242,6 +242,108 @@ test("pins the word card when its word is selected", async ({ page }) => {
   await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
 });
 
+test("marks paragraph words and keeps one reading position", async ({ page }) => {
+  await createMaterial(
+    page,
+    materialTitle,
+    "A bear runs.\n中文翻譯。\n\nThe fox sleeps.\n另一段翻譯。",
+  );
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const paragraphs = page.locator("[data-reading-paragraph]");
+  await expect(paragraphs).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(2);
+
+  await paragraphs.nth(0).getByRole("button", { name: "將本段單字標記為認識" }).click();
+  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
+  await expect(page.locator('[data-word="fox"]').first()).not.toHaveClass(/known-word/);
+
+  const firstMarker = paragraphs.nth(0).getByRole("button", { name: "標記目前閱讀段落" });
+  const secondMarker = paragraphs.nth(1).getByRole("button", { name: "標記目前閱讀段落" });
+  await firstMarker.click();
+  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await secondMarker.click();
+  await expect(firstMarker).toHaveAttribute("aria-pressed", "false");
+  await expect(secondMarker).toHaveAttribute("aria-pressed", "true");
+  await secondMarker.click();
+  await expect(secondMarker).toHaveAttribute("aria-pressed", "false");
+
+  await firstMarker.click();
+  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await page.waitForTimeout(100);
+  const firstParagraphKey = await paragraphs.nth(0).getAttribute("data-paragraph-key");
+  const storedParagraphKey = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const records = await new Promise<Array<{ readingParagraphKey?: string | null }>>(
+      (resolve, reject) => {
+        const request = database.transaction("materials", "readonly")
+          .objectStore("materials").getAll();
+        request.addEventListener("success", () => resolve(request.result), { once: true });
+        request.addEventListener("error", () => reject(request.error), { once: true });
+      },
+    );
+    database.close();
+    return records[0]?.readingParagraphKey ?? null;
+  });
+  expect(storedParagraphKey).toBe(firstParagraphKey);
+  await page.reload();
+  await expect(
+    page.locator("[data-reading-paragraph]").nth(0)
+      .getByRole("button", { name: "標記目前閱讀段落" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  const reloadedMarkers = page.getByRole("button", { name: "標記目前閱讀段落" });
+  await reloadedMarkers.nth(1).focus();
+  await page.keyboard.press("Enter");
+  await expect(reloadedMarkers.nth(0)).toHaveAttribute("aria-pressed", "false");
+  await expect(reloadedMarkers.nth(1)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("offers a return action whenever a reading position is marked", async ({ page }) => {
+  const paragraphs = Array.from(
+    { length: 24 },
+    (_, index) => {
+      const original = index === 23
+        ? `Paragraph ${index + 1} ${"contains additional words for a long reading line ".repeat(18)}`
+        : `Paragraph ${index + 1} contains enough words for reading.`;
+      return `${original}\n這是第 ${index + 1} 段翻譯。`;
+    },
+  ).join("\n\n");
+  await createMaterial(page, materialTitle, paragraphs);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const readingParagraphs = page.locator("[data-reading-paragraph]");
+  const lastParagraph = readingParagraphs.last();
+  const lastMarker = lastParagraph.getByRole("button", { name: "標記目前閱讀段落" });
+  const returnAction = page.getByRole("button", { name: "回到閱讀位置" });
+
+  await lastMarker.scrollIntoViewIfNeeded();
+  await lastMarker.click();
+  await expect(lastMarker).toHaveClass(/is-active/);
+  await expect(lastParagraph).toHaveClass(/is-reading-position/);
+  await expect(returnAction).toBeVisible();
+  expect(await returnAction.evaluate((button) => Boolean(button.closest(".panel__heading")))).toBe(true);
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(lastMarker).not.toBeInViewport();
+  await expect(returnAction).toBeVisible();
+  await returnAction.focus();
+  await page.keyboard.press("Enter");
+  await expect(returnAction).toBeVisible();
+  await expect(lastMarker).toBeFocused();
+  await expect(lastParagraph).toBeInViewport();
+
+  await lastMarker.click();
+  await expect(lastMarker).toHaveAttribute("aria-pressed", "false");
+  await expect(lastParagraph).not.toHaveClass(/is-reading-position/);
+  await expect(returnAction).toBeHidden();
+});
+
 test("unpins a pinned word card before its natural outside close", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

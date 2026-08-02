@@ -34,6 +34,7 @@ import type {
 const MAX_MATERIAL_BYTES = 2 * 1024 * 1024;
 const BACKUP_SCHEMA_VERSION = 3;
 const MATERIALS_PER_PAGE = 12;
+const READING_PARAGRAPH_KEY_PATTERN = /^\d+-\d+-\d+$/;
 
 export type MaterialSort = "newest" | "oldest" | "progress" | "title";
 
@@ -220,6 +221,26 @@ export async function updateMaterial(
     updatedAt: new Date().toISOString(),
   };
   return writeOne(STORES.materials, updated);
+}
+
+export async function setMaterialReadingParagraph(
+  id: string,
+  readingParagraphKey: string | null,
+): Promise<MaterialRecord> {
+  if (
+    readingParagraphKey !== null
+    && !READING_PARAGRAPH_KEY_PATTERN.test(readingParagraphKey)
+  ) {
+    throw new Error("段落標記格式不正確。");
+  }
+  await ensureMaterialKnowledge();
+  const material = await readOne(STORES.materials, id);
+  if (!material) throw new Error("找不到指定的素材。");
+  return writeOne(STORES.materials, {
+    ...material,
+    readingParagraphKey,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export async function removeMaterial(id: string): Promise<void> {
@@ -502,6 +523,14 @@ function validateBackup(backup: LearningBackup): void {
           Array.isArray(material.knownWords)
           && new Set(material.knownWords).size === material.knownWords.length
           && material.knownWords.every(isValidWord)
+        )
+      )
+      && (
+        material.readingParagraphKey === undefined
+        || material.readingParagraphKey === null
+        || (
+          typeof material.readingParagraphKey === "string"
+          && READING_PARAGRAPH_KEY_PATTERN.test(material.readingParagraphKey)
         )
       )
       && isTimestamp(material.createdAt)

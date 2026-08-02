@@ -602,6 +602,11 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .text-button:focus-visible { outline: 3px solid rgb(216 107 72 / 18%); outline-offset: 2px; }
 .reading-content { font: 1.08rem/1.85 Georgia, "Times New Roman", serif; overflow-wrap: anywhere; user-select: text; }
 .reading-content p { margin: 0 0 1.2em; white-space: pre-wrap; }
+.reading-content p.is-reading-position {
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgb(83 58 130 / 10%), transparent 72%);
+  box-shadow: -4px 0 0 #533a82;
+}
 .reading-content > p,
 .reading-content > .reading-figure {
   content-visibility: auto;
@@ -612,12 +617,93 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   position: relative;
   display: block;
 }
+.reading-paragraph-controls {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  margin-left: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: 0 2px 8px rgb(32 45 70 / 12%);
+  vertical-align: middle;
+}
+.reading-paragraph-control {
+  display: inline-grid;
+  width: 28px;
+  height: 24px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  place-items: center;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+.reading-paragraph-control + .reading-paragraph-control {
+  border-left: 1px solid var(--line);
+}
+.reading-paragraph-control svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+.reading-paragraph-control:hover,
+.reading-paragraph-control:focus-visible {
+  color: rgb(var(--familiarity-base-rgb));
+  background: rgb(var(--familiarity-base-rgb) / 10%);
+  outline: none;
+}
+.reading-paragraph-control.is-active {
+  color: #fff;
+  background: #533a82;
+  outline: none;
+}
+.reading-paragraph-control:focus-visible {
+  box-shadow: 0 0 0 3px rgb(var(--familiarity-base-rgb) / 18%);
+}
+.reading-paragraph-control:disabled {
+  color: rgb(var(--familiarity-base-rgb));
+  background: rgb(var(--familiarity-base-rgb) / 8%);
+  cursor: default;
+  opacity: .62;
+}
+.reading-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.reading-panel__title-row h2 { margin-bottom: 0; }
+.reading-position-return {
+  flex: none;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #533a82;
+  border-radius: 8px;
+  color: #fff;
+  background: #533a82;
+  font-size: .82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.reading-position-return:focus-visible {
+  outline: 3px solid rgb(83 58 130 / 22%);
+  outline-offset: 2px;
+}
 .translation-control-anchor {
   position: relative;
   z-index: 3;
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   margin-left: 6px;
   vertical-align: middle;
 }
@@ -625,9 +711,9 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   position: static;
   z-index: 1;
   display: inline-grid;
-  width: 32px;
-  height: 32px;
-  padding: 5px;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
   border: 1px solid transparent;
   border-radius: 50%;
   color: var(--muted);
@@ -645,8 +731,8 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
     background-color 140ms ease;
 }
 .translation-visibility-toggle svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentcolor;
   stroke-linecap: round;
@@ -1079,6 +1165,11 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
   .data-action-card p { min-height: 0; }
   .history-panel { right: 0; }
   .word-card { max-height: min(65vh, 520px); }
+  .reading-panel > .panel__heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
   .detail-layout {
     display: block;
     padding: 0;

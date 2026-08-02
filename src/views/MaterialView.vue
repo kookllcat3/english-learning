@@ -11,6 +11,7 @@ import { RouterLink, useRoute } from "vue-router";
 import {
   getMaterial,
   getVocabularyProgress,
+  setMaterialReadingParagraph,
   setWordsKnown,
 } from "../core/learning/learning-repository.js";
 import {
@@ -60,9 +61,11 @@ const actionError = ref("");
 const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
+const readingPanel = ref<HTMLElement | null>(null);
 const wordCard = ref<WordCardController | null>(null);
 const activeWord = ref("");
 const wordCardPinned = ref(false);
+const currentParagraphKey = ref<string | null>(null);
 let loadSequence = 0;
 let selectionTimer: number | undefined;
 let wordCloseTimer: number | undefined;
@@ -126,6 +129,7 @@ async function loadMaterialPage(): Promise<void> {
     vocabularyProgress.value = progress;
     familiarityColor.value = color;
     familiarityLevels.value = levels;
+    currentParagraphKey.value = loadedMaterial.readingParagraphKey ?? null;
     materialWords.value = extractUniqueWords(loadedMaterial.content);
     document.title = `${loadedMaterial.title}｜英文學習庫`;
   } catch {
@@ -179,6 +183,19 @@ function openWordCard(
   window.clearTimeout(wordCloseTimer);
   activeWord.value = key;
   void wordCard.value?.open(word, rect, trigger === "selection");
+}
+
+async function toggleReadingParagraph(paragraphKey: string): Promise<void> {
+  const previousParagraphKey = currentParagraphKey.value;
+  const nextParagraphKey = previousParagraphKey === paragraphKey ? null : paragraphKey;
+  currentParagraphKey.value = nextParagraphKey;
+  actionError.value = "";
+  try {
+    await setMaterialReadingParagraph(materialId(), nextParagraphKey);
+  } catch (error) {
+    currentParagraphKey.value = previousParagraphKey;
+    actionError.value = getErrorMessage(error, "無法儲存目前閱讀段落。");
+  }
 }
 
 function scheduleWordCardClose(): void {
@@ -274,6 +291,25 @@ useLearningDataRefresh({
   onHidden: closeTransientWordCard,
   refresh: refreshLearningProgress,
 });
+const showReadingPositionReturn = computed(() =>
+  activeView.value === "reading"
+  && currentParagraphKey.value !== null);
+
+function readingPositionParagraph(): HTMLElement | null {
+  const paragraphKey = currentParagraphKey.value;
+  if (!paragraphKey) return null;
+  return [...(readingPanel.value?.querySelectorAll<HTMLElement>("[data-paragraph-key]") ?? [])]
+    .find((paragraph) => paragraph.dataset.paragraphKey === paragraphKey) ?? null;
+}
+
+function returnToReadingPosition(): void {
+  const paragraph = readingPositionParagraph();
+  if (!paragraph) return;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  paragraph.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+  paragraph.querySelector<HTMLElement>('[aria-label="標記目前閱讀段落"]')
+    ?.focus({ preventScroll: true });
+}
 
 watch(() => route.params.id, () => void loadMaterialPage());
 watch(searchQuery, () => {
@@ -344,12 +380,23 @@ onBeforeUnmount(() => {
         </nav>
 
         <article
+          ref="readingPanel"
           class="panel reading-panel"
           :hidden="activeView !== 'reading'"
           :style="readingPanelStyle"
         >
           <div class="panel__heading">
-            <h2>素材內容</h2>
+            <div class="reading-panel__title-row">
+              <h2>素材內容</h2>
+              <button
+                v-if="showReadingPositionReturn"
+                class="reading-position-return"
+                type="button"
+                @click="returnToReadingPosition"
+              >
+                回到閱讀位置
+              </button>
+            </div>
             <p ref="familiarityLegend" class="familiarity-legend">
               <button
                 class="familiarity-help"
@@ -385,6 +432,7 @@ onBeforeUnmount(() => {
           <MaterialReadingContent
             :active-word="activeWord"
             :blocks="material.contentBlocks"
+            :current-paragraph-key="currentParagraphKey"
             :familiarity-levels="familiarityLevels"
             :vocabulary-progress="vocabularyProgress"
             @mouseup="handleWordSelection"
@@ -393,6 +441,8 @@ onBeforeUnmount(() => {
             @lookup="openWordCard"
             @activate="openWordCard"
             @deactivate="scheduleWordCardClose"
+            @learn-paragraph="updateWords($event, true)"
+            @toggle-reading-paragraph="toggleReadingParagraph"
           />
         </article>
 

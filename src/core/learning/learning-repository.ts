@@ -14,6 +14,7 @@ import {
   mergeNewerRecords,
   synchronizeVocabularyRecords,
 } from "./learning-records.js";
+import { normalizedReadingParagraphKey } from "./reading-position.js";
 import {
   extractUniqueWords,
   fileNameWithoutExtension,
@@ -34,7 +35,6 @@ import type {
 const MAX_MATERIAL_BYTES = 2 * 1024 * 1024;
 const BACKUP_SCHEMA_VERSION = 3;
 const MATERIALS_PER_PAGE = 12;
-const READING_PARAGRAPH_KEY_PATTERN = /^\d+-\d+-\d+$/;
 
 export type MaterialSort = "newest" | "oldest" | "progress" | "title";
 
@@ -86,6 +86,16 @@ function normalizedBlocks(content: string, contentBlocks?: ContentBlock[]): Cont
   return Array.isArray(contentBlocks) && contentBlocks.length > 0
     ? contentBlocks.map((block, order) => ({ ...block, order }))
     : textBlocks(content);
+}
+
+function hasValidReadingParagraphReference(material: Record<string, unknown>): boolean {
+  const value = material.readingParagraphKey;
+  if (value === undefined || value === null) return true;
+  if (typeof material.content !== "string") return false;
+  const contentBlocks = material.contentBlocks;
+  if (contentBlocks !== undefined && !Array.isArray(contentBlocks)) return false;
+  const blocks = normalizedBlocks(material.content, contentBlocks as ContentBlock[] | undefined);
+  return normalizedReadingParagraphKey(value, blocks) === value;
 }
 
 async function readKnownWords(): Promise<Set<string>> {
@@ -160,10 +170,12 @@ export async function getMaterial(id: string): Promise<BackupMaterial> {
     readOne(STORES.materialContents, id),
   ]);
   if (!metadata || !storedContent) throw new Error("找不到這份素材。");
+  const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
   return {
     ...metadata,
+    readingParagraphKey: normalizedReadingParagraphKey(metadata.readingParagraphKey, contentBlocks),
     content: storedContent.content,
-    contentBlocks: normalizedBlocks(storedContent.content, storedContent.contentBlocks),
+    contentBlocks,
   };
 }
 
@@ -227,15 +239,19 @@ export async function setMaterialReadingParagraph(
   id: string,
   readingParagraphKey: string | null,
 ): Promise<MaterialRecord> {
+  await ensureMaterialKnowledge();
+  const [material, storedContent] = await Promise.all([
+    readOne(STORES.materials, id),
+    readOne(STORES.materialContents, id),
+  ]);
+  if (!material || !storedContent) throw new Error("找不到指定的素材。");
+  const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
   if (
     readingParagraphKey !== null
-    && !READING_PARAGRAPH_KEY_PATTERN.test(readingParagraphKey)
+    && normalizedReadingParagraphKey(readingParagraphKey, contentBlocks) !== readingParagraphKey
   ) {
-    throw new Error("段落標記格式不正確。");
+    throw new Error("指定的閱讀段落不存在。");
   }
-  await ensureMaterialKnowledge();
-  const material = await readOne(STORES.materials, id);
-  if (!material) throw new Error("找不到指定的素材。");
   return writeOne(STORES.materials, {
     ...material,
     readingParagraphKey,
@@ -411,10 +427,12 @@ async function materialsWithContent(): Promise<BackupMaterial[]> {
   return materials.map((material) => {
     const stored = contentById.get(material.id);
     const content = stored?.content ?? "";
+    const contentBlocks = normalizedBlocks(content, stored?.contentBlocks);
     return {
       ...material,
+      readingParagraphKey: normalizedReadingParagraphKey(material.readingParagraphKey, contentBlocks),
       content,
-      contentBlocks: normalizedBlocks(content, stored?.contentBlocks),
+      contentBlocks,
     };
   });
 }
@@ -525,14 +543,7 @@ function validateBackup(backup: LearningBackup): void {
           && material.knownWords.every(isValidWord)
         )
       )
-      && (
-        material.readingParagraphKey === undefined
-        || material.readingParagraphKey === null
-        || (
-          typeof material.readingParagraphKey === "string"
-          && READING_PARAGRAPH_KEY_PATTERN.test(material.readingParagraphKey)
-        )
-      )
+      && hasValidReadingParagraphReference(material)
       && isTimestamp(material.createdAt)
       && isTimestamp(material.updatedAt);
     if (!isValid || materialIds.has(material.id)) {

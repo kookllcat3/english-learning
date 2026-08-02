@@ -2,9 +2,12 @@
 import { computed, ref } from "vue";
 import type {
   ContentBlock,
-  TextContentBlock,
   VocabularyRecord,
 } from "../../../core/models/models.js";
+import {
+  readingParagraphKey,
+  splitReadingParagraphs,
+} from "../../../core/learning/reading-position.js";
 import { normalizeWord } from "../../../core/text/text.js";
 import {
   familiarityDelay,
@@ -64,10 +67,6 @@ const emit = defineEmits<{
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const hiddenTranslationLines = ref(new Set<string>());
 
-function paragraphs(block: TextContentBlock): string[] {
-  return block.text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
-}
-
 function appendPlainTextSegments(text: string, segments: TextSegment[]): void {
   if (!text) return;
   let start = 0;
@@ -114,15 +113,16 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
       return {
         key,
         type: "text",
-        paragraphs: paragraphs(block).map((paragraph, paragraphIndex) => {
+        paragraphs: splitReadingParagraphs(block.text).map((paragraph, paragraphIndex) => {
+          const paragraphKey = readingParagraphKey(block.order, blockIndex, paragraphIndex);
           const lines = paragraph.split("\n").map((line, lineIndex) => ({
             isTranslation: /[\u3400-\u9fff]/u.test(line),
-            key: `${key}-${paragraphIndex}-${lineIndex}`,
+            key: `${paragraphKey}-${lineIndex}`,
             segments: textSegments(line),
           }));
           const originalLines = lines.filter((line) => !line.isTranslation);
           return {
-            key: `${key}-${paragraphIndex}`,
+            key: paragraphKey,
             lastOriginalLineKey: originalLines.at(-1)?.key,
             lines,
             words: [...new Set(originalLines.flatMap((line) =>

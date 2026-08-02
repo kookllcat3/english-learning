@@ -344,6 +344,40 @@ test("offers a return action whenever a reading position is marked", async ({ pa
   await expect(returnAction).toBeHidden();
 });
 
+test("ignores an orphaned reading position stored in IndexedDB", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.waitForURL(/#\/materials\/[^/]+$/);
+  const materialId = /#\/materials\/([^/]+)$/.exec(page.url())?.[1];
+  if (!materialId) throw new Error("material id not found");
+  await page.evaluate(async (storedMaterialId) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction("materials", "readwrite");
+    const store = transaction.objectStore("materials");
+    const material = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const request = store.get(storedMaterialId);
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    store.put({ ...material, readingParagraphKey: "99-99-99" });
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
+      transaction.addEventListener("error", () => reject(transaction.error), { once: true });
+    });
+    database.close();
+  }, materialId);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
+    .toHaveAttribute("aria-pressed", "false");
+});
+
 test("unpins a pinned word card before its natural outside close", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
@@ -418,6 +452,7 @@ test("keeps the legacy material URL compatible", async ({ page }) => {
 test("exports, removes, and restores a complete backup", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
   await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
   await page.getByLabel("可編輯提示詞").fill("備份中的自訂 AI 提示詞");
   await page.waitForTimeout(500);
@@ -450,6 +485,9 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
   await page.getByRole("link", { name: "開始閱讀" }).click();
+  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
+    .toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
   await expect(page.getByLabel("可編輯提示詞")).toHaveValue("備份中的自訂 AI 提示詞");
 });
@@ -468,6 +506,40 @@ test("reports an invalid backup without changing the library", async ({ page }) 
   await expect(dataDialog.getByRole("status")).toContainText("JSON");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+});
+
+test("rejects a backup whose reading position does not exist", async ({ page }) => {
+  const timestamp = "2026-08-02T08:00:00.000Z";
+  await createMaterial(page);
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "orphaned-reading-position.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 3,
+      exportedAt: timestamp,
+      materials: [{
+        id: "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a27",
+        title: "Invalid reading position",
+        description: "",
+        content: "Only one paragraph.",
+        contentBlocks: [{ type: "text", text: "Only one paragraph.", order: 0 }],
+        readingParagraphKey: "0-0-9",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      vocabulary: [],
+      wordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("status")).toContainText("素材資料");
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Invalid reading position" })).toHaveCount(0);
 });
 
 test("imports a schema version 1 backup with legacy learning progress", async ({ page }) => {

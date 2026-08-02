@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Check and build
+    name: Quality checks and build
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -29,8 +29,27 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Run checks and production build
-        run: npm run check
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run pull request checks and E2E
+        if: github.event_name == 'pull_request'
+        run: npm run check && npm run test:e2e
+
+      - name: Run full main checks
+        if: github.event_name != 'pull_request'
+        run: npm run check:full
+
+      - name: Upload Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Configure GitHub Pages
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -42,10 +61,29 @@ jobs:
         with:
           path: dist
 
+  security:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit high and critical vulnerabilities
+        run: npm audit --audit-level=high
+
   deploy:
     name: Deploy GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, security]
     runs-on: ubuntu-latest
     permissions:
       contents: read

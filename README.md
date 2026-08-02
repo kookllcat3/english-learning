@@ -94,8 +94,10 @@ npm start
 
 公開倉庫使用 GitHub Actions 自動部署到 GitHub Pages：
 
-- pull request 合併前會執行型別檢查、單元測試與正式建置，但不會部署。
-- `main` 更新或從 Actions 手動執行 workflow 時，通過相同檢查後會發布 `dist/`。
+- pull request 合併前會執行型別檢查、單元測試、桌面／窄版／觸控 E2E 與 axe 無障礙檢查，但不會部署。
+- `main` 更新或從 Actions 手動執行 workflow 時，會執行 `npm run check:full`，包含 production E2E 與效能基準；同時必須通過 high 以上 npm audit 才會發布 `dist/`。
+- Playwright 失敗時會保存 HTML report、trace、截圖與 `test-results` Artifact，方便從 Actions 下載定位問題。
+- Dependabot 會追蹤 npm 與 GitHub Actions 依賴更新，CodeQL 會掃描 JavaScript／TypeScript 與 GitHub Actions workflow。
 - 部署使用 GitHub Pages artifact，不需要 `gh-pages` 分支，也不會使用 Firebase。
 
 第一次啟用時，請在 GitHub repository 的 **Settings → Pages → Build and deployment**
@@ -184,6 +186,13 @@ npm run check
 ```bash
 npx playwright install chromium
 npm run test:e2e
+```
+
+CI runner 會使用 `npx playwright install --with-deps chromium` 安裝瀏覽器與必要系統套件；本機若要模擬部署前完整檢查，可執行：
+
+```bash
+npm run check:full
+npm audit --audit-level=high
 ```
 
 Playwright 會以桌面 Chromium 與 390 px 窄螢幕執行同一套核心流程，

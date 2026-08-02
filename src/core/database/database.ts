@@ -6,6 +6,7 @@ import type {
   MaterialRecord,
   MaterialTermsRecord,
   SettingRecord,
+  StoredMaterialAssetRecord,
   VocabularyRecord,
   WordNoteRecord,
 } from "../models/models.js";
@@ -27,7 +28,7 @@ export const STORES = Object.freeze({
 type StoreName = typeof STORES[keyof typeof STORES];
 
 interface StoreRecordMap {
-  materialAssets: MaterialAssetRecord;
+  materialAssets: StoredMaterialAssetRecord;
   materialContents: MaterialContentRecord;
   materialTerms: MaterialTermsRecord;
   materials: MaterialRecord;
@@ -40,6 +41,26 @@ let databasePromise: Promise<IDBDatabase> | undefined;
 
 interface TransactionFailureState {
   error: DOMException | null;
+}
+
+async function storedAsset(asset: MaterialAssetRecord): Promise<StoredMaterialAssetRecord> {
+  return {
+    ...asset,
+    blob: await blobToArrayBuffer(asset.blob),
+  };
+}
+
+function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === "function") return blob.arrayBuffer();
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error("圖片二進位轉換失敗。"));
+    }, { once: true });
+    reader.addEventListener("error", () => reject(reader.error), { once: true });
+    reader.readAsArrayBuffer(blob);
+  });
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
@@ -186,6 +207,9 @@ export async function writeOne<K extends StoreName>(
 }
 
 export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<void> {
+  const assetsToStore = await Promise.all(
+    bundles.flatMap((bundle) => bundle.assets ?? []).map(storedAsset),
+  );
   const database = await openDatabase();
   const transaction = database.transaction(
     [STORES.materials, STORES.materialAssets, STORES.materialContents, STORES.materialTerms],
@@ -203,8 +227,8 @@ export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<v
       contentBlocks: bundle.contentBlocks,
     });
     terms.put({ materialId: bundle.metadata.id, words: bundle.words });
-    (bundle.assets ?? []).forEach((asset) => assets.put(asset));
   });
+  assetsToStore.forEach((asset) => assets.put(asset));
   await transactionResult(transaction);
 }
 
@@ -278,6 +302,7 @@ export async function writeBackupStores({
   wordNotes,
   settings,
 }: BackupStoreRecords): Promise<void> {
+  const assetsToStore = await Promise.all(materialAssets.map(storedAsset));
   const database = await openDatabase();
   const transaction = database.transaction(Object.values(STORES), "readwrite");
   const failureState: TransactionFailureState = { error: null };
@@ -296,7 +321,7 @@ export async function writeBackupStores({
 
   materials.forEach((material) => trackRequest(materialStore.put(material)));
   trackRequest(assetStore.clear());
-  materialAssets.forEach((asset) => trackRequest(assetStore.put(asset)));
+  assetsToStore.forEach((asset) => trackRequest(assetStore.put(asset)));
   materialContents.forEach((content) => trackRequest(contentStore.put(content)));
   materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
   vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));

@@ -50,6 +50,17 @@ export interface MaterialAssetRecord {
   caption?: string;
 }
 
+/**
+ * IndexedDB representation of an image asset.
+ *
+ * Safari can abort a transaction when a Blob is structured-cloned into
+ * IndexedDB. ArrayBuffer is the portable persisted representation; Blob is
+ * retained here so records written by older app versions remain readable.
+ */
+export interface StoredMaterialAssetRecord extends Omit<MaterialAssetRecord, "blob"> {
+  blob: Blob | ArrayBuffer;
+}
+
 export interface VocabularyRecord {
   word: string;
   learned: boolean;

@@ -87,6 +87,9 @@ async function importBackupFile(file: File): Promise<void> {
       `更新素材 ${preview.updatedMaterials} 份`,
       `新增詞彙 ${preview.newWords} 筆`,
       `更新詞彙 ${preview.updatedWords} 筆`,
+      ...(preview.skippedMaterials.length > 0
+        ? [`略過不支援素材 ${preview.skippedMaterials.length} 份`]
+        : []),
     ].join("、");
     if (!window.confirm(`即將匯入備份：${summary}。要繼續嗎？`)) {
       backupStatus.value = "已取消匯入。";
@@ -95,9 +98,11 @@ async function importBackupFile(file: File): Promise<void> {
     }
 
     backupStatus.value = "正在寫入資料庫，請不要關閉頁面…";
-    await importBackup(backup);
+    const result = await importBackup(backup);
     notifyLearningDataChanged("backup");
-    backupStatus.value = "備份已匯入。";
+    backupStatus.value = result.skippedMaterials.length > 0
+      ? `備份已匯入；已略過不支援素材 ${result.skippedMaterials.length} 份。`
+      : "備份已匯入。";
     backupStatusKind.value = "success";
   } catch (error) {
     backupStatus.value = `備份匯入失敗：${errorMessage(error)}`;

@@ -32,15 +32,22 @@ import type {
   ContentBlock,
   CreateMaterialInput,
   LearningBackup,
+  MaterialAssetRecord,
   MaterialRecord,
+  StoredMaterialAssetRecord,
   VocabularyRecord,
 } from "../models/models.js";
 
 const MAX_MATERIAL_BYTES = 2 * 1024 * 1024;
+const MAX_ASSET_BYTES = 2 * 1024 * 1024;
 const BACKUP_SCHEMA_VERSION = 3;
 const MATERIALS_PER_PAGE = 12;
 const READING_CONTENT_CLASSIFICATION_KEY = "readingContentClassificationVersion";
 const READING_CONTENT_CLASSIFICATION_VERSION = 1;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
 export type MaterialSort = "newest" | "oldest" | "progress" | "title";
 
@@ -222,7 +229,15 @@ export async function getMaterial(id: string): Promise<BackupMaterial> {
 }
 
 export async function getMaterialAsset(assetId: string) {
-  return readOne(STORES.materialAssets, assetId);
+  const asset = await readOne(STORES.materialAssets, assetId);
+  return asset ? materialAssetFromStoredRecord(asset) : undefined;
+}
+
+function materialAssetFromStoredRecord(asset: StoredMaterialAssetRecord): MaterialAssetRecord {
+  const blob = asset.blob instanceof Blob
+    ? asset.blob
+    : new Blob([new Uint8Array(asset.blob)], { type: asset.mimeType });
+  return { ...asset, blob };
 }
 
 export async function createMaterial({
@@ -508,13 +523,14 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 export async function createBackup(): Promise<LearningBackup> {
-  const [materials, assets, vocabulary, wordNotes, settings] = await Promise.all([
+  const [materials, storedAssets, vocabulary, wordNotes, settings] = await Promise.all([
     materialsWithContent(),
     readAll(STORES.materialAssets),
     readAll(STORES.vocabulary),
     readAll(STORES.wordNotes),
     readAll(STORES.settings),
   ]);
+  const assets = storedAssets.map(materialAssetFromStoredRecord);
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
@@ -532,6 +548,87 @@ export async function createBackup(): Promise<LearningBackup> {
   };
 }
 
+export interface BackupImportPreview {
+  newMaterials: number;
+  updatedMaterials: number;
+  newWords: number;
+  updatedWords: number;
+  skippedMaterials: string[];
+}
+
+export interface BackupImportResult {
+  skippedMaterials: string[];
+}
+
+interface PreparedBackup {
+  backup: LearningBackup;
+  skippedMaterials: string[];
+}
+
+function hasUnsupportedMaterialAsset(
+  material: unknown,
+  assetsById: Map<string, unknown>,
+): boolean {
+  if (!isRecord(material) || !Array.isArray(material.contentBlocks)) return false;
+  return material.contentBlocks.some((block) => {
+    if (!isRecord(block) || block.type !== "image" || typeof block.assetId !== "string") return false;
+    const asset = assetsById.get(block.assetId);
+    if (!isRecord(asset) || typeof asset.data !== "string") return true;
+    try {
+      return dataUrlToBlob(asset.data).size > MAX_ASSET_BYTES;
+    } catch {
+      return true;
+    }
+  });
+}
+
+function prepareBackup(backup: LearningBackup): PreparedBackup {
+  if (!Array.isArray(backup?.materials) || !Array.isArray(backup?.vocabulary)) {
+    validateBackup(backup);
+  }
+  if (backup.materialAssets !== undefined && !Array.isArray(backup.materialAssets)) {
+    validateBackup(backup);
+  }
+
+  const assetsById = new Map(
+    (backup.materialAssets ?? [])
+      .filter((asset) => isRecord(asset) && typeof asset.id === "string")
+      .map((asset) => [asset.id, asset]),
+  );
+  const unsupportedMaterials = backup.materials.filter((material) => (
+    (isRecord(material) && typeof material.content === "string" && utf8Size(material.content) > MAX_MATERIAL_BYTES)
+    || hasUnsupportedMaterialAsset(material, assetsById)
+  ));
+  const skippedMaterials = unsupportedMaterials.map((material) => (
+      isRecord(material) && typeof material.title === "string" && material.title.trim()
+        ? material.title.trim()
+        : "未命名素材"
+  ));
+  if (skippedMaterials.length === 0) {
+    validateBackup(backup);
+    return { backup, skippedMaterials };
+  }
+
+  const skippedMaterialSet = new Set(unsupportedMaterials);
+  const supportedMaterials = backup.materials.filter((material) => {
+    return !skippedMaterialSet.has(material);
+  });
+  const supportedMaterialIds = new Set(
+    supportedMaterials
+      .filter((material): material is LearningBackup["materials"][number] & { id: string } => (
+        isRecord(material) && typeof material.id === "string"
+      ))
+      .map((material) => material.id),
+  );
+  const filteredBackup: LearningBackup = {
+    ...backup,
+    materials: supportedMaterials,
+    materialAssets: (backup.materialAssets ?? []).filter((asset) => supportedMaterialIds.has(asset.materialId)),
+  };
+  validateBackup(filteredBackup);
+  return { backup: filteredBackup, skippedMaterials };
+}
+
 function validateBackup(backup: LearningBackup): void {
   if (!backup || ![1, 2, BACKUP_SCHEMA_VERSION].includes(backup.schemaVersion)) {
     throw new Error("這份備份的版本不受支援。");
@@ -546,8 +643,6 @@ function validateBackup(backup: LearningBackup): void {
     throw new Error("備份的單字筆記格式不正確。");
   }
 
-  const isRecord = (value: unknown): value is Record<string, unknown> =>
-    value !== null && typeof value === "object" && !Array.isArray(value);
   const isTimestamp = (value: unknown): value is string =>
     typeof value === "string" && Number.isFinite(Date.parse(value));
   const materialIds = new Set<string>();
@@ -622,7 +717,7 @@ function validateBackup(backup: LearningBackup): void {
       throw new Error("備份包含格式不正確或重複的圖片資料。");
     }
     const blob = dataUrlToBlob(asset.data);
-    if (blob.size > 2 * 1024 * 1024) throw new Error("備份圖片超過 2 MB。");
+    if (blob.size > MAX_ASSET_BYTES) throw new Error("備份圖片超過 2 MB。");
     assetIds.add(asset.id);
   });
   if ([...referencedAssetIds].some((id) => !assetIds.has(id))) {
@@ -690,8 +785,9 @@ function validateBackup(backup: LearningBackup): void {
   });
 }
 
-export async function previewBackup(backup: LearningBackup) {
-  validateBackup(backup);
+export async function previewBackup(backup: LearningBackup): Promise<BackupImportPreview> {
+  const prepared = prepareBackup(backup);
+  backup = prepared.backup;
   const [currentMaterials, currentVocabulary] = await Promise.all([
     listMaterials(),
     readAll(STORES.vocabulary),
@@ -703,14 +799,16 @@ export async function previewBackup(backup: LearningBackup) {
     updatedMaterials: backup.materials.filter((item) => materialIds.has(item.id)).length,
     newWords: backup.vocabulary.filter((item) => !words.has(item.word)).length,
     updatedWords: backup.vocabulary.filter((item) => words.has(item.word)).length,
+    skippedMaterials: prepared.skippedMaterials,
   };
 }
 
-export async function importBackup(backup: LearningBackup): Promise<void> {
-  validateBackup(backup);
+export async function importBackup(backup: LearningBackup): Promise<BackupImportResult> {
+  const prepared = prepareBackup(backup);
+  backup = prepared.backup;
   const [currentMaterials, currentAssets, currentVocabulary, currentWordNotes, currentSettings] = await Promise.all([
     materialsWithContent(),
-    readAll(STORES.materialAssets),
+    readAll(STORES.materialAssets).then((assets) => assets.map(materialAssetFromStoredRecord)),
     readAll(STORES.vocabulary),
     readAll(STORES.wordNotes),
     readAll(STORES.settings),
@@ -794,4 +892,5 @@ export async function importBackup(backup: LearningBackup): Promise<void> {
       "key",
     ),
   });
+  return { skippedMaterials: prepared.skippedMaterials };
 }

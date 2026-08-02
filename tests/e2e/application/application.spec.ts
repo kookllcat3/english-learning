@@ -693,9 +693,96 @@ test("reports an invalid backup without changing the library", async ({ page }) 
   });
 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
-  await expect(dataDialog.getByRole("status")).toContainText("JSON");
+  await expect(dataDialog.getByRole("alert")).toContainText("JSON");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+});
+
+test("skips an unsupported image material and imports the remaining backup", async ({ page }) => {
+  const timestamp = "2026-08-02T08:00:00.000Z";
+  const supportedMaterialId = "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a27";
+  const unsupportedMaterialId = "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a28";
+  const supportedImageMaterialId = "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a29";
+  await page.goto("/");
+  await page.locator('button[aria-label="開啟資料管理"]').click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "mixed-support-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 3,
+      materials: [
+        {
+          id: supportedMaterialId,
+          title: "Supported text material",
+          description: "",
+          content: "A supported sentence.",
+          contentBlocks: [{ type: "text", text: "A supported sentence.", order: 0 }],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        {
+          id: unsupportedMaterialId,
+          title: "Unsupported image material",
+          description: "",
+          content: "An image sentence.",
+          contentBlocks: [{ type: "image", assetId: "unsupported-asset", order: 0 }],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        {
+          id: supportedImageMaterialId,
+          title: "Supported image material",
+          description: "",
+          content: "An image sentence.",
+          contentBlocks: [{
+            type: "image",
+            assetId: "supported-asset",
+            alt: "",
+            caption: "",
+            order: 0,
+          }],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ],
+      materialAssets: [
+        {
+          id: "unsupported-asset",
+          materialId: unsupportedMaterialId,
+          mimeType: "image/webp",
+          width: 1,
+          height: 1,
+          alt: "",
+          caption: "",
+          data: "data:image/webp;base64,not-a-webp",
+        },
+        {
+          id: "supported-asset",
+          materialId: supportedImageMaterialId,
+          mimeType: "image/webp",
+          width: 1,
+          height: 1,
+          alt: "",
+          caption: "",
+          data: `data:image/webp;base64,${Buffer.concat([
+            Buffer.from("RIFF"),
+            Buffer.alloc(4),
+            Buffer.from("WEBP"),
+          ]).toString("base64")}`,
+        },
+      ],
+      vocabulary: [],
+      wordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.locator('.data-management-dialog');
+  await expect(dataDialog.locator('[role="status"]')).toContainText("略過不支援素材 1 份");
+  await expect(page.getByText("Supported text material")).toBeVisible();
+  await expect(page.getByText("Supported image material")).toBeVisible();
+  await expect(page.getByText("Unsupported image material")).toHaveCount(0);
 });
 
 test("rejects a backup whose reading position does not exist", async ({ page }) => {
@@ -726,7 +813,7 @@ test("rejects a backup whose reading position does not exist", async ({ page }) 
   });
 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
-  await expect(dataDialog.getByRole("status")).toContainText("素材資料");
+  await expect(dataDialog.getByRole("alert")).toContainText("素材資料");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Invalid reading position" })).toHaveCount(0);

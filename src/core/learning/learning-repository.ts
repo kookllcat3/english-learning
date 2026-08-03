@@ -424,7 +424,7 @@ function compareMaterials(
     return (first, second) => first.title.localeCompare(second.title, "zh-Hant");
   }
   if (sort === "progress") {
-    return (first, second) => materialCompletion(second) - materialCompletion(first)
+    return (first, second) => materialCompletion(first) - materialCompletion(second)
       || second.updatedAt.localeCompare(first.updatedAt);
   }
   return (first, second) => second.createdAt.localeCompare(first.createdAt);

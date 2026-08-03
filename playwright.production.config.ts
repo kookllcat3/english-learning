@@ -7,9 +7,10 @@ export default defineConfig({
   testMatch: ["deployment.spec.ts", "performance.spec.ts"],
   fullyParallel: false,
   forbidOnly: true,
-  reporter: "list",
+  reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: applicationUrl,
+    screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   projects: [

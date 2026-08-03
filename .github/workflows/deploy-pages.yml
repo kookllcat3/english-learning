@@ -46,8 +46,8 @@ jobs:
         with:
           name: playwright-diagnostics-${{ github.run_id }}
           path: |
-            playwright-report
-            test-results
+            .artifacts/playwright/report
+            .artifacts/playwright/test-results
           if-no-files-found: ignore
           retention-days: 14
 

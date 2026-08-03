@@ -7,7 +7,12 @@ export default defineConfig({
   testMatch: ["deployment.spec.ts", "performance.spec.ts"],
   fullyParallel: false,
   forbidOnly: true,
-  reporter: [["list"], ["html", { open: "never" }]],
+  workers: 4,
+  outputDir: ".artifacts/playwright/test-results",
+  reporter: [["list"], ["html", {
+    open: "never",
+    outputFolder: ".artifacts/playwright/report",
+  }]],
   use: {
     baseURL: applicationUrl,
     screenshot: "only-on-failure",

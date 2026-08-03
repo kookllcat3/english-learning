@@ -93,7 +93,7 @@ npm start
 
 - pull request 合併前會執行型別檢查、單元測試、桌面／窄版／觸控 E2E、production E2E、效能與 axe 無障礙檢查，但不會部署。
 - `main` 更新或從 Actions 手動執行 workflow 時，會執行 `npm run check:full`；同時必須通過 high 以上 npm audit 與 CodeQL 分析 job 才會發布 `dist/`。
-- Playwright 失敗時才會保存 HTML report、trace、截圖與 `test-results` Artifact，方便從 Actions 下載定位問題。
+- Playwright 失敗時才會從 `.artifacts/playwright/` 保存 HTML report、trace、截圖與 `test-results` Artifact，方便從 Actions 下載定位問題。
 - Dependabot 會追蹤 npm 與 GitHub Actions 依賴更新；PR／main 品質 workflow 會執行 CodeQL，另有每週排程掃描。
 - 部署使用 GitHub Pages artifact，不需要 `gh-pages` 分支，也不會使用 Firebase。
 
@@ -125,8 +125,6 @@ dist/
 ```text
 english-learning/
 ├─ .github/workflows/deploy-pages.yml
-├─ assets/
-│  └─ config/familiarity-levels.json
 ├─ scripts/start.ps1
 ├─ src/
 │  ├─ app/
@@ -137,15 +135,18 @@ english-learning/
 │  │  ├─ database/
 │  │  ├─ importers/
 │  │  ├─ learning/
+│  │  ├─ materials/
+│  │  ├─ models/
+│  │  ├─ queries/
 │  │  ├─ settings/
 │  │  ├─ services/
-│  │  ├─ text/
-│  │  └─ models.ts
+│  │  └─ text/
 │  ├─ features/
+│  │  ├─ data-management/components/
 │  │  ├─ home/components/
-│  │  └─ material/components/
+│  │  └─ material/{components,composables,config}/
 │  ├─ shared/components/
-│  ├─ styles/
+│  ├─ styles/{base,home,dialogs,material}.css
 │  ├─ types/
 │  ├─ vendor/
 │  │  ├─ jszip/
@@ -167,9 +168,10 @@ english-learning/
 └─ start.cmd
 ```
 
-`src/core` 不依賴 Vue，集中 IndexedDB、備份、匯入、模型與學習規則；`features`
-放各頁功能元件；`shared` 只放跨功能共用元件。`assets` 僅保留需要以固定
-網址直接讀取的靜態設定，第三方離線程式庫則集中在 `src/vendor` 由 Vite 打包。
+`src/core` 不依賴 Vue，並將 IndexedDB migration、素材存取、dashboard query、
+備份、匯入、模型與學習規則分責；`learning-repository.ts` 只保留既有 import 的
+相容入口。`features` 擁有各產品功能的元件、composable 與編譯期設定；`shared`
+只放跨功能共用能力。第三方離線程式庫集中在 `src/vendor` 由 Vite 打包。
 
 ## 開發與檢查
 
@@ -196,6 +198,9 @@ Playwright 會以桌面 Chromium 與 390 px 窄螢幕執行同一套核心流程
 驗證單一 Vue App、Vue Router、IndexedDB 學習進度持久化、跨分頁同步、
 離線資料寫入、舊版資料庫升級、備份往返、axe WCAG 2.0/2.1 A 與 AA
 自動檢查基線，以及舊網址轉址。自動檢查不能取代完整的人工無障礙測試。
+application E2E 依核心流程、單字卡、彈窗、閱讀進度、AI 助手、備份、素材庫與
+韌性測試拆檔；runner 最多使用 4 個 workers，避免多個瀏覽器互搶本機資源。
+本機 Playwright 報告與測試結果統一寫入被 Git 忽略的 `.artifacts/playwright/`。
 需要一次執行全部自動檢查時使用：
 
 ```bash

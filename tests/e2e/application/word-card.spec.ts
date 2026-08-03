@@ -1,0 +1,247 @@
+import { expect, test } from "@playwright/test";
+
+import { createMaterial, materialContent, materialTitle } from "./test-helpers";
+
+test("persists a word note without showing formatting controls", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  await page.locator('[data-word="bear"]').first().hover();
+  const wordHeading = page.getByRole("heading", { name: "bear", level: 2 });
+  await expect(wordHeading).toBeVisible();
+  await expect(wordHeading.locator("a")).toHaveCount(0);
+  await expect(wordHeading).not.toHaveCSS("user-select", "none");
+  const leftHeaderActions = page.locator(".word-card__word").getByRole("button");
+  await expect(leftHeaderActions.nth(0)).toHaveAccessibleName("播放單字發音");
+  await expect(leftHeaderActions.nth(1)).toHaveAccessibleName("標記為已認識");
+  const rightHeaderActions = page.locator(".word-card__actions").getByRole("button");
+  await expect(rightHeaderActions.nth(0)).toHaveAccessibleName("釘選單字卡");
+  await expect(rightHeaderActions).toHaveCount(1);
+  await leftHeaderActions.nth(1).click();
+  await expect(leftHeaderActions.nth(1)).toHaveAccessibleName("標記為不認識");
+  await expect(leftHeaderActions.nth(1)).toHaveClass(/is-active/);
+  for (const control of await page.locator(".word-card__heading button").all()) {
+    await expect(control).toHaveCSS("height", "36px");
+  }
+  for (const control of await page.locator(".word-card__heading .icon-button").all()) {
+    await expect(control).toHaveCSS("display", "grid");
+    await expect(control).toHaveCSS("place-items", "center");
+  }
+  await expect(page.getByRole("button", { name: "關閉單字卡" })).toHaveCount(0);
+  await expect(page.getByRole("toolbar", { name: "Markdown 格式工具列" })).toHaveCount(0);
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await expect(editor).toHaveCSS("resize", "none");
+  await expect(editor).toHaveCSS("overflow-y", "auto");
+  await editor.click();
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+  await page.locator('[data-word="runs"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await editor.fill("large animal");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+
+  await page.reload();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("large animal");
+});
+
+test("keeps a word note draft visible when IndexedDB persistence fails", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.locator('[data-word="bear"]').first().hover();
+
+  await page.evaluate(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    const state = window as typeof window & { restoreWordNotePut?: () => void };
+    state.restoreWordNotePut = () => {
+      IDBObjectStore.prototype.put = originalPut;
+    };
+    IDBObjectStore.prototype.put = function put(value, key) {
+      if (this.name === "wordNotes") throw new DOMException("Simulated write failure", "UnknownError");
+      return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+    };
+  });
+
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await editor.fill("recover this note");
+  await expect(page.getByRole("status")).toContainText("草稿仍保留在此分頁");
+  await page.locator('[data-word="runs"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(editor).toContainText("recover this note");
+
+  await page.evaluate(() => {
+    const state = window as typeof window & { restoreWordNotePut?: () => void };
+    state.restoreWordNotePut?.();
+  });
+  await editor.fill("recover this note safely");
+  await page.waitForTimeout(800);
+  await page.reload();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("recover this note safely");
+});
+
+test("keeps the word card open while a pointer interaction is active", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  const bearWord = page.locator('[data-word="bear"]').first();
+  const bearHeading = page.getByRole("heading", { name: "bear", level: 2 });
+  await bearWord.hover();
+  await expect(bearHeading).toBeHidden();
+  await page.waitForTimeout(1050);
+  await expect(bearHeading).toBeVisible();
+  await page.locator('[data-word="runs"]').first().hover();
+  await expect(page.getByRole("heading", { name: "runs", level: 2 })).toBeVisible();
+
+  const card = page.locator(".word-card");
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await editor.dispatchEvent("pointerdown", { button: 0, pointerId: 91 });
+  await card.dispatchEvent("pointerleave", { pointerId: 91 });
+  await expect(page.getByRole("heading", { name: "runs", level: 2 })).toBeVisible();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
+  });
+});
+
+test("locks page scrolling while the word card is open", async ({ page }) => {
+  const longContent = Array.from({ length: 40 }, () => materialContent).join("\n");
+  await createMaterial(page, "Word card scroll lock", longContent);
+  await page.locator(".material-card .button--primary").first().click();
+
+  const wordHeading = page.getByRole("heading", { name: "bear", level: 2 });
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(wordHeading).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  const readingPosition = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(readingPosition);
+  await page.keyboard.press("PageDown");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(readingPosition);
+
+  await page.locator("h1").click();
+  await expect(wordHeading).toBeHidden();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(readingPosition);
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator(".material-view-switcher__button").nth(1).click();
+  await page.locator(".word-item__lookup").first().click();
+  await expect(page.locator(".word-card h2")).toBeVisible();
+  const vocabularyPosition = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(vocabularyPosition);
+});
+
+test("pins a word card opened from a text selection", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await expect(page.locator('[data-word="bear"]').first()).toBeVisible();
+  await page.evaluate(() => {
+    const word = document.querySelector<HTMLElement>('[data-word="bear"]');
+    if (!word) throw new Error("word not found");
+    const range = document.createRange();
+    range.selectNodeContents(word);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("heading", { name: "bear", level: 2 }).click();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+});
+
+test("keeps translation text selectable while preserving its blur control", async ({ page }) => {
+  const title = "Translation selection";
+  await createMaterial(page, title, "An original sentence.\n中文翻譯內容。");
+  const materialCard = page.getByRole("article").filter({ hasText: title });
+  await materialCard.getByRole("link").click();
+
+  const translationLine = page.locator(".reading-line-wrap.is-translation").first();
+  const translationText = translationLine.locator(".reading-line");
+  const toggle = translationLine.locator(".translation-visibility-toggle");
+  const textBounds = await translationText.boundingBox();
+  if (!textBounds) throw new Error("translation line is not visible");
+
+  const selectionY = textBounds.y + (textBounds.height / 2);
+  await expect(toggle).toHaveCSS("pointer-events", "auto");
+
+  await page.mouse.move(textBounds.x + 2, selectionY);
+  await page.mouse.down();
+  await page.mouse.move(textBounds.x + textBounds.width - 2, selectionY, { steps: 8 });
+  await page.mouse.up();
+
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toContain("中文翻譯內容");
+  await expect(toggle).toHaveCSS("pointer-events", "auto");
+
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await toggle.click();
+  await expect(translationText).toHaveClass(/translation-mask/);
+});
+
+test("pins the word card when its word is selected", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  const word = page.locator('[data-word="bear"]').first();
+  await word.hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await page.evaluate(() => {
+    const heading = document.querySelector<HTMLElement>(".word-card__heading h2");
+    if (!heading) throw new Error("word card heading not found");
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+
+  await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("unpins a pinned word card before its natural outside close", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+
+  await page.getByRole("button", { name: "釘選單字卡" }).click();
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).dispatchEvent("pointerdown", {
+    button: 0,
+    pointerId: 91,
+    pointerType: "mouse",
+  });
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
+
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+
+  await page.getByRole("button", { name: "釘選單字卡" }).click();
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).dispatchEvent("pointerdown", {
+    button: 0,
+    pointerId: 92,
+    pointerType: "touch",
+  });
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
+
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  const pinButton = page.locator(".word-card__actions .icon-button");
+  await pinButton.click();
+  const nextWord = page.locator('.reading-word:not([data-word="bear"])').first();
+  const nextWordText = await nextWord.getAttribute("data-word");
+  if (!nextWordText) throw new Error("next reading word not found");
+  await nextWord.click();
+  await page.waitForTimeout(200);
+  await expect(page.getByRole("heading", { name: nextWordText, level: 2 })).toBeVisible();
+  await expect(pinButton).toHaveAttribute("aria-pressed", "false");
+});

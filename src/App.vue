@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
-import DataManagement from "./features/home/components/DataManagement.vue";
+import DataManagement from "./features/data-management/components/DataManagement.vue";
 import MaterialGuide from "./features/home/components/MaterialGuide.vue";
 import AppErrorBoundary from "./shared/components/AppErrorBoundary.vue";
 import { usePageActionsStore } from "./app/stores/page-actions.js";

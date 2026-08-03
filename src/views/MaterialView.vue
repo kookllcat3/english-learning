@@ -11,7 +11,6 @@ import { RouterLink, useRoute } from "vue-router";
 import {
   getMaterial,
   getVocabularyProgress,
-  setMaterialReadingParagraph,
   setWordsKnown,
 } from "../core/learning/learning-repository.js";
 import {
@@ -21,7 +20,6 @@ import {
 import {
   notifyLearningDataChanged,
 } from "../core/learning/learning-sync.js";
-import { isValidWord, normalizeWord } from "../core/text/text.js";
 import { sourceWordsForBlocks } from "../core/learning/reading-content.js";
 import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
 import { errorMessage as getErrorMessage } from "../shared/errors.js";
@@ -34,19 +32,12 @@ import {
 } from "../features/material/familiarity.js";
 import MaterialReadingContent from "../features/material/components/MaterialReadingContent.vue";
 import WordCard from "../features/material/components/WordCard.vue";
+import { useReadingPosition } from "../features/material/composables/use-reading-position.js";
+import { useWordCardInteractions } from "../features/material/composables/use-word-card-interactions.js";
 
 type MaterialViewMode = "reading" | "vocabulary";
 
-interface WordCardController {
-  close(): void;
-  open(word: string, rect: DOMRect, shouldPin?: boolean): Promise<void>;
-  unpin(): void;
-}
-
 const INITIAL_VISIBLE_WORD_LIMIT = 300;
-const WORD_CARD_CLOSE_DELAY_MS = 120;
-const WORD_CARD_HOVER_DELAY_MS = 600;
-const WORD_SELECTION_DELAY_MS = 220;
 
 const route = useRoute();
 const material = ref<BackupMaterial | null>(null);
@@ -63,14 +54,7 @@ const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
 const readingPanel = ref<HTMLElement | null>(null);
-const wordCard = ref<WordCardController | null>(null);
-const activeWord = ref("");
-const wordCardPinned = ref(false);
-const currentParagraphKey = ref<string | null>(null);
 let loadSequence = 0;
-let selectionTimer: number | undefined;
-let wordCloseTimer: number | undefined;
-let wordHoverTimer: number | undefined;
 
 const knownWords = computed(() => new Set(
   [...vocabularyProgress.value.values()]
@@ -97,6 +81,28 @@ const readingPanelStyle = computed(() => {
 function materialId(): string {
   return String(route.params.id ?? "");
 }
+
+const {
+  currentParagraphKey,
+  returnToPosition: returnToReadingPosition,
+  showReturnAction: showReadingPositionReturn,
+  toggle: toggleReadingParagraph,
+} = useReadingPosition({ actionError, activeView, materialId, readingPanel });
+
+const {
+  activeWord,
+  close: closeWordCard,
+  dispose: disposeWordCard,
+  handleClosed: handleWordCardClosed,
+  handlePointerDown: handleWordCardPointerDown,
+  handleSelection: handleWordSelection,
+  keepOpen: keepWordCardOpen,
+  open: openWordCard,
+  scheduleClose: scheduleWordCardClose,
+  scheduleSelectionLookup,
+  setPinned: setWordCardPinned,
+  wordCard,
+} = useWordCardInteractions();
 
 async function refreshKnownWords(): Promise<void> {
   if (!materialId()) return;
@@ -166,109 +172,11 @@ async function saveFamiliarityColor(): Promise<void> {
   }
 }
 
-function openWordCard(
-  word: string,
-  rect: DOMRect,
-  key = "",
-  trigger: "hover" | "focus" | "touch" | "selection" | "direct" = "direct",
-): void {
-  if (wordCardPinned.value || document.activeElement?.closest(".word-card")) return;
-  window.clearTimeout(wordHoverTimer);
-  if (trigger === "hover" && !activeWord.value) {
-    wordHoverTimer = window.setTimeout(() => {
-      wordHoverTimer = undefined;
-      openWordCard(word, rect, key, "direct");
-    }, WORD_CARD_HOVER_DELAY_MS);
-    return;
-  }
-  window.clearTimeout(wordCloseTimer);
-  activeWord.value = key;
-  void wordCard.value?.open(word, rect, trigger === "selection");
-}
-
-async function toggleReadingParagraph(paragraphKey: string): Promise<void> {
-  const previousParagraphKey = currentParagraphKey.value;
-  const nextParagraphKey = previousParagraphKey === paragraphKey ? null : paragraphKey;
-  currentParagraphKey.value = nextParagraphKey;
-  actionError.value = "";
-  try {
-    await setMaterialReadingParagraph(materialId(), nextParagraphKey);
-  } catch (error) {
-    currentParagraphKey.value = previousParagraphKey;
-    actionError.value = getErrorMessage(error, "無法儲存目前閱讀段落。");
-  }
-}
-
-function scheduleWordCardClose(): void {
-  window.clearTimeout(wordHoverTimer);
-  if (wordCardPinned.value) return;
-  window.clearTimeout(wordCloseTimer);
-  wordCloseTimer = window.setTimeout(() => {
-    const focusedWord = document.activeElement?.closest<HTMLElement>(".reading-word");
-    if (wordCardPinned.value || focusedWord?.dataset.wordKey === activeWord.value) return;
-    activeWord.value = "";
-    wordCard.value?.close();
-  }, WORD_CARD_CLOSE_DELAY_MS);
-}
-
-function keepWordCardOpen(): void {
-  window.clearTimeout(wordCloseTimer);
-  window.clearTimeout(wordHoverTimer);
-  window.clearTimeout(selectionTimer);
-}
-
-function closeWordCard(): void {
-  window.clearTimeout(wordCloseTimer);
-  window.clearTimeout(wordHoverTimer);
-  activeWord.value = "";
-}
-
-function setWordCardPinned(pinned: boolean): void {
-  window.clearTimeout(wordCloseTimer);
-  window.clearTimeout(wordHoverTimer);
-  wordCardPinned.value = pinned;
-}
-
-function handleWordSelection(): void {
-  if (document.activeElement?.closest(".word-card")) return;
-  const selection = window.getSelection();
-  const readingContent = document.querySelector(".reading-content");
-  if (
-    !selection
-    || selection.isCollapsed
-    || selection.rangeCount === 0
-    || !readingContent?.contains(selection.anchorNode)
-  ) return;
-
-  const word = normalizeWord(selection.toString());
-  if (!isValidWord(word)) return;
-  openWordCard(word, selection.getRangeAt(0).getBoundingClientRect(), "", "selection");
-}
-
-function scheduleSelectionLookup(): void {
-  window.clearTimeout(selectionTimer);
-  selectionTimer = window.setTimeout(handleWordSelection, WORD_SELECTION_DELAY_MS);
-}
-
 function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
   if (!familiarityLegend.value?.contains(target)) familiarityHelpOpen.value = false;
-  if (target.closest(".word-card")) return;
-  if (wordCardPinned.value) {
-    wordCard.value?.unpin();
-    const readingWord = target.closest<HTMLElement>(".reading-word");
-    const word = readingWord?.dataset.word;
-    const key = readingWord?.dataset.wordKey;
-    if (readingWord && word && key) {
-      openWordCard(word, readingWord.getBoundingClientRect(), key);
-      return;
-    }
-    if (target.closest(".word-item__lookup")) return;
-    scheduleWordCardClose();
-    return;
-  }
-  if (!target.closest(".reading-word, .word-item__lookup")) wordCard.value?.close();
+  handleWordCardPointerDown(event);
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -278,8 +186,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 function closeTransientWordCard(): void {
-  activeWord.value = "";
-  wordCard.value?.close();
+  closeWordCard();
 }
 
 function refreshLearningProgress(): void {
@@ -292,26 +199,6 @@ useLearningDataRefresh({
   onHidden: closeTransientWordCard,
   refresh: refreshLearningProgress,
 });
-const showReadingPositionReturn = computed(() =>
-  activeView.value === "reading"
-  && currentParagraphKey.value !== null);
-
-function readingPositionParagraph(): HTMLElement | null {
-  const paragraphKey = currentParagraphKey.value;
-  if (!paragraphKey) return null;
-  return [...(readingPanel.value?.querySelectorAll<HTMLElement>("[data-paragraph-key]") ?? [])]
-    .find((paragraph) => paragraph.dataset.paragraphKey === paragraphKey) ?? null;
-}
-
-function returnToReadingPosition(): void {
-  const paragraph = readingPositionParagraph();
-  if (!paragraph) return;
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  paragraph.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
-  paragraph.querySelector<HTMLElement>('[aria-label="標記目前閱讀段落"]')
-    ?.focus({ preventScroll: true });
-}
-
 watch(() => route.params.id, () => void loadMaterialPage());
 watch(searchQuery, () => {
   visibleWordLimit.value = INITIAL_VISIBLE_WORD_LIMIT;
@@ -326,10 +213,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   loadSequence += 1;
-  window.clearTimeout(selectionTimer);
-  window.clearTimeout(wordCloseTimer);
-  window.clearTimeout(wordHoverTimer);
-  wordCard.value?.close();
+  disposeWordCard();
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   document.removeEventListener("selectionchange", scheduleSelectionLookup);
   document.removeEventListener("keydown", handleKeydown);
@@ -505,7 +389,7 @@ onBeforeUnmount(() => {
         ref="wordCard"
         :style="readingPanelStyle"
         :known-words="knownWords"
-        @close="closeWordCard"
+        @close="handleWordCardClosed"
         @enter="keepWordCardOpen"
         @leave="scheduleWordCardClose"
         @pin-change="setWordCardPinned"

@@ -44,7 +44,7 @@ test("keeps local learning progress writable while offline", async ({ page, cont
 });
 
 test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
-  await page.goto("/assets/config/familiarity-levels.json");
+  await page.goto("/tests/e2e/fixtures/same-origin.html");
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.deleteDatabase("english-learning");

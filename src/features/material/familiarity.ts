@@ -1,4 +1,4 @@
-import familiarityConfig from "../../../assets/config/familiarity-levels.json";
+import familiarityConfig from "./config/familiarity-levels.json";
 
 export interface FamiliarityLevel {
   flowDuration: number;

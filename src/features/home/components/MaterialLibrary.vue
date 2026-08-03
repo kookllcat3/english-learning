@@ -5,15 +5,12 @@ import {
   onMounted,
   onUnmounted,
   ref,
-  type Ref,
 } from "vue";
 import { RouterLink } from "vue-router";
 import {
-  createMaterial,
   getDashboard,
   removeMaterial,
   type MaterialSort,
-  updateMaterial,
 } from "../../../core/learning/learning-repository.js";
 import {
   clearSearchHistory,
@@ -23,39 +20,21 @@ import {
 import {
   notifyLearningDataChanged,
 } from "../../../core/learning/learning-sync.js";
-import type {
-  ContentBlock,
-  MaterialAssetRecord,
-  MaterialRecord,
-} from "../../../core/models/models.js";
 import AsyncState from "../../../shared/components/AsyncState.vue";
-import BaseDialog from "../../../shared/components/BaseDialog.vue";
-import type { DialogController } from "../../../shared/components/base-dialog.js";
 import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
 import { useDashboardStore } from "../../../app/stores/dashboard.js";
 import { useLearningDataRefresh } from "../../../app/composables/use-learning-data-refresh.js";
+import AddMaterialDialog from "./AddMaterialDialog.vue";
+import RenameMaterialDialog from "./RenameMaterialDialog.vue";
 
 type Dashboard = Awaited<ReturnType<typeof getDashboard>>;
 type DashboardMaterial = Dashboard["materials"][number];
 
-interface ImportedMaterial {
-  assets: Array<Omit<MaterialAssetRecord, "materialId">>;
-  content: string;
-  contentBlocks?: ContentBlock[];
-}
-
 const SEARCH_DELAY_MS = 180;
 const dashboardStore = useDashboardStore();
 
-const addDialog = ref<DialogController | null>(null);
-const addFile = ref<HTMLInputElement | null>(null);
-const addForm = ref<HTMLFormElement | null>(null);
-const addMessage = ref("");
-const editDialog = ref<DialogController | null>(null);
-const editForm = ref<HTMLFormElement | null>(null);
-const editMessage = ref("");
-const editTitle = ref("");
-const editingMaterialId = ref("");
+const addDialog = ref<InstanceType<typeof AddMaterialDialog> | null>(null);
+const renameDialog = ref<InstanceType<typeof RenameMaterialDialog> | null>(null);
 const errorMessage = ref("");
 const history = ref<string[]>([]);
 const historyOpen = ref(false);
@@ -72,8 +51,6 @@ const pagination = ref({
 });
 const query = ref("");
 const removingMaterialId = ref("");
-const pastedContent = ref("");
-const savingMaterial = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
 const sort = ref<MaterialSort>("newest");
 let searchTimer: number | undefined;
@@ -92,123 +69,8 @@ function completionPercentage(material: DashboardMaterial): number {
   return Math.round(material.completion * 100);
 }
 
-function closeFormDialog(
-  dialog: DialogController | null,
-  form: HTMLFormElement | null,
-  message: Ref<string>,
-): void {
-  if (!dialog || !form) return;
-  dialog.close();
-  form.reset();
-  message.value = "";
-}
-
-function closeAddDialog(): void {
-  closeFormDialog(addDialog.value, addForm.value, addMessage);
-  pastedContent.value = "";
-}
-
-function resetAddDialog(): void {
-  addForm.value?.reset();
-  addMessage.value = "";
-  pastedContent.value = "";
-}
-
-function openEditDialog(material: MaterialRecord): void {
-  editingMaterialId.value = material.id;
-  editTitle.value = material.title;
-  editMessage.value = "";
-  editDialog.value?.showModal();
-}
-
-function closeEditDialog(): void {
-  closeFormDialog(editDialog.value, editForm.value, editMessage);
-  editingMaterialId.value = "";
-  editTitle.value = "";
-}
-
-function resetEditDialog(): void {
-  editForm.value?.reset();
-  editMessage.value = "";
-  editingMaterialId.value = "";
-  editTitle.value = "";
-}
-
-function pastedMaterialFileName(): string {
-  const timestamp = new Date().toISOString().replaceAll(":", "-").slice(0, 16);
-  return `貼上素材-${timestamp}.txt`;
-}
-
-async function readMaterialFile(file: File): Promise<ImportedMaterial> {
-  const lowerCaseName = file.name.toLocaleLowerCase();
-  const isPdf = file.type === "application/pdf" || lowerCaseName.endsWith(".pdf");
-  const isText = file.type === "text/plain" || lowerCaseName.endsWith(".txt");
-  const isDocx = file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    || lowerCaseName.endsWith(".docx");
-
-  if (isText) return { content: await file.text(), contentBlocks: undefined, assets: [] };
-  if (isDocx) {
-    const { importDocx } = await import("../../../core/importers/docx-importer.js");
-    return importDocx(file, (status: string) => {
-      addMessage.value = status;
-    });
-  }
-  if (!isPdf) throw new Error("只支援 UTF-8 TXT、文字型 PDF 或 DOCX。");
-
-  addMessage.value = "正在從 PDF 擷取文字…";
-  const { extractPdfText } = await import("../../../core/importers/pdf-importer.js");
-  return { content: await extractPdfText(file), contentBlocks: undefined, assets: [] };
-}
-
-function handlePastedContent(): void {
-  if (pastedContent.value.trim() && addFile.value) addFile.value.value = "";
-}
-
-async function addMaterial(): Promise<void> {
-  const form = addForm.value;
-  if (!form) return;
-  addMessage.value = "";
-  savingMaterial.value = true;
-  const formData = new FormData(form);
-  const fileEntry = formData.get("file");
-  const file = fileEntry instanceof File ? fileEntry : null;
-  const titleEntry = formData.get("title");
-  const title = typeof titleEntry === "string" ? titleEntry : "";
-  const normalizedPastedContent = pastedContent.value.trim();
-
-  try {
-    if (!normalizedPastedContent && !file?.name) {
-      throw new Error("請選擇 TXT、PDF、DOCX，或直接貼上素材內容。");
-    }
-    addMessage.value = "讀取素材…";
-    const imported = normalizedPastedContent
-      ? { content: normalizedPastedContent, contentBlocks: undefined, assets: [] }
-      : await readMaterialFile(file as File);
-    addMessage.value = "儲存素材…";
-    await createMaterial({
-      title,
-      fileName: file?.name || pastedMaterialFileName(),
-      description: "",
-      ...imported,
-    });
-    closeAddDialog();
-    notifyLearningDataChanged("materials");
-  } catch (error) {
-    addMessage.value = getErrorMessage(error);
-  } finally {
-    savingMaterial.value = false;
-  }
-}
-
-async function renameMaterial(): Promise<void> {
-  editMessage.value = "";
-  try {
-    await updateMaterial(editingMaterialId.value, { title: editTitle.value });
-    closeEditDialog();
-    notifyLearningDataChanged("materials");
-  } catch (error) {
-    editMessage.value = getErrorMessage(error);
-  }
+function openEditDialog(material: DashboardMaterial): void {
+  renameDialog.value?.open(material.id, material.title);
 }
 
 async function loadDashboard(page = pagination.value.currentPage): Promise<void> {
@@ -300,7 +162,7 @@ function handleDocumentClick(event: MouseEvent): void {
 }
 
 function openAddDialog(): void {
-  addDialog.value?.showModal();
+  addDialog.value?.open();
 }
 
 useLearningDataRefresh({ refresh: () => void loadDashboard() });
@@ -497,67 +359,6 @@ onUnmounted(() => {
 
   </section>
 
-  <BaseDialog
-    ref="addDialog"
-    eyebrow="New material"
-    title="新增學習素材"
-    @close="resetAddDialog"
-  >
-    <form ref="addForm" class="dialog-form" @submit.prevent="addMaterial">
-        <label class="field">
-          <span>素材名稱（選填）</span>
-          <input name="title" maxlength="80" placeholder="未填時使用檔名或自動名稱">
-        </label>
-        <label class="field">
-          <span>選擇 TXT、PDF 或 DOCX</span>
-          <input
-            ref="addFile"
-            name="file"
-            type="file"
-            :disabled="Boolean(pastedContent.trim())"
-            accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          >
-          <small>DOCX 可包含文字與圖片，原檔上限 30 MB、最多 50 張圖片；圖片會在瀏覽器逐張轉成 WebP。限制圖片數量是為了避免轉檔時占用過多記憶體、瀏覽器儲存空間及備份容量。TXT 上限 2 MB；文字型 PDF 上限 20 MB。</small>
-        </label>
-        <div class="input-divider"><span>或</span></div>
-        <label class="field">
-          <span>直接貼上文字</span>
-          <textarea
-            v-model="pastedContent"
-            name="content"
-            rows="8"
-            placeholder="將英文文章、對話或其他學習內容貼在這裡"
-            @input="handlePastedContent"
-          />
-          <small>開始貼上後會改用這裡的內容；若要切換回檔案，請先清空文字。</small>
-        </label>
-
-        <p class="form-message" role="alert">{{ addMessage }}</p>
-        <div class="dialog__actions dialog__actions--centered">
-          <button class="button button--primary" type="submit" :disabled="savingMaterial">
-            儲存素材
-          </button>
-        </div>
-    </form>
-  </BaseDialog>
-
-  <BaseDialog
-    ref="editDialog"
-    dialog-class="rename-material-dialog"
-    eyebrow="Rename material"
-    title="重新命名素材"
-    @close="resetEditDialog"
-  >
-    <form ref="editForm" class="dialog-form" @submit.prevent="renameMaterial">
-        <label class="field">
-          <span>新名稱</span>
-          <input v-model="editTitle" required maxlength="80">
-        </label>
-
-        <p class="form-message" role="alert">{{ editMessage }}</p>
-        <div class="dialog__actions dialog__actions--centered">
-          <button class="button button--primary" type="submit">儲存名稱</button>
-        </div>
-    </form>
-  </BaseDialog>
+  <AddMaterialDialog ref="addDialog" />
+  <RenameMaterialDialog ref="renameDialog" />
 </template>

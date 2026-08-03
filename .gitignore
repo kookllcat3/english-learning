@@ -1,6 +1,6 @@
 # Local learning data and product documents
-materials/
-data/
+/materials/
+/data/
 *.xlsx
 .~lock.*#
 
@@ -11,8 +11,7 @@ dist/
 .runtime/
 npm-debug.log*
 debug.log
-playwright-report/
-test-results/
+.artifacts/
 
 # Private deployment and implementation notes
 .firebaserc

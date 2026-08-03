@@ -262,6 +262,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div v-show="visible" class="word-card-backdrop" aria-hidden="true" />
   <aside
     v-show="visible"
     ref="card"

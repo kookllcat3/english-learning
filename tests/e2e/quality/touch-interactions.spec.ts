@@ -27,6 +27,9 @@ test("prevents background touch scrolling while the word card is open", async ({
   await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
   await page.locator('[data-word="original"]').first().tap();
   await expect(page.locator(".word-card")).toBeVisible();
+  await expect(page.locator(".word-card-backdrop")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("none");
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehavior)).toBe("none");
 
   const touchMovePrevented = await page.evaluate(() => {
     const event = new TouchEvent("touchmove", { bubbles: true, cancelable: true });

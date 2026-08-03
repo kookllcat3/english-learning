@@ -1,5 +1,7 @@
 interface ScrollLockSnapshot {
   scrollY: number;
+  documentTouchAction: string;
+  documentOverscrollBehavior: string;
 }
 
 let activeLockCount = 0;
@@ -29,17 +31,21 @@ function restoreBackgroundScroll(): void {
 }
 
 function addScrollGuards(): void {
+  document.documentElement.style.touchAction = "none";
+  document.documentElement.style.overscrollBehavior = "none";
   document.addEventListener("wheel", preventBackgroundScroll, { capture: true, passive: false });
   document.addEventListener("touchmove", preventBackgroundScroll, { capture: true, passive: false });
   document.addEventListener("keydown", preventBackgroundKeyboardScroll, true);
   window.addEventListener("scroll", restoreBackgroundScroll, { passive: true });
 }
 
-function removeScrollGuards(): void {
+function removeScrollGuards(currentSnapshot: ScrollLockSnapshot): void {
   document.removeEventListener("wheel", preventBackgroundScroll, true);
   document.removeEventListener("touchmove", preventBackgroundScroll, true);
   document.removeEventListener("keydown", preventBackgroundKeyboardScroll, true);
   window.removeEventListener("scroll", restoreBackgroundScroll);
+  document.documentElement.style.touchAction = currentSnapshot.documentTouchAction;
+  document.documentElement.style.overscrollBehavior = currentSnapshot.documentOverscrollBehavior;
 }
 
 /**
@@ -50,7 +56,11 @@ export function acquirePageScrollLock(): () => void {
   if (typeof window === "undefined" || !document.body) return () => undefined;
 
   if (activeLockCount === 0) {
-    snapshot = { scrollY: window.scrollY };
+    snapshot = {
+      scrollY: window.scrollY,
+      documentTouchAction: document.documentElement.style.touchAction,
+      documentOverscrollBehavior: document.documentElement.style.overscrollBehavior,
+    };
     addScrollGuards();
   }
   activeLockCount += 1;
@@ -62,8 +72,8 @@ export function acquirePageScrollLock(): () => void {
     activeLockCount = Math.max(0, activeLockCount - 1);
     if (activeLockCount !== 0 || !snapshot) return;
     const currentSnapshot = snapshot;
+    removeScrollGuards(currentSnapshot);
     snapshot = null;
-    removeScrollGuards();
     window.scrollTo(0, currentSnapshot.scrollY);
   };
 }

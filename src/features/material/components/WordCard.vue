@@ -7,6 +7,7 @@ import {
 import { htmlToMarkdown, renderMarkdown } from "../markdown.js";
 import { useWordCardPosition } from "../use-word-card-position.js";
 import { errorMessage } from "../../../shared/errors.js";
+import { acquirePageScrollLock } from "../../../shared/page-scroll-lock.js";
 
 const props = defineProps<{
   knownWords: Set<string>;
@@ -31,6 +32,7 @@ const pointerInteractionActive = ref(false);
 let pointerInsideCard = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
+let releasePageScrollLock: (() => void) | null = null;
 const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
 const {
   clearAnchor,
@@ -108,6 +110,7 @@ async function requestClose(): Promise<void> {
   visible.value = false;
   selectedWord.value = "";
   clearAnchor();
+  unlockPageScroll();
   if (pinned.value) {
     pinned.value = false;
     emit("pinChange", false);
@@ -117,6 +120,15 @@ async function requestClose(): Promise<void> {
 
 function close(): void {
   void requestClose();
+}
+
+function lockPageScroll(): void {
+  releasePageScrollLock ??= acquirePageScrollLock();
+}
+
+function unlockPageScroll(): void {
+  releasePageScrollLock?.();
+  releasePageScrollLock = null;
 }
 
 function togglePinned(): void {
@@ -177,6 +189,7 @@ async function open(word: string, rect: DOMRect, shouldPin = false): Promise<voi
   savedMarkdown.value = "";
   saveMessage.value = "";
   visible.value = true;
+  lockPageScroll();
   await nextTick();
   positionAt(rect);
   try {
@@ -236,6 +249,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   cancelScheduledSave();
+  unlockPageScroll();
   if (selectedWord.value && markdown.value !== savedMarkdown.value) {
     preserveDraft(selectedWord.value, markdown.value);
     void persistNote();

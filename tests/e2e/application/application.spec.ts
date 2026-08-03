@@ -173,6 +173,36 @@ test("keeps the word card open while a pointer interaction is active", async ({ 
   });
 });
 
+test("locks page scrolling while the word card is open", async ({ page }) => {
+  const longContent = Array.from({ length: 40 }, () => materialContent).join("\n");
+  await createMaterial(page, "Word card scroll lock", longContent);
+  await page.locator(".material-card .button--primary").first().click();
+
+  const wordHeading = page.getByRole("heading", { name: "bear", level: 2 });
+  await page.locator('[data-word="bear"]').first().hover();
+  await expect(wordHeading).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  const readingPosition = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(readingPosition);
+  await page.keyboard.press("PageDown");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(readingPosition);
+
+  await page.locator("h1").click();
+  await expect(wordHeading).toBeHidden();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(readingPosition);
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator(".material-view-switcher__button").nth(1).click();
+  await page.locator(".word-item__lookup").first().click();
+  await expect(page.locator(".word-card h2")).toBeVisible();
+  const vocabularyPosition = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(vocabularyPosition);
+});
+
 test("pins a word card opened from a text selection", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

@@ -22,6 +22,20 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
   await expect(translationText).toHaveClass(/translation-mask/);
 });
 
+test("prevents background touch scrolling while the word card is open", async ({ page }) => {
+  await createTouchMaterial(page);
+  await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
+  await page.locator('[data-word="original"]').first().tap();
+  await expect(page.locator(".word-card")).toBeVisible();
+
+  const touchMovePrevented = await page.evaluate(() => {
+    const event = new TouchEvent("touchmove", { bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(touchMovePrevented).toBe(true);
+});
+
 test("allows a current backup package to be chosen on mobile", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "開啟資料管理" }).click();

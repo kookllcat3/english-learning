@@ -34,10 +34,14 @@ test("prevents background touch scrolling while the word card is open", async ({
 
 test("locks the page behind a native dialog on touch devices", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator(".material-grid")).toHaveAttribute("aria-busy", "false");
   await page.evaluate(() => {
     document.body.style.minHeight = "2000px";
-    window.scrollTo(0, 400);
   });
+  await expect.poll(() => page.evaluate(() => {
+    window.scrollTo(0, 400);
+    return window.scrollY;
+  })).toBe(400);
   await page.getByRole("button", { name: "開啟資料管理" }).click();
 
   await expect(page.getByRole("dialog", { name: "資料管理" })).toBeVisible();

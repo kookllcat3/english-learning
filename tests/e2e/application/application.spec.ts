@@ -205,10 +205,14 @@ test("locks page scrolling while the word card is open", async ({ page }) => {
 
 test("locks page scrolling behind a native dialog and restores the reading position", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator(".material-grid")).toHaveAttribute("aria-busy", "false");
   await page.evaluate(() => {
     document.body.style.minHeight = "2400px";
-    window.scrollTo(0, 400);
   });
+  await expect.poll(() => page.evaluate(() => {
+    window.scrollTo(0, 400);
+    return window.scrollY;
+  })).toBe(400);
 
   await page.getByRole("button", { name: "開啟資料管理" }).dispatchEvent("click");
   await expect(page.getByRole("dialog", { name: "資料管理" })).toBeVisible();

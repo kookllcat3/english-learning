@@ -81,14 +81,6 @@ let scrollPositionBeforeSorting: number | undefined;
 
 const hasActiveFilter = computed(() => Boolean(pagination.value.query));
 
-const libraryCount = computed(() => {
-  if (hasActiveFilter.value) {
-    return `找到 ${pagination.value.totalItems} 份，共 ${pagination.value.totalLibraryItems} 份素材`;
-  }
-  if (pagination.value.totalItems === 0) return "目前沒有素材";
-  return `共 ${pagination.value.totalItems} 份，目前顯示第 ${pagination.value.startItem}–${pagination.value.endItem} 份`;
-});
-
 const emptyState = computed(() => ({
   description: hasActiveFilter.value
     ? "試試其他關鍵字，或清除搜尋條件。"
@@ -329,7 +321,6 @@ onUnmounted(() => {
     <div class="section-heading">
       <div class="library-heading">
         <p class="eyebrow">Library</p>
-        <p class="library-count">{{ libraryCount }}</p>
       </div>
       <button
         class="add-material-button add-material-button--inline"

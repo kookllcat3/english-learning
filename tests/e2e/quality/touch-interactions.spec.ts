@@ -28,15 +28,24 @@ test("prevents background touch scrolling while the word card is open", async ({
   await page.locator('[data-word="original"]').first().tap();
   await expect(page.locator(".word-card")).toBeVisible();
   await expect(page.locator(".word-card-backdrop")).toBeVisible();
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("none");
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).position)).toBe("fixed");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehavior)).toBe("none");
+});
 
-  const touchMovePrevented = await page.evaluate(() => {
-    const event = new TouchEvent("touchmove", { bubbles: true, cancelable: true });
-    document.dispatchEvent(event);
-    return event.defaultPrevented;
+test("locks the page behind a native dialog on touch devices", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.body.style.minHeight = "2000px";
+    window.scrollTo(0, 400);
   });
-  expect(touchMovePrevented).toBe(true);
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+
+  await expect(page.getByRole("dialog", { name: "資料管理" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
+  await expect.poll(() => page.evaluate(() => document.body.style.top)).toBe("-400px");
+
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400);
 });
 
 test("allows a current backup package to be chosen on mobile", async ({ page }) => {

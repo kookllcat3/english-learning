@@ -1,55 +1,49 @@
 interface ScrollLockSnapshot {
+  scrollX: number;
   scrollY: number;
-  documentTouchAction: string;
+  documentOverflow: string;
   documentOverscrollBehavior: string;
+  documentScrollBehavior: string;
+  bodyPosition: string;
+  bodyTop: string;
+  bodyLeft: string;
+  bodyWidth: string;
+  bodyOverflow: string;
+  bodyPaddingRight: string;
 }
 
 let activeLockCount = 0;
 let snapshot: ScrollLockSnapshot | null = null;
-let restoringScroll = false;
 
-function isInsideWordCard(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest(".word-card"));
-}
-
-function preventBackgroundScroll(event: Event): void {
-  if (!isInsideWordCard(event.target)) event.preventDefault();
-}
-
-function preventBackgroundKeyboardScroll(event: KeyboardEvent): void {
-  if (isInsideWordCard(event.target)) return;
-  if ([" ", "PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(event.key)) {
-    event.preventDefault();
-  }
-}
-
-function restoreBackgroundScroll(): void {
-  if (!snapshot || restoringScroll || window.scrollY === snapshot.scrollY) return;
-  restoringScroll = true;
-  window.scrollTo(0, snapshot.scrollY);
-  restoringScroll = false;
-}
-
-function addScrollGuards(): void {
-  document.documentElement.style.touchAction = "none";
+function lockViewport(currentSnapshot: ScrollLockSnapshot): void {
+  const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+  const bodyPaddingRight = Number.parseFloat(getComputedStyle(document.body).paddingRight) || 0;
+  document.documentElement.style.overflow = "hidden";
   document.documentElement.style.overscrollBehavior = "none";
-  document.addEventListener("wheel", preventBackgroundScroll, { capture: true, passive: false });
-  document.addEventListener("touchmove", preventBackgroundScroll, { capture: true, passive: false });
-  document.addEventListener("keydown", preventBackgroundKeyboardScroll, true);
-  window.addEventListener("scroll", restoreBackgroundScroll, { passive: true });
+  document.documentElement.style.scrollBehavior = "auto";
+  document.body.style.position = "fixed";
+  document.body.style.top = `${-currentSnapshot.scrollY}px`;
+  document.body.style.left = `${-currentSnapshot.scrollX}px`;
+  document.body.style.width = "100%";
+  document.body.style.overflow = "hidden";
+  if (scrollbarWidth > 0) document.body.style.paddingRight = `${bodyPaddingRight + scrollbarWidth}px`;
 }
 
-function removeScrollGuards(currentSnapshot: ScrollLockSnapshot): void {
-  document.removeEventListener("wheel", preventBackgroundScroll, true);
-  document.removeEventListener("touchmove", preventBackgroundScroll, true);
-  document.removeEventListener("keydown", preventBackgroundKeyboardScroll, true);
-  window.removeEventListener("scroll", restoreBackgroundScroll);
-  document.documentElement.style.touchAction = currentSnapshot.documentTouchAction;
+function unlockViewport(currentSnapshot: ScrollLockSnapshot): void {
+  document.documentElement.style.overflow = currentSnapshot.documentOverflow;
   document.documentElement.style.overscrollBehavior = currentSnapshot.documentOverscrollBehavior;
+  document.body.style.position = currentSnapshot.bodyPosition;
+  document.body.style.top = currentSnapshot.bodyTop;
+  document.body.style.left = currentSnapshot.bodyLeft;
+  document.body.style.width = currentSnapshot.bodyWidth;
+  document.body.style.overflow = currentSnapshot.bodyOverflow;
+  document.body.style.paddingRight = currentSnapshot.bodyPaddingRight;
+  window.scrollTo(currentSnapshot.scrollX, currentSnapshot.scrollY);
+  document.documentElement.style.scrollBehavior = currentSnapshot.documentScrollBehavior;
 }
 
 /**
- * Locks page scrolling while a non-dialog overlay is active.
+ * Locks viewport scrolling while preserving scrollable content inside the active overlay.
  * The returned release function is idempotent and supports nested callers.
  */
 export function acquirePageScrollLock(): () => void {
@@ -57,11 +51,19 @@ export function acquirePageScrollLock(): () => void {
 
   if (activeLockCount === 0) {
     snapshot = {
+      scrollX: window.scrollX,
       scrollY: window.scrollY,
-      documentTouchAction: document.documentElement.style.touchAction,
+      documentOverflow: document.documentElement.style.overflow,
       documentOverscrollBehavior: document.documentElement.style.overscrollBehavior,
+      documentScrollBehavior: document.documentElement.style.scrollBehavior,
+      bodyPosition: document.body.style.position,
+      bodyTop: document.body.style.top,
+      bodyLeft: document.body.style.left,
+      bodyWidth: document.body.style.width,
+      bodyOverflow: document.body.style.overflow,
+      bodyPaddingRight: document.body.style.paddingRight,
     };
-    addScrollGuards();
+    lockViewport(snapshot);
   }
   activeLockCount += 1;
   let released = false;
@@ -72,8 +74,7 @@ export function acquirePageScrollLock(): () => void {
     activeLockCount = Math.max(0, activeLockCount - 1);
     if (activeLockCount !== 0 || !snapshot) return;
     const currentSnapshot = snapshot;
-    removeScrollGuards(currentSnapshot);
     snapshot = null;
-    window.scrollTo(0, currentSnapshot.scrollY);
+    unlockViewport(currentSnapshot);
   };
 }

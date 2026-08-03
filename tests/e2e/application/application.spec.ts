@@ -203,6 +203,28 @@ test("locks page scrolling while the word card is open", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(vocabularyPosition);
 });
 
+test("locks page scrolling behind a native dialog and restores the reading position", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.body.style.minHeight = "2400px";
+    window.scrollTo(0, 400);
+  });
+
+  await page.getByRole("button", { name: "開啟資料管理" }).dispatchEvent("click");
+  await expect(page.getByRole("dialog", { name: "資料管理" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
+  await expect.poll(() => page.evaluate(() => document.body.style.top)).toBe("-400px");
+
+  await page.mouse.move(2, 400);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => document.body.style.top)).toBe("-400px");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400);
+  await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
+});
+
 test("pins a word card opened from a text selection", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

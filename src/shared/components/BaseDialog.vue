@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, useId } from "vue";
+import { onBeforeUnmount, ref, useId } from "vue";
+import { acquirePageScrollLock } from "../page-scroll-lock.js";
 
 const props = withDefaults(defineProps<{
   dialogClass?: string;
@@ -11,9 +12,12 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 const titleId = useId();
+let releasePageScrollLock: (() => void) | null = null;
 
 function showModal(): void {
-  dialog.value?.showModal();
+  if (!dialog.value || dialog.value.open) return;
+  dialog.value.showModal();
+  releasePageScrollLock ??= acquirePageScrollLock();
 }
 
 function close(): void {
@@ -23,6 +27,17 @@ function close(): void {
 function closeFromBackdrop(event: MouseEvent): void {
   if (event.target === event.currentTarget) close();
 }
+
+function handleClose(): void {
+  releasePageScrollLock?.();
+  releasePageScrollLock = null;
+  emit("close");
+}
+
+onBeforeUnmount(() => {
+  releasePageScrollLock?.();
+  releasePageScrollLock = null;
+});
 
 defineExpose({ close, showModal });
 </script>
@@ -35,7 +50,7 @@ defineExpose({ close, showModal });
       :class="props.dialogClass"
       :aria-labelledby="titleId"
       @click="closeFromBackdrop"
-      @close="emit('close')"
+      @close="handleClose"
     >
       <div class="dialog__body">
         <div class="dialog__heading">

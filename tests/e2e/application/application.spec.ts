@@ -371,7 +371,7 @@ test("classifies structured reading content and repairs polluted learning data",
   const content = blocks.map((block) => block.text).join("\n");
 
   await page.goto("/");
-  await expect(page.getByText("目前沒有素材")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "還沒有學習素材" })).toBeVisible();
   await page.evaluate(async ({ blocks: storedBlocks, content: storedContent, id: materialId, timestamp: storedTimestamp }) => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("english-learning");
@@ -967,11 +967,19 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
     "blink-182 - ONE MORE TIME",
     "blink-182 - I Miss You",
   ];
+  const contents = [
+    "alpha beta gamma",
+    "delta epsilon",
+    "zeta eta",
+    "theta iota kappa",
+  ];
+  const knownWords = [[], ["delta"], ["zeta", "eta"], ["theta", "iota"]];
   const materials = titles.map((title, index) => ({
     id: `7e4fafc8-9533-4a3e-bfb6-69fe4cc88a${String(index).padStart(2, "0")}`,
     title,
     description: "",
-    content: `Material ${index + 1}`,
+    content: contents[index],
+    knownWords: knownWords[index],
     createdAt: new Date(Date.parse(timestamp) + index * 1_000).toISOString(),
     updatedAt: new Date(Date.parse(timestamp) + index * 1_000).toISOString(),
   }));
@@ -1014,6 +1022,12 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
   );
   await page.getByRole("radio", { name: "完成度" }).click();
   await expect(page.locator(".material-grid")).toHaveAttribute("aria-busy", "false");
+  await expect(page.locator(".material-card h2")).toHaveText([
+    "30隻動物",
+    "Childish Gambino - This Is America",
+    "blink-182 - I Miss You",
+    "blink-182 - ONE MORE TIME",
+  ]);
   const cardHeightAfterProgressSort = await shortTitleCard.evaluate(
     (element) => element.getBoundingClientRect().height,
   );

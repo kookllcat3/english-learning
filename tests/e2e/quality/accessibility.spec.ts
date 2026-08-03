@@ -46,6 +46,7 @@ test("reading view meets accessibility and narrow-layout baselines", async ({ pa
     page,
     Array.from({ length: 80 }, () => "A bear reads a book.").join("\n\n"),
   );
+  await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("heading", { name: "無障礙測試素材", level: 1 })).toBeVisible();
 
@@ -58,9 +59,11 @@ test("reading view meets accessibility and narrow-layout baselines", async ({ pa
   }));
   expect(readingScrollMetrics.overflowY).toBe("visible");
   expect(readingScrollMetrics.scrollHeight).toBe(readingScrollMetrics.clientHeight);
-  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(
-    page.viewportSize()?.height ?? 0,
-  );
+  const readingBounds = await page.locator(".reading-content").evaluate((element) => ({
+    bottom: element.getBoundingClientRect().bottom,
+    viewportHeight: window.innerHeight,
+  }));
+  expect(readingBounds.bottom).toBeGreaterThan(readingBounds.viewportHeight);
 });
 
 test("reduced motion disables familiarity animations", async ({ page }) => {

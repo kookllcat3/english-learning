@@ -25,14 +25,14 @@ let materialKnowledgePromise: Promise<void> | undefined;
 
 export function requiredMaterialTitle(title: string, fileName: string): string {
   const resolvedTitle = title.trim() || fileNameWithoutExtension(fileName);
-  if (!resolvedTitle) throw new Error("素材需要檔名或名稱。");
+  if (!resolvedTitle) throw new Error("教材需要檔名或名稱。");
   return resolvedTitle.slice(0, 80);
 }
 
 export function validateMaterialContent(content: string): void {
-  if (!content.trim()) throw new Error("素材內容不能是空白。");
+  if (!content.trim()) throw new Error("教材內容不能是空白。");
   if (utf8Size(content) > MAX_MATERIAL_BYTES) {
-    throw new Error("單份素材請控制在 2 MB 以內。");
+    throw new Error("單份教材請控制在 2 MB 以內。");
   }
 }
 

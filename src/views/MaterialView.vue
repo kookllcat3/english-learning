@@ -120,7 +120,7 @@ async function loadMaterialPage(): Promise<void> {
   activeView.value = "reading";
   if (!id) {
     loading.value = false;
-    errorMessage.value = "找不到這份素材";
+    errorMessage.value = "找不到這份教材";
     return;
   }
 
@@ -142,7 +142,7 @@ async function loadMaterialPage(): Promise<void> {
   } catch {
     if (sequence !== loadSequence) return;
     material.value = null;
-    errorMessage.value = "素材可能已被移除，或目前無法讀取。";
+    errorMessage.value = "教材可能已被移除，或目前無法讀取。";
   } finally {
     if (sequence === loadSequence) loading.value = false;
   }
@@ -224,11 +224,11 @@ onBeforeUnmount(() => {
 <template>
   <main class="page-shell">
     <section v-if="loading" class="empty-state" aria-live="polite">
-      <h1>載入素材中…</h1>
+      <h1>載入教材中…</h1>
     </section>
 
     <section v-else-if="errorMessage || !material" class="empty-state">
-      <h1>找不到這份素材</h1>
+      <h1>找不到這份教材</h1>
       <p>{{ errorMessage }}</p>
       <RouterLink class="button button--primary" :to="{ name: 'home' }">回到首頁</RouterLink>
     </section>
@@ -243,7 +243,7 @@ onBeforeUnmount(() => {
       <p v-if="actionError" class="form-message is-error" role="alert">{{ actionError }}</p>
 
       <div class="detail-layout">
-        <nav class="material-view-switcher" aria-label="素材檢視">
+        <nav class="material-view-switcher" aria-label="教材檢視">
           <button
             class="material-view-switcher__button"
             :class="{ 'is-active': activeView === 'reading' }"
@@ -260,7 +260,7 @@ onBeforeUnmount(() => {
             :aria-pressed="activeView === 'vocabulary'"
             @click="activeView = 'vocabulary'"
           >
-            素材詞彙
+            教材詞彙
           </button>
         </nav>
 
@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
         >
           <div class="panel__heading">
             <div class="reading-panel__title-row">
-              <h2>素材內容</h2>
+              <h2>教材內容</h2>
               <button
                 v-if="showReadingPositionReturn"
                 class="reading-position-return"
@@ -308,8 +308,8 @@ onBeforeUnmount(() => {
                 :class="{ 'is-open': familiarityHelpOpen }"
                 role="tooltip"
               >
-                熟悉度依單字在幾份素材中被你勾選為認識來計算，同一份素材只算一次。
-                尚未建立熟悉度時不顯示效果；隨著認識這個單字的素材增加，標記深度、流光與光暈會逐步增強。
+                熟悉度依單字在幾份教材中被你勾選為認識來計算，同一份教材只算一次。
+                尚未建立熟悉度時不顯示效果；隨著認識這個單字的教材增加，標記深度、流光與光暈會逐步增強。
                 點擊旁邊色帶可以自訂標記顏色。
               </span>
             </p>
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
         >
           <div class="panel__heading">
             <div>
-              <h2>素材詞彙</h2>
+              <h2>教材詞彙</h2>
               <p>已認識 <span>{{ knownCount }}</span> / <span>{{ materialWords.length }}</span> 個</p>
             </div>
           </div>
@@ -346,10 +346,10 @@ onBeforeUnmount(() => {
               <circle cx="11" cy="11" r="6.5" />
               <path d="m16 16 4 4" />
             </svg>
-            <span class="sr-only">搜尋素材詞彙</span>
+            <span class="sr-only">搜尋教材詞彙</span>
             <input v-model="searchQuery" type="search" placeholder="搜尋單字" autocomplete="off">
           </label>
-          <div class="bulk-actions" aria-label="批次設定素材詞彙">
+          <div class="bulk-actions" aria-label="批次設定教材詞彙">
             <button class="text-button" type="button" @click="updateWords(materialWords, true)">全選</button>
             <button class="text-button" type="button" @click="updateWords(materialWords, false)">全取消</button>
           </div>

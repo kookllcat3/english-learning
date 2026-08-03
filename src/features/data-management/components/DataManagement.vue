@@ -84,12 +84,12 @@ async function importBackupFile(file: File): Promise<void> {
       : (await readBackupPackage(file)).backup;
     const preview = await previewBackup(backup);
     const summary = [
-      `新增素材 ${preview.newMaterials} 份`,
-      `更新素材 ${preview.updatedMaterials} 份`,
+      `新增教材 ${preview.newMaterials} 份`,
+      `更新教材 ${preview.updatedMaterials} 份`,
       `新增詞彙 ${preview.newWords} 筆`,
       `更新詞彙 ${preview.updatedWords} 筆`,
       ...(preview.skippedMaterials.length > 0
-        ? [`略過不支援素材 ${preview.skippedMaterials.length} 份`]
+        ? [`略過不支援教材 ${preview.skippedMaterials.length} 份`]
         : []),
     ].join("、");
     if (!window.confirm(`即將匯入備份：${summary}。要繼續嗎？`)) {
@@ -102,7 +102,7 @@ async function importBackupFile(file: File): Promise<void> {
     const result = await importBackup(preview.plan);
     notifyLearningDataChanged("backup");
     backupStatus.value = result.skippedMaterials.length > 0
-      ? `備份已匯入；已略過不支援素材 ${result.skippedMaterials.length} 份。`
+      ? `備份已匯入；已略過不支援教材 ${result.skippedMaterials.length} 份。`
       : "備份已匯入。";
     backupStatusKind.value = "success";
   } catch (error) {
@@ -147,7 +147,7 @@ function chooseBackupFile(): void {
     title="資料管理"
   >
     <p class="data-management-intro">
-      素材與學習進度只保存在目前瀏覽器。定期匯出備份，能避免清除網站資料或更換網址時遺失紀錄。
+      教材與學習進度只保存在目前瀏覽器。定期匯出備份，能避免清除網站資料或更換網址時遺失紀錄。
     </p>
     <p class="storage-usage">{{ storageUsage }}</p>
 
@@ -155,7 +155,7 @@ function chooseBackupFile(): void {
       <section class="data-action-card">
         <div>
           <h3>匯出完整備份</h3>
-          <p>下載一份可持續擴充的備份封裝，包含素材、進度、筆記、設定與圖片。</p>
+          <p>下載一份可持續擴充的備份封裝，包含教材、進度、筆記、設定與圖片。</p>
           <button class="button button--primary" type="button" :disabled="isBackupBusy" @click="exportBackup">下載備份</button>
         </div>
       </section>
@@ -171,7 +171,7 @@ function chooseBackupFile(): void {
 
     <aside class="data-capacity-note">
       <strong>大量資料提醒</strong>
-      <p>首頁只載入輕量摘要並每頁顯示 12 份，不會讀取所有素材全文。單份素材上限 2 MB；只有完整備份接近數百 MB 時，匯入與匯出可能暫時占用較多記憶體。</p>
+      <p>首頁只載入輕量摘要並每頁顯示 12 份，不會讀取所有教材全文。單份教材上限 2 MB；只有完整備份接近數百 MB 時，匯入與匯出可能暫時占用較多記憶體。</p>
     </aside>
     <p
       v-if="backupStatus"

@@ -16,7 +16,7 @@ const routes: RouteRecordRaw[] = [
     name: "material",
     component: () => import("../views/MaterialView.vue"),
     props: true,
-    meta: { title: "素材｜英文學習庫" },
+    meta: { title: "教材｜英文學習庫" },
   },
   {
     path: "/:pathMatch(.*)*",

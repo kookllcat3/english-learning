@@ -62,7 +62,7 @@ const emptyState = computed(() => ({
   description: hasActiveFilter.value
     ? "試試其他關鍵字，或清除搜尋條件。"
     : "新增第一份文字檔，替自己的英文學習歷程留下起點。",
-  title: hasActiveFilter.value ? "找不到符合的素材" : "還沒有學習素材",
+  title: hasActiveFilter.value ? "找不到符合的教材" : "還沒有學習教材",
 }));
 
 function completionPercentage(material: DashboardMaterial): number {
@@ -179,7 +179,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="content-section" aria-label="素材列表">
+  <section class="content-section" aria-label="教材列表">
     <div class="section-heading">
       <div class="library-heading">
         <p class="eyebrow">Library</p>
@@ -187,8 +187,8 @@ onUnmounted(() => {
       <button
         class="add-material-button add-material-button--inline"
         type="button"
-        aria-label="新增素材"
-        title="新增素材"
+        aria-label="新增教材"
+        title="新增教材"
         @click="openAddDialog"
       >
         <span aria-hidden="true">+</span>
@@ -201,13 +201,13 @@ onUnmounted(() => {
           <circle cx="11" cy="11" r="6.5" />
           <path d="m16 16 4 4" />
         </svg>
-        <label class="sr-only" for="material-search-input">搜尋素材名稱或說明</label>
+        <label class="sr-only" for="material-search-input">搜尋教材名稱或說明</label>
         <input
           id="material-search-input"
           ref="searchInput"
           v-model="query"
           type="search"
-          placeholder="搜尋素材名稱或說明"
+          placeholder="搜尋教材名稱或說明"
           autocomplete="off"
           @input="scheduleSearch"
         >
@@ -245,7 +245,7 @@ onUnmounted(() => {
         @pointerdown="rememberScrollPositionBeforeSorting"
         @keydown="rememberScrollPositionBeforeSorting"
       >
-        <legend class="sr-only">素材排序方式</legend>
+        <legend class="sr-only">教材排序方式</legend>
         <label><input v-model="sort" type="radio" value="newest" @change="sortMaterials">最新加入</label>
         <label><input v-model="sort" type="radio" value="oldest" @change="sortMaterials">最早加入</label>
         <label><input v-model="sort" type="radio" value="title" @change="sortMaterials">名稱</label>
@@ -336,7 +336,7 @@ onUnmounted(() => {
     <nav
       v-if="pagination.pageCount > 1"
       class="pagination"
-      aria-label="素材列表分頁"
+      aria-label="教材列表分頁"
     >
       <button
         class="text-button"

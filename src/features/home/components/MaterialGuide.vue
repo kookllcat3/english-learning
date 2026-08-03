@@ -91,8 +91,8 @@ onBeforeUnmount(() => {
   <button
     class="header-icon-button"
     type="button"
-    aria-label="查看素材製作教學"
-    title="素材製作教學"
+    aria-label="查看教材製作教學"
+    title="教材製作教學"
     @click="openDialog"
   >
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -106,13 +106,13 @@ onBeforeUnmount(() => {
     ref="dialog"
     dialog-class="material-guide-dialog"
     eyebrow="Material guide"
-    title="如何製作學習素材"
+    title="如何製作學習教材"
   >
     <ol class="guide-steps">
       <li><strong>選擇想學的英文內容</strong><p>文章、對話、逐字稿或你想練習的句子都可以。</p></li>
       <li><strong>選擇純文字或圖文格式</strong><p>純文字可貼上或存成 UTF-8 TXT；需要圖片時請使用 DOCX。</p></li>
-      <li><strong>保持內容聚焦</strong><p>一份素材建議只包含一個主題，篇幅以一次能讀完為準。</p></li>
-      <li><strong>上傳到素材庫</strong><p>按頁面右下角的「＋」，選擇檔案或直接貼上文字。</p></li>
+      <li><strong>保持內容聚焦</strong><p>一份教材建議只包含一個主題，篇幅以一次能讀完為準。</p></li>
+      <li><strong>上傳到教材庫</strong><p>按頁面右下角的「＋」，選擇檔案或直接貼上文字。</p></li>
     </ol>
 
     <section class="guide-prompt" aria-labelledby="guide-prompt-title">

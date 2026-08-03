@@ -2,10 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function createMaterial(page: Page, title: string, content: string): Promise<void> {
   await page.goto("/");
-  await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill(title);
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill(title);
   await page.getByLabel("直接貼上文字").fill(content);
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 }
 
@@ -13,20 +13,20 @@ test("propagates material changes across tabs", async ({ page }) => {
   const secondPage = await page.context().newPage();
   await Promise.all([page.goto("/"), secondPage.goto("/")]);
 
-  await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill("跨分頁素材");
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill("跨分頁教材");
   await page.getByLabel("直接貼上文字").fill("Shared tab material.");
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
 
-  await expect(secondPage.getByRole("heading", { name: "跨分頁素材" })).toBeVisible();
+  await expect(secondPage.getByRole("heading", { name: "跨分頁教材" })).toBeVisible();
   await secondPage.close();
 });
 
 test("keeps local learning progress writable while offline", async ({ page, context }) => {
-  await createMaterial(page, "離線素材", "A bear sleeps.");
+  await createMaterial(page, "離線教材", "A bear sleeps.");
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await expect(page.getByRole("heading", { name: "離線素材", level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await expect(page.getByRole("heading", { name: "離線教材", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
   const bearCheckbox = page.getByRole("checkbox", { name: /bear/ });
   await expect(bearCheckbox).toBeVisible();
 
@@ -39,7 +39,7 @@ test("keeps local learning progress writable while offline", async ({ page, cont
   }
 
   await page.reload();
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
   await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
 });
 
@@ -64,7 +64,7 @@ test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
         database.createObjectStore("settings", { keyPath: "key" });
         materials.put({
           id: "82b5d947-cf8a-4225-98e5-09672ea30bf6",
-          title: "舊資料庫素材",
+          title: "舊資料庫教材",
           description: "",
           content: "Animal",
           createdAt: "2025-01-01T00:00:00.000Z",
@@ -86,7 +86,7 @@ test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
   });
 
   await page.goto("/");
-  const migratedCard = page.getByRole("article").filter({ hasText: "舊資料庫素材" });
+  const migratedCard = page.getByRole("article").filter({ hasText: "舊資料庫教材" });
   await expect(migratedCard).toContainText("1 / 1");
   await migratedCard.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByText("Animal", { exact: true })).toBeVisible();

@@ -20,9 +20,9 @@ export async function createMaterial(
   content = materialContent,
 ): Promise<void> {
   await page.goto("/");
-  await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill(title);
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill(title);
   await page.getByLabel("直接貼上文字").fill(content);
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 }

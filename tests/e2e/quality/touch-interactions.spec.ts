@@ -2,10 +2,10 @@ import { expect, test } from "@playwright/test";
 
 async function createTouchMaterial(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
-  await page.getByRole("button", { name: "新增素材" }).click();
+  await page.getByRole("button", { name: "新增教材" }).click();
   await page.locator('input[name="title"]').fill("Touch interactions");
   await page.locator('textarea[name="content"]').fill("An original sentence.\n中文翻譯內容。");
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
   const materialCard = page.getByRole("article").filter({ hasText: "Touch interactions" });
   await materialCard.getByRole("link", { name: "開始閱讀" }).click();
 }

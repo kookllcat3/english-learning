@@ -34,7 +34,7 @@ export async function getMaterial(id: string): Promise<BackupMaterial> {
     readOne(STORES.materials, id),
     readOne(STORES.materialContents, id),
   ]);
-  if (!metadata || !storedContent) throw new Error("找不到這份素材。");
+  if (!metadata || !storedContent) throw new Error("找不到這份教材。");
   const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
   return {
     ...metadata,
@@ -95,9 +95,9 @@ export async function updateMaterial(
 ): Promise<MaterialRecord> {
   await ensureMaterialKnowledge();
   const material = await readOne(STORES.materials, id);
-  if (!material) throw new Error("找不到這份素材。");
+  if (!material) throw new Error("找不到這份教材。");
   const title = changes.title.trim();
-  if (!title) throw new Error("素材名稱不能留空。");
+  if (!title) throw new Error("教材名稱不能留空。");
   const updated = {
     ...material,
     title: title.slice(0, 80),
@@ -118,7 +118,7 @@ export async function setMaterialReadingParagraph(
     readOne(STORES.materials, id),
     readOne(STORES.materialContents, id),
   ]);
-  if (!material || !storedContent) throw new Error("找不到指定的素材。");
+  if (!material || !storedContent) throw new Error("找不到指定的教材。");
   const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
   if (
     readingParagraphKey !== null
@@ -197,7 +197,7 @@ export async function setWordsKnown(
     readOne(STORES.materialTerms, materialId),
     readAll(STORES.materials),
   ]);
-  if (!material || !terms) throw new Error("找不到這份素材。");
+  if (!material || !terms) throw new Error("找不到這份教材。");
   const materialWordSet = new Set(terms.words);
   const normalizedWords = [...new Set(words.map(normalizeWord).filter((word) =>
     word && materialWordSet.has(word)))];

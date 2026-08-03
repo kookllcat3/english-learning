@@ -24,14 +24,14 @@ test("keeps startup and large-list interaction within the performance baseline",
     97 + Math.floor(index / 26),
     97 + (index % 26),
   )}`);
-  await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill("效能基線素材");
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill("效能基線教材");
   await page.getByLabel("直接貼上文字").fill(words.join(" "));
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
 
   const interactionStart = Date.now();
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
   await expect(page.getByRole("checkbox")).toHaveCount(300);
   const largeMaterialInteraction = Date.now() - interactionStart;
   expect(largeMaterialInteraction).toBeLessThan(MAX_LARGE_MATERIAL_INTERACTION_MS);
@@ -46,10 +46,10 @@ test("keeps dialogs and prompt tabs responsive", async ({ page }, testInfo) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  const guideDialog = page.getByRole("dialog", { name: "如何製作學習素材" });
+  const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
   const guideDuration = await page.evaluate(async () => {
     const button = document.querySelector<HTMLButtonElement>(
-      'button[aria-label="查看素材製作教學"]',
+      'button[aria-label="查看教材製作教學"]',
     );
     if (!button) throw new Error("Guide button was not found.");
     const startedAt = performance.now();

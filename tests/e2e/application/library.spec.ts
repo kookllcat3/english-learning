@@ -41,7 +41,7 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
   });
   await page.getByRole("button", { name: "關閉", exact: true }).click();
 
-  const sortOptions = page.getByRole("group", { name: "素材排序方式" });
+  const sortOptions = page.getByRole("group", { name: "教材排序方式" });
   if ((page.viewportSize()?.width ?? 0) > 720) {
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   } else {
@@ -84,13 +84,13 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
 test("bounds the rendered vocabulary list for large materials", async ({ page }) => {
   const words = Array.from({ length: 350 }, (_, index) => alphabeticWord(index));
   await page.goto("/");
-  await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill("大型詞彙列表");
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill("大型詞彙列表");
   await page.getByLabel("直接貼上文字").fill(words.join(" "));
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
 
   await expect(page.getByRole("checkbox")).toHaveCount(300);
   await page.getByRole("button", { name: /顯示更多/ }).click();

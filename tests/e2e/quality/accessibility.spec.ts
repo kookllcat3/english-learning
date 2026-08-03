@@ -6,10 +6,10 @@ async function createAccessibleMaterial(
   content = "A bear reads a book.",
 ): Promise<void> {
   await page.goto("/");
-  await page.getByRole("button", { name: "新增素材" }).click();
-  await page.getByLabel("素材名稱（選填）").fill("無障礙測試素材");
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill("無障礙測試教材");
   await page.getByLabel("直接貼上文字").fill(content);
-  await page.getByRole("button", { name: "儲存素材" }).click();
+  await page.getByRole("button", { name: "儲存教材" }).click();
 }
 
 async function expectNoAccessibilityViolations(page: Page): Promise<void> {
@@ -30,15 +30,15 @@ test("home and shared dialogs meet the automated accessibility baseline", async 
   await page.goto("/");
   await expectNoAccessibilityViolations(page);
 
-  await page.getByRole("button", { name: "新增素材" }).click();
-  const addDialog = page.getByRole("dialog", { name: "新增學習素材" });
+  await page.getByRole("button", { name: "新增教材" }).click();
+  const addDialog = page.getByRole("dialog", { name: "新增學習教材" });
   await expect(addDialog).toBeVisible();
   await expect(addDialog.getByRole("button", { name: "關閉" })).toBeFocused();
   await expectNoAccessibilityViolations(page);
 
   await page.keyboard.press("Escape");
   await expect(addDialog).toBeHidden();
-  await expect(page.getByRole("button", { name: "新增素材" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "新增教材" })).toBeFocused();
 });
 
 test("reading view meets accessibility and narrow-layout baselines", async ({ page }) => {
@@ -48,7 +48,7 @@ test("reading view meets accessibility and narrow-layout baselines", async ({ pa
   );
   await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await expect(page.getByRole("heading", { name: "無障礙測試素材", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "無障礙測試教材", level: 1 })).toBeVisible();
 
   await expectNoAccessibilityViolations(page);
   await expectNoHorizontalOverflow(page);
@@ -70,7 +70,7 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await createAccessibleMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
   await page.getByRole("checkbox", { name: /bear/ }).check();
   await page.getByRole("button", { name: "閱讀內容" }).click();
 
@@ -112,7 +112,7 @@ test("primary pages and data dialog remain responsive at supported breakpoints",
 
     await page.getByRole("link", { name: "開始閱讀" }).click();
     await expectNoHorizontalOverflow(page);
-    await page.getByRole("button", { name: "素材詞彙" }).click();
+    await page.getByRole("button", { name: "教材詞彙" }).click();
     await expectNoHorizontalOverflow(page);
   }
 });

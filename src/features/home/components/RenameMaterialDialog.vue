@@ -51,7 +51,7 @@ defineExpose({ open });
     ref="dialog"
     dialog-class="rename-material-dialog"
     eyebrow="Rename material"
-    title="重新命名素材"
+    title="重新命名教材"
     @close="reset"
   >
     <form ref="form" class="dialog-form" @submit.prevent="save">

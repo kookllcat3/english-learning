@@ -260,7 +260,7 @@ export async function importDocx(
     );
     const assetId = crypto.randomUUID();
     block.assetId = assetId;
-    block.alt = block.alt || `素材圖片 ${index + 1}`;
+    block.alt = block.alt || `教材圖片 ${index + 1}`;
     delete block.relationshipId;
     assets.push({
       id: assetId,

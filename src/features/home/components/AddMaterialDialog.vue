@@ -38,7 +38,7 @@ function open(): void {
 
 function pastedMaterialFileName(): string {
   const timestamp = new Date().toISOString().replaceAll(":", "-").slice(0, 16);
-  return `貼上素材-${timestamp}.txt`;
+  return `貼上教材-${timestamp}.txt`;
 }
 
 async function readMaterialFile(file: File): Promise<ImportedMaterial> {
@@ -79,13 +79,13 @@ async function save(): Promise<void> {
 
   try {
     if (!normalizedPastedContent && !file?.name) {
-      throw new Error("請選擇 TXT、PDF、DOCX，或直接貼上素材內容。");
+      throw new Error("請選擇 TXT、PDF、DOCX，或直接貼上教材內容。");
     }
-    message.value = "讀取素材…";
+    message.value = "讀取教材…";
     const imported = normalizedPastedContent
       ? { content: normalizedPastedContent, contentBlocks: undefined, assets: [] }
       : await readMaterialFile(file as File);
-    message.value = "儲存素材…";
+    message.value = "儲存教材…";
     await createMaterial({
       title,
       fileName: file?.name || pastedMaterialFileName(),
@@ -105,10 +105,10 @@ defineExpose({ open });
 </script>
 
 <template>
-  <BaseDialog ref="dialog" eyebrow="New material" title="新增學習素材" @close="reset">
+  <BaseDialog ref="dialog" eyebrow="New material" title="新增學習教材" @close="reset">
     <form ref="form" class="dialog-form" @submit.prevent="save">
       <label class="field">
-        <span>素材名稱（選填）</span>
+        <span>教材名稱（選填）</span>
         <input name="title" maxlength="80" placeholder="未填時使用檔名或自動名稱">
       </label>
       <label class="field">
@@ -136,7 +136,7 @@ defineExpose({ open });
       </label>
       <p class="form-message" role="alert">{{ message }}</p>
       <div class="dialog__actions dialog__actions--centered">
-        <button class="button button--primary" type="submit" :disabled="saving">儲存素材</button>
+        <button class="button button--primary" type="submit" :disabled="saving">儲存教材</button>
       </div>
     </form>
   </BaseDialog>

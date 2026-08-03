@@ -78,7 +78,7 @@ test("classifies structured reading content and repairs polluted learning data",
   const content = blocks.map((block) => block.text).join("\n");
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "還沒有學習素材" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "還沒有學習教材" })).toBeVisible();
   await page.evaluate(async ({ blocks: storedBlocks, content: storedContent, id: materialId, timestamp: storedTimestamp }) => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("english-learning");

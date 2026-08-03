@@ -16,24 +16,24 @@ const GUIDE_STEPS = [
 const QUICK_PROMPT = `你是我的英文學習助教。
 
 規則：
-1. 以我在下方提供的學習素材為主要範圍。
-2. 不要假裝素材中包含未提供的資訊。
-3. 如果我的問題超出素材範圍，請先明確提醒我。
-4. 可以補充理解素材所必要的英文知識，但要清楚標示為補充說明。
+1. 以我在下方提供的學習教材為主要範圍。
+2. 不要假裝教材中包含未提供的資訊。
+3. 如果我的問題超出教材範圍，請先明確提醒我。
+4. 可以補充理解教材所必要的英文知識，但要清楚標示為補充說明。
 5. 預設使用繁體中文輔助，英文練習內容除外。
 6. 進行口說練習時，每次只提出一個問題，等我回答後再繼續。
 7. 不要聲稱已修改網站中的詞彙或學習進度。
 
-收到素材後，先簡短說明主題，再讓我選擇：
+收到教材後，先簡短說明主題，再讓我選擇：
 A. 口說練習
 B. 閱讀理解
 C. 單字練習
 D. 文法與句型
 E. 自由提問`;
 
-const RECOVERY_PROMPT = `請重新讀取本次對話中的學習素材。
-接下來仍以該素材為主要範圍，不要依賴先前對素材的摘要或印象。
-如果問題超出素材，請明確提醒我。`;
+const RECOVERY_PROMPT = `請重新讀取本次對話中的學習教材。
+接下來仍以該教材為主要範圍，不要依賴先前對教材的摘要或印象。
+如果問題超出教材，請明確提醒我。`;
 
 const props = defineProps<{ material: BackupMaterial }>();
 const pageActions = usePageActionsStore();
@@ -46,17 +46,17 @@ let promptSaveTimer: number | undefined;
 const materialCharacters = computed(() => props.material.content.length.toLocaleString());
 const materialSizeMessage = computed(() =>
   props.material.content.length > 50_000
-    ? `素材全文約 ${materialCharacters.value} 個字元，內容較長，部分 AI 服務可能無法一次完整處理。`
-    : `你可以修改提示詞；複製時會自動加入素材全文（約 ${materialCharacters.value} 個字元）。`);
+    ? `教材全文約 ${materialCharacters.value} 個字元，內容較長，部分 AI 服務可能無法一次完整處理。`
+    : `你可以修改提示詞；複製時會自動加入教材全文（約 ${materialCharacters.value} 個字元）。`);
 
 function materialBlock(): string {
-  return `素材標題：${props.material.title}
+  return `教材標題：${props.material.title}
 
-學習素材開始：
+學習教材開始：
 <<<MATERIAL
 ${props.material.content}
 MATERIAL
-學習素材結束。`;
+學習教材結束。`;
 }
 
 function showStatus(message: string, isError = false): void {
@@ -114,7 +114,7 @@ onBeforeUnmount(() => window.clearTimeout(promptSaveTimer));
     eyebrow="AI learning assistant"
     title="啟用 AI 學習"
   >
-    <p class="ai-dialog-intro">提示詞與素材只在本機產生，不會自動傳送或修改學習進度。</p>
+    <p class="ai-dialog-intro">提示詞與教材只在本機產生，不會自動傳送或修改學習進度。</p>
     <section class="ai-guide" aria-labelledby="ai-guide-title">
       <strong id="ai-guide-title">使用步驟</strong>
       <ol>
@@ -132,8 +132,8 @@ onBeforeUnmount(() => window.clearTimeout(promptSaveTimer));
       </small>
     </div>
     <details class="ai-recovery">
-      <summary>AI 忘記或偏離素材時怎麼辦？</summary>
-      <p>複製以下提醒貼回同一個對話，要求 AI 重新讀取素材。</p>
+      <summary>AI 忘記或偏離教材時怎麼辦？</summary>
+      <p>複製以下提醒貼回同一個對話，要求 AI 重新讀取教材。</p>
       <pre>{{ RECOVERY_PROMPT }}</pre>
       <button
         class="text-button"

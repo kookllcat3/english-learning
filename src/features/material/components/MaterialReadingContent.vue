@@ -265,7 +265,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
     class="reading-content"
     lang="en"
     role="region"
-    aria-label="素材內容閱讀區"
+    aria-label="教材內容閱讀區"
     tabindex="0"
     @pointerover="handlePointerOver"
     @pointerout="handlePointerOut"

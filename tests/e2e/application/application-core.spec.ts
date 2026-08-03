@@ -10,14 +10,14 @@ test("uses one Vue app and persists learning progress through routed views", asy
   await expect(page).toHaveURL(/#\/materials\/.+/);
   await expect(page.getByRole("heading", { name: materialTitle, level: 1 })).toBeVisible();
 
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
 
   const bearCheckbox = page.getByRole("checkbox", { name: /bear/ });
   await bearCheckbox.check();
   await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
   await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
   await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
 
@@ -34,7 +34,7 @@ test("shows global familiarity in an unread material", async ({ page }) => {
 
   const learnedMaterialCard = page.getByRole("article").filter({ hasText: learnedMaterialTitle });
   await learnedMaterialCard.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "素材詞彙" }).click();
+  await page.getByRole("button", { name: "教材詞彙" }).click();
   await page.getByRole("checkbox", { name: /bear/ }).check();
   await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
 

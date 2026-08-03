@@ -18,7 +18,7 @@ const {
       <span class="metric-card__unit">個</span>
     </article>
     <article class="metric-card">
-      <span class="metric-card__label">學習素材</span>
+      <span class="metric-card__label">學習教材</span>
       <strong class="metric-card__value">{{ materialCount }}</strong>
       <span class="metric-card__unit">份</span>
     </article>

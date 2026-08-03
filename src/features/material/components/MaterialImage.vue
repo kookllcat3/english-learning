@@ -30,7 +30,7 @@ async function loadImage(): Promise<void> {
       return;
     }
     imageUrl.value = URL.createObjectURL(asset.blob);
-    imageAlt.value = props.block.alt || asset.alt || "素材圖片";
+    imageAlt.value = props.block.alt || asset.alt || "教材圖片";
     imageWidth.value = asset.width;
     imageHeight.value = asset.height;
     caption.value = props.block.caption || asset.caption || "";

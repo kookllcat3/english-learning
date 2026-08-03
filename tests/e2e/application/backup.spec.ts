@@ -138,7 +138,7 @@ test("skips an unsupported image material and imports the remaining backup", asy
   });
 
   const dataDialog = page.locator('.data-management-dialog');
-  await expect(dataDialog.locator('[role="status"]')).toContainText("略過不支援素材 1 份");
+  await expect(dataDialog.locator('[role="status"]')).toContainText("略過不支援教材 1 份");
   await expect(page.getByText("Supported text material")).toBeVisible();
   await expect(page.getByText("Supported image material")).toBeVisible();
   await expect(page.getByText("Unsupported image material")).toHaveCount(0);
@@ -239,7 +239,7 @@ test("imports a schema version 1 backup with legacy learning progress", async ({
     schemaVersion: 1,
     materials: [{
       id: "7e4fafc8-9533-4a3e-bfb6-69fe4cc88a27",
-      title: "舊版備份素材",
+      title: "舊版備份教材",
       description: "",
       content: "Animal",
       createdAt: timestamp,
@@ -265,6 +265,6 @@ test("imports a schema version 1 backup with legacy learning progress", async ({
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
   await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
-  const legacyCard = page.getByRole("article").filter({ hasText: "舊版備份素材" });
+  const legacyCard = page.getByRole("article").filter({ hasText: "舊版備份教材" });
   await expect(legacyCard).toContainText("1 / 1");
 });

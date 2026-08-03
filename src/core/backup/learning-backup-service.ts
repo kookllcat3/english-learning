@@ -123,7 +123,7 @@ export interface BackupImportPlan {
 function materialDisplayName(material: unknown): string {
   return isRecord(material) && typeof material.title === "string" && material.title.trim()
     ? material.title.trim()
-    : "未命名素材";
+    : "未命名教材";
 }
 
 function backupWithoutMaterials(backup: LearningBackup): LearningBackup {
@@ -180,7 +180,7 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
   });
   (backup.materialAssets ?? []).forEach((asset) => {
     if (!isRecord(asset) || typeof asset.materialId !== "string" || !materialIds.has(asset.materialId)) {
-      throw new Error("備份圖片缺少有效的素材關聯。");
+      throw new Error("備份圖片缺少有效的教材關聯。");
     }
   });
   const supportedMaterials: LearningBackup["materials"] = [];
@@ -232,7 +232,7 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
     throw new Error("這份備份的版本不受支援。");
   }
   if (!Array.isArray(backup.materials) || !Array.isArray(backup.vocabulary)) {
-    throw new Error("備份缺少素材或詞彙資料。");
+    throw new Error("備份缺少教材或詞彙資料。");
   }
   if (backup.settings !== undefined && !Array.isArray(backup.settings)) {
     throw new Error("備份的設定資料格式不正確。");
@@ -286,7 +286,7 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
       && isTimestamp(material.createdAt)
       && isTimestamp(material.updatedAt);
     if (!isValid || materialIds.has(material.id)) {
-      throw new Error("備份包含格式不正確或重複的素材資料。");
+      throw new Error("備份包含格式不正確或重複的教材資料。");
     }
     validateMaterialContent(material.content);
     materialIds.add(material.id);
@@ -320,10 +320,10 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
     assetIds.add(asset.id);
   });
   if ([...referencedAssetIds].some((id) => !assetIds.has(id))) {
-    throw new Error("備份缺少素材引用的圖片。");
+    throw new Error("備份缺少教材引用的圖片。");
   }
   if ([...assetIds].some((id) => !referencedAssetIds.has(id))) {
-    throw new Error("備份包含未被素材引用的圖片。");
+    throw new Error("備份包含未被教材引用的圖片。");
   }
 
   const vocabularyWords = new Set<string>();
@@ -456,7 +456,7 @@ export async function importBackup(
       .forEach((block) => {
         const existingMaterialId = referencedAssetMaterialById.get(block.assetId);
         if (existingMaterialId && existingMaterialId !== bundle.metadata.id) {
-          throw new Error("備份與現有素材使用了相同的圖片識別碼。");
+          throw new Error("備份與現有教材使用了相同的圖片識別碼。");
         }
         referencedAssetMaterialById.set(block.assetId, bundle.metadata.id);
       });
@@ -465,12 +465,12 @@ export async function importBackup(
     const materialId = referencedAssetMaterialById.get(asset.id);
     if (!materialId) return false;
     if (asset.materialId !== materialId) {
-      throw new Error("備份與素材的圖片關聯不一致。");
+      throw new Error("備份與教材的圖片關聯不一致。");
     }
     return true;
   });
   if (mergedAssets.length !== referencedAssetMaterialById.size) {
-    throw new Error("備份或現有素材缺少引用的圖片。");
+    throw new Error("備份或現有教材缺少引用的圖片。");
   }
   const learnedWords = new Set(bundles.flatMap((bundle) => bundle.metadata.knownWords));
   const timestamp = new Date().toISOString();

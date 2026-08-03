@@ -28,6 +28,7 @@ export function useWordCardInteractions() {
   ): void {
     if (pinned.value || document.activeElement?.closest(".word-card")) return;
     window.clearTimeout(hoverTimer);
+    window.clearTimeout(closeTimer);
     if (trigger === "hover" && !activeWord.value) {
       hoverTimer = window.setTimeout(() => {
         hoverTimer = undefined;
@@ -35,7 +36,6 @@ export function useWordCardInteractions() {
       }, HOVER_DELAY_MS);
       return;
     }
-    window.clearTimeout(closeTimer);
     activeWord.value = key;
     void wordCard.value?.open(word, rect, trigger === "selection");
   }

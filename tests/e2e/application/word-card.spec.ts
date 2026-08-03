@@ -218,6 +218,8 @@ test("unpins a pinned word card before its natural outside close", async ({ page
   await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeHidden();
 
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.locator(".word-card").dispatchEvent("pointerleave", { pointerId: 93 });
   await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();

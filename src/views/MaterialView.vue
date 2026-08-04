@@ -107,11 +107,12 @@ const {
   handleSelection: handleWordSelection,
   keepOpen: keepWordCardOpen,
   open: openWordCard,
+  openVocabularyWord,
   scheduleClose: scheduleWordCardClose,
   scheduleSelectionLookup,
   setPinned: setWordCardPinned,
   wordCard,
-} = useWordCardInteractions();
+} = useWordCardInteractions({ materialId });
 
 async function refreshKnownWords(): Promise<void> {
   if (!materialId()) return;
@@ -392,7 +393,7 @@ onBeforeUnmount(() => {
                 class="word-item__lookup"
                 type="button"
                 lang="en"
-                @click="openWordCard(word, ($event.currentTarget as HTMLElement).getBoundingClientRect())"
+                @click="openVocabularyWord(word, ($event.currentTarget as HTMLElement).getBoundingClientRect())"
               >
                 {{ word }}
               </button>

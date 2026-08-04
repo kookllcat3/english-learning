@@ -1,5 +1,6 @@
 import type {
   BackupStoreRecords,
+  ContextualWordNoteRecord,
   MaterialAssetRecord,
   MaterialBundle,
   MaterialContentRecord,
@@ -8,33 +9,33 @@ import type {
   SettingRecord,
   StoredMaterialAssetRecord,
   VocabularyRecord,
-  WordNoteRecord,
 } from "../models/models.js";
 
 const DATABASE_NAME = "english-learning";
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 7;
 const BACKUP_TRANSACTION_TIMEOUT_MS = 60_000;
+const LEGACY_WORD_NOTES_STORE = "wordNotes";
 
 export const STORES = Object.freeze({
+  contextualWordNotes: "contextualWordNotes",
   materialAssets: "materialAssets",
   materialContents: "materialContents",
   materialTerms: "materialTerms",
   materials: "materials",
   settings: "settings",
   vocabulary: "vocabulary",
-  wordNotes: "wordNotes",
 });
 
 type StoreName = typeof STORES[keyof typeof STORES];
 
 interface StoreRecordMap {
+  contextualWordNotes: ContextualWordNoteRecord;
   materialAssets: StoredMaterialAssetRecord;
   materialContents: MaterialContentRecord;
   materialTerms: MaterialTermsRecord;
   materials: MaterialRecord;
   settings: SettingRecord;
   vocabulary: VocabularyRecord;
-  wordNotes: WordNoteRecord;
 }
 
 let databasePromise: Promise<IDBDatabase> | undefined;
@@ -142,20 +143,38 @@ function createSchema(database: IDBDatabase): void {
     const materialAssets = database.createObjectStore(STORES.materialAssets, { keyPath: "id" });
     materialAssets.createIndex("materialId", "materialId");
   }
-  if (!database.objectStoreNames.contains(STORES.wordNotes)) {
-    database.createObjectStore(STORES.wordNotes, { keyPath: "word" });
+  if (!database.objectStoreNames.contains(STORES.contextualWordNotes)) {
+    const notes = database.createObjectStore(STORES.contextualWordNotes, { keyPath: "id" });
+    notes.createIndex("materialId", "materialId");
+  }
+  if (database.objectStoreNames.contains(LEGACY_WORD_NOTES_STORE)) {
+    database.deleteObjectStore(LEGACY_WORD_NOTES_STORE);
   }
 }
 
 function openDatabase(): Promise<IDBDatabase> {
   if (!databasePromise) {
     databasePromise = new Promise<IDBDatabase>((resolve, reject) => {
+      let blocked = false;
       const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
       request.addEventListener("upgradeneeded", () => createSchema(request.result), { once: true });
-      request.addEventListener("success", () => resolve(request.result), { once: true });
-      request.addEventListener("error", () => reject(request.error), { once: true });
+      request.addEventListener("success", () => {
+        const database = request.result;
+        if (blocked) {
+          database.close();
+          return;
+        }
+        database.addEventListener("versionchange", () => database.close());
+        resolve(database);
+      }, { once: true });
+      request.addEventListener("error", () => {
+        databasePromise = undefined;
+        reject(request.error);
+      }, { once: true });
       request.addEventListener("blocked", () => {
-        reject(new Error("資料庫正在被其他分頁使用，請關閉其他分頁後重試。"));
+        blocked = true;
+        databasePromise = undefined;
+        reject(new Error("資料庫升級遭到其他分頁阻擋，請關閉其他英文學習庫分頁後重新整理。"));
       }, { once: true });
     });
   }
@@ -168,6 +187,16 @@ export async function readAll<K extends StoreName>(
   const database = await openDatabase();
   const transaction = database.transaction(storeName, "readonly");
   return requestResult(transaction.objectStore(storeName).getAll());
+}
+
+export async function readAllByIndex<K extends StoreName>(
+  storeName: K,
+  indexName: string,
+  key: IDBValidKey,
+): Promise<StoreRecordMap[K][]> {
+  const database = await openDatabase();
+  const transaction = database.transaction(storeName, "readonly");
+  return requestResult(transaction.objectStore(storeName).index(indexName).getAll(key));
 }
 
 export async function readOne<K extends StoreName>(
@@ -209,14 +238,23 @@ export async function writeOne<K extends StoreName>(
 export async function writeMaterialContent(
   material: MaterialRecord,
   content: MaterialContentRecord,
+  retainedContextualNoteIds?: ReadonlySet<string>,
 ): Promise<void> {
   const database = await openDatabase();
-  const transaction = database.transaction(
-    [STORES.materials, STORES.materialContents],
-    "readwrite",
-  );
+  const storeNames: StoreName[] = [STORES.materials, STORES.materialContents];
+  if (retainedContextualNoteIds) storeNames.push(STORES.contextualWordNotes);
+  const transaction = database.transaction(storeNames, "readwrite");
   transaction.objectStore(STORES.materials).put(material);
   transaction.objectStore(STORES.materialContents).put(content);
+  if (retainedContextualNoteIds) {
+    const noteStore = transaction.objectStore(STORES.contextualWordNotes);
+    const request = noteStore.index("materialId").getAllKeys(material.id);
+    request.addEventListener("success", () => {
+      request.result
+        .filter((key) => !retainedContextualNoteIds.has(String(key)))
+        .forEach((key) => noteStore.delete(key));
+    }, { once: true });
+  }
   await transactionResult(transaction);
 }
 
@@ -249,7 +287,13 @@ export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<v
 export async function deleteMaterialBundle(materialId: string): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(
-    [STORES.materials, STORES.materialAssets, STORES.materialContents, STORES.materialTerms],
+    [
+      STORES.materials,
+      STORES.materialAssets,
+      STORES.materialContents,
+      STORES.materialTerms,
+      STORES.contextualWordNotes,
+    ],
     "readwrite",
   );
   transaction.objectStore(STORES.materials).delete(materialId);
@@ -259,6 +303,11 @@ export async function deleteMaterialBundle(materialId: string): Promise<void> {
   const assetRequest = assetStore.index("materialId").getAllKeys(materialId);
   assetRequest.addEventListener("success", () => {
     assetRequest.result.forEach((key) => assetStore.delete(key));
+  }, { once: true });
+  const noteStore = transaction.objectStore(STORES.contextualWordNotes);
+  const noteRequest = noteStore.index("materialId").getAllKeys(materialId);
+  noteRequest.addEventListener("success", () => {
+    noteRequest.result.forEach((key) => noteStore.delete(key));
   }, { once: true });
   await transactionResult(transaction);
 }
@@ -313,7 +362,7 @@ export async function writeBackupStores({
   materialContents,
   materialTerms,
   vocabulary,
-  wordNotes,
+  contextualWordNotes,
   settings,
 }: BackupStoreRecords): Promise<void> {
   const assetsToStore = await Promise.all(materialAssets.map(storedAsset));
@@ -329,7 +378,7 @@ export async function writeBackupStores({
   const assetStore = transaction.objectStore(STORES.materialAssets);
   const vocabularyStore = transaction.objectStore(STORES.vocabulary);
   const settingsStore = transaction.objectStore(STORES.settings);
-  const wordNoteStore = transaction.objectStore(STORES.wordNotes);
+  const contextualWordNoteStore = transaction.objectStore(STORES.contextualWordNotes);
   const contentStore = transaction.objectStore(STORES.materialContents);
   const termStore = transaction.objectStore(STORES.materialTerms);
 
@@ -339,7 +388,7 @@ export async function writeBackupStores({
   materialContents.forEach((content) => trackRequest(contentStore.put(content)));
   materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
   vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
-  wordNotes.forEach((record) => trackRequest(wordNoteStore.put(record)));
+  contextualWordNotes.forEach((record) => trackRequest(contextualWordNoteStore.put(record)));
   settings.forEach((setting) => trackRequest(settingsStore.put(setting)));
   await transactionResult(
     transaction,

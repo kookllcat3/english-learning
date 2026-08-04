@@ -26,6 +26,13 @@ export interface ReadingImageSection {
 
 export type ReadingContentSection = ReadingTextSection | ReadingImageSection;
 
+export interface ReadingWordOccurrence {
+  lineKey: string;
+  paragraphKey: string;
+  word: string;
+  wordKey: string;
+}
+
 interface ParagraphCandidate {
   key: string;
   lines: Array<{ key: string; text: string }>;
@@ -225,4 +232,36 @@ export function sourceWordsForBlocks(blocks: ContentBlock[]): string[] {
     ))
     .flatMap((section) => section.words))]
     .sort((first, second) => first.localeCompare(second));
+}
+
+function lineWordOccurrences(
+  paragraphKey: string,
+  line: ReadingTextLine,
+): ReadingWordOccurrence[] {
+  if (line.role !== "source") return [];
+  const occurrences: ReadingWordOccurrence[] = [];
+  const interactiveText = line.text.slice(line.interactiveTextStart);
+  const wordPattern = new RegExp(ENGLISH_WORD_PATTERN.source, ENGLISH_WORD_PATTERN.flags);
+  let segmentIndex = line.interactiveTextStart > 0 ? 1 : 0;
+  let cursor = 0;
+  for (const match of interactiveText.matchAll(wordPattern)) {
+    if (match.index > cursor) segmentIndex += 1;
+    occurrences.push({
+      lineKey: line.key,
+      paragraphKey,
+      word: match[0].toLocaleLowerCase("en"),
+      wordKey: `${line.key}-${segmentIndex}`,
+    });
+    segmentIndex += 1;
+    cursor = match.index + match[0].length;
+  }
+  return occurrences;
+}
+
+export function readingWordOccurrencesForBlocks(blocks: ContentBlock[]): ReadingWordOccurrence[] {
+  return classifyReadingContent(blocks).flatMap((section) => (
+    section.type === "text"
+      ? section.lines.flatMap((line) => lineWordOccurrences(section.key, line))
+      : []
+  ));
 }

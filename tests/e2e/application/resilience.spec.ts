@@ -91,3 +91,121 @@ test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
   await migratedCard.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByText("Animal", { exact: true })).toBeVisible();
 });
+
+test("replaces the legacy word note store during the version 7 upgrade", async ({ page }) => {
+  await page.goto("/tests/e2e/fixtures/same-origin.html");
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase("english-learning");
+      deletion.onsuccess = () => resolve();
+      deletion.onerror = () => reject(deletion.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("english-learning", 6);
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        database.createObjectStore("materials", { keyPath: "id" });
+        database.createObjectStore("vocabulary", { keyPath: "word" });
+        database.createObjectStore("settings", { keyPath: "key" }).put({
+          key: "searchHistory",
+          value: ["preserved"],
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        });
+        database.createObjectStore("wordNotes", { keyPath: "word" }).put({
+          word: "driver",
+          markdown: "legacy global note",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        });
+      };
+      request.onsuccess = () => {
+        request.result.close();
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "回到英文學習庫首頁" })).toBeVisible();
+  const state = await page.evaluate(async () => new Promise<{
+    stores: string[];
+    version: number;
+    preservedSetting: unknown;
+  }>((resolve, reject) => {
+    const request = indexedDB.open("english-learning");
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("settings", "readonly");
+      const settingRequest = transaction.objectStore("settings").get("searchHistory");
+      settingRequest.onsuccess = () => {
+        resolve({
+          stores: [...database.objectStoreNames],
+          version: database.version,
+          preservedSetting: settingRequest.result,
+        });
+        database.close();
+      };
+      settingRequest.onerror = () => reject(settingRequest.error);
+    };
+    request.onerror = () => reject(request.error);
+  }));
+
+  expect(state.version).toBe(7);
+  expect(state.stores).toContain("contextualWordNotes");
+  expect(state.stores).not.toContain("wordNotes");
+  expect(state.preservedSetting).toMatchObject({ value: ["preserved"] });
+});
+
+test("reports a blocked database upgrade and succeeds after the old connection closes", async ({ page }) => {
+  await page.goto("/tests/e2e/fixtures/same-origin.html");
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase("english-learning");
+      deletion.onsuccess = () => resolve();
+      deletion.onerror = () => reject(deletion.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("english-learning", 6);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore("materials", { keyPath: "id" });
+        request.result.createObjectStore("vocabulary", { keyPath: "word" });
+        request.result.createObjectStore("settings", { keyPath: "key" });
+        request.result.createObjectStore("wordNotes", { keyPath: "word" });
+      };
+      request.onsuccess = () => {
+        (window as typeof window & { legacyDatabase?: IDBDatabase }).legacyDatabase = request.result;
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+
+  const blockedMessage = await page.evaluate(async () => {
+    const databaseModulePath = "/src/core/database/database.ts";
+    const database = await import(databaseModulePath);
+    return database.readAll(database.STORES.materials).then(
+      () => "",
+      (error: unknown) => error instanceof Error ? error.message : String(error),
+    );
+  });
+  expect(blockedMessage).toContain("其他英文學習庫分頁");
+
+  await page.evaluate(() => {
+    (window as typeof window & { legacyDatabase?: IDBDatabase }).legacyDatabase?.close();
+  });
+  const stores = await page.evaluate(async () => {
+    const databaseModulePath = "/src/core/database/database.ts";
+    const database = await import(databaseModulePath);
+    await database.readAll(database.STORES.materials);
+    return new Promise<string[]>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.onsuccess = () => {
+        resolve([...request.result.objectStoreNames]);
+        request.result.close();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+  expect(stores).toContain("contextualWordNotes");
+});

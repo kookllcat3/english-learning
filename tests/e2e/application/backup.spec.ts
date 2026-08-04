@@ -1,6 +1,32 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { createMaterial, materialTitle, validWebpBase64 } from "./test-helpers";
+
+interface StoredContextualNote {
+  markdown: string;
+  occurrenceKey: string;
+}
+
+async function storedContextualNotes(page: Page): Promise<StoredContextualNote[]> {
+  return page.evaluate(async () => new Promise<StoredContextualNote[]>((resolve, reject) => {
+    const request = indexedDB.open("english-learning");
+    request.onsuccess = () => {
+      const database = request.result;
+      const records = database.transaction("contextualWordNotes", "readonly")
+        .objectStore("contextualWordNotes")
+        .getAll();
+      records.onsuccess = () => {
+        resolve(records.result.map((record) => ({
+          markdown: record.markdown,
+          occurrenceKey: record.occurrenceKey,
+        })));
+        database.close();
+      };
+      records.onerror = () => reject(records.error);
+    };
+    request.onerror = () => reject(request.error);
+  }));
+}
 
 test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.goto("/");
@@ -15,6 +41,15 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
+  await page.locator('[data-word="bear"]').first().focus();
+  await page.getByLabel("單字 Markdown 筆記").fill("備份中的位置型筆記");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+  await expect.poll(async () => (await storedContextualNotes(page)).map(({ markdown }) => markdown))
+    .toContain("備份中的位置型筆記");
+  const savedNote = (await storedContextualNotes(page)).find(
+    ({ markdown }) => markdown === "備份中的位置型筆記",
+  );
+  expect(savedNote).toBeDefined();
   await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
   await page.getByLabel("可編輯提示詞").fill("備份中的自訂 AI 提示詞");
   await page.waitForTimeout(500);
@@ -54,6 +89,22 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
     .getByRole("button", { name: "移除" })
     .click();
   await expect(page.getByRole("heading", { name: materialTitle })).toHaveCount(0);
+  const remainingNotes = await page.evaluate(async () => new Promise<number>((resolve, reject) => {
+    const request = indexedDB.open("english-learning");
+    request.onsuccess = () => {
+      const database = request.result;
+      const count = database.transaction("contextualWordNotes", "readonly")
+        .objectStore("contextualWordNotes")
+        .count();
+      count.onsuccess = () => {
+        resolve(count.result);
+        database.close();
+      };
+      count.onerror = () => reject(count.error);
+    };
+    request.onerror = () => reject(request.error);
+  }));
+  expect(remainingNotes).toBe(0);
 
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   page.once("dialog", (dialog) => dialog.accept());
@@ -62,12 +113,20 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
   await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
+  await expect.poll(async () => (await storedContextualNotes(page)).map(({ markdown }) => markdown))
+    .toContain("備份中的位置型筆記");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeVisible();
   await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
     .toHaveAttribute("aria-pressed", "true");
+  const restoredNotes = await storedContextualNotes(page);
+  expect(restoredNotes).toContainEqual(savedNote);
+  const savedWordKey = savedNote?.occurrenceKey.replace(/^reading:/, "");
+  expect(savedWordKey).toBeTruthy();
+  await page.locator(`[data-word-key="${savedWordKey}"]`).focus();
+  await expect(page.getByLabel("單字 Markdown 筆記")).toHaveText("備份中的位置型筆記");
   await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
   await expect(page.getByLabel("可編輯提示詞")).toHaveValue("備份中的自訂 AI 提示詞");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
@@ -286,6 +345,12 @@ test("imports a schema version 1 backup with legacy learning progress", async ({
       learnedAt: timestamp,
       updatedAt: timestamp,
     }],
+    wordNotes: [{
+      word: "animal",
+      markdown: "舊版全域筆記",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }],
   };
 
   await page.goto("/");
@@ -298,8 +363,57 @@ test("imports a schema version 1 backup with legacy learning progress", async ({
   });
 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
-  await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
+  await expect(dataDialog.getByRole("status")).toContainText("舊版全域單字筆記 1 筆");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   const legacyCard = page.getByRole("article").filter({ hasText: "舊版備份教材" });
   await expect(legacyCard).toContainText("1 / 1");
+});
+
+test("imports a legacy package while skipping its global word notes", async ({ page }) => {
+  const timestamp = "2026-01-02T03:04:05.000Z";
+  await page.goto("/");
+  const downloadPromise = page.waitForEvent("download");
+  await page.evaluate(async ({ timestamp }) => {
+    const modulePath = "/src/core/backup/backup-package.ts";
+    const { createBackupPackage } = await import(modulePath);
+    const blob = await createBackupPackage({
+      schemaVersion: 3,
+      exportedAt: timestamp,
+      materials: [{
+        id: "8c16fdc9-f80e-47af-b77a-53046fe884ad",
+        title: "舊版封裝教材",
+        description: "",
+        content: "Animal",
+        contentBlocks: [{ type: "text", text: "Animal", order: 0 }],
+        knownWords: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      materialAssets: [],
+      vocabulary: [],
+      wordNotes: [{
+        word: "animal",
+        markdown: "舊版封裝筆記",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      settings: [],
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "legacy-backup.elpkg";
+    link.click();
+  }, { timestamp });
+  const download = await downloadPromise;
+  const backupPath = await download.path();
+  if (!backupPath) throw new Error("legacy package was not downloaded");
+
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles(backupPath);
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("status")).toContainText("舊版全域單字筆記 1 筆");
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect(page.getByRole("article").filter({ hasText: "舊版封裝教材" })).toBeVisible();
 });

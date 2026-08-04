@@ -85,7 +85,9 @@ test("keeps a word note draft visible when IndexedDB persistence fails", async (
       IDBObjectStore.prototype.put = originalPut;
     };
     IDBObjectStore.prototype.put = function put(value, key) {
-      if (this.name === "wordNotes") throw new DOMException("Simulated write failure", "UnknownError");
+      if (this.name === "contextualWordNotes") {
+        throw new DOMException("Simulated write failure", "UnknownError");
+      }
       return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
     };
   });
@@ -270,4 +272,42 @@ test("unpins a pinned word card before its natural outside close", async ({ page
   await page.waitForTimeout(200);
   await expect(page.getByRole("heading", { name: nextWordText, level: 2 })).toBeVisible();
   await expect(pinButton).toHaveAttribute("aria-pressed", "false");
+});
+
+test("keeps notes separate for repeated words and the vocabulary entry", async ({ page }) => {
+  await createMaterial(
+    page,
+    "Repeated contextual notes",
+    "The driver waits.\n司機正在等待。\n\nThe driver leaves.\n司機離開了。",
+  );
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const repeatedWords = page.locator('[data-word="driver"]');
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await repeatedWords.nth(0).focus();
+  await editor.fill("first occurrence");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+
+  await editor.evaluate((element) => (element as HTMLElement).blur());
+  await page.locator(".word-card").dispatchEvent("pointerleave");
+  await repeatedWords.nth(1).focus();
+  await expect(editor).toHaveText("");
+  await editor.fill("second occurrence");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+
+  await editor.evaluate((element) => (element as HTMLElement).blur());
+  await page.locator(".word-card").dispatchEvent("pointerleave");
+  await page.getByRole("button", { name: "教材詞彙" }).click();
+  await page.locator(".word-item__lookup", { hasText: "driver" }).click();
+  await expect(editor).toHaveText("");
+  await editor.fill("vocabulary entry");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+
+  await page.reload();
+  await repeatedWords.nth(0).focus();
+  await expect(editor).toHaveText("first occurrence");
+  await editor.evaluate((element) => (element as HTMLElement).blur());
+  await page.locator(".word-card").dispatchEvent("pointerleave");
+  await repeatedWords.nth(1).focus();
+  await expect(editor).toHaveText("second occurrence");
 });

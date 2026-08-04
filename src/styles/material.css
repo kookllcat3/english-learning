@@ -588,6 +588,11 @@
   outline: none;
 }
 .word-note__editor:focus { border-color: #b9c3d5; box-shadow: inset 0 0 0 1px #b9c3d5; }
+.word-note__editor.is-disabled {
+  cursor: not-allowed;
+  background: #f3f4f6;
+  color: var(--muted);
+}
 .word-note__editor:empty::before {
   color: var(--muted);
   content: attr(data-placeholder);

@@ -1,5 +1,10 @@
 import { STORES, readAll, writeBackupStores } from "../database/database.js";
 import { mergeNewerRecords, synchronizeVocabularyRecords } from "../learning/learning-records.js";
+import {
+  contextualWordNoteId,
+  isContextualOccurrenceValid,
+  isValidWordNoteContext,
+} from "../learning/contextual-word-note.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
 import { sourceWordsForBlocks } from "../learning/reading-content.js";
 import {
@@ -26,7 +31,7 @@ import type {
 } from "../models/models.js";
 
 const MAX_ASSET_BYTES = 2 * 1024 * 1024;
-const BACKUP_SCHEMA_VERSION = 3;
+const BACKUP_SCHEMA_VERSION = 4;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -80,11 +85,11 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 export async function createBackup(): Promise<LearningBackup> {
-  const [materials, storedAssets, vocabulary, wordNotes, settings] = await Promise.all([
+  const [materials, storedAssets, vocabulary, contextualWordNotes, settings] = await Promise.all([
     materialsWithContent(),
     readAll(STORES.materialAssets),
     readAll(STORES.vocabulary),
-    readAll(STORES.wordNotes),
+    readAll(STORES.contextualWordNotes),
     readAll(STORES.settings),
   ]);
   const assets = storedAssets.map(materialAssetFromStoredRecord);
@@ -97,7 +102,7 @@ export async function createBackup(): Promise<LearningBackup> {
       data: await blobToDataUrl(blob),
     }))),
     vocabulary: vocabulary.map(currentVocabularyRecord),
-    wordNotes,
+    contextualWordNotes,
     settings: settings.filter(({ key }) => ![
       "familiarityTrackingVersion",
       READING_CONTENT_CLASSIFICATION_KEY,
@@ -111,16 +116,19 @@ export interface BackupImportPreview {
   newWords: number;
   updatedWords: number;
   skippedMaterials: string[];
+  skippedLegacyWordNotes: number;
   plan: BackupImportPlan;
 }
 
 export interface BackupImportResult {
   skippedMaterials: string[];
+  skippedLegacyWordNotes: number;
 }
 
 export interface BackupImportPlan {
   backup: LearningBackup;
   skippedMaterials: string[];
+  skippedLegacyWordNotes: number;
   decodedAssets: MaterialAssetRecord[];
 }
 
@@ -131,7 +139,15 @@ function materialDisplayName(material: unknown): string {
 }
 
 function backupWithoutMaterials(backup: LearningBackup): LearningBackup {
-  return { ...backup, materials: [], materialAssets: [] };
+  return { ...backup, materials: [], materialAssets: [], contextualWordNotes: [] };
+}
+
+function contextualNotesFor(
+  material: unknown,
+  notes: LearningBackup["contextualWordNotes"],
+): LearningBackup["contextualWordNotes"] {
+  if (!isRecord(material) || typeof material.id !== "string") return [];
+  return (notes ?? []).filter((note) => isRecord(note) && note.materialId === material.id);
 }
 
 function materialAssetsFor(
@@ -195,6 +211,7 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
       ...baseBackup,
       materials: [material],
       materialAssets: materialAssetsFor(material, backup.materialAssets),
+      contextualWordNotes: contextualNotesFor(material, backup.contextualWordNotes),
     };
     try {
       if (!id || (materialIds.get(id) ?? 0) > 1) throw new Error("duplicate material id");
@@ -222,17 +239,24 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
     ...backup,
     materials: retainedMaterials,
     materialAssets: (backup.materialAssets ?? []).filter((asset) => supportedMaterialIds.has(asset.materialId)),
+    contextualWordNotes: (backup.contextualWordNotes ?? [])
+      .filter((note) => supportedMaterialIds.has(note.materialId)),
   };
   validateBackup(filteredBackup, decodedAssetCache);
   const decodedAssets = (filteredBackup.materialAssets ?? []).map(({ data, ...asset }) => ({
     ...asset,
     blob: decodedAssetCache.get(asset.id) ?? dataUrlToBlob(data),
   }));
-  return { backup: filteredBackup, skippedMaterials, decodedAssets };
+  return {
+    backup: filteredBackup,
+    skippedMaterials,
+    skippedLegacyWordNotes: backup.wordNotes?.length ?? 0,
+    decodedAssets,
+  };
 }
 
 function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<string, Blob>()): void {
-  if (!backup || ![1, 2, BACKUP_SCHEMA_VERSION].includes(backup.schemaVersion)) {
+  if (!backup || ![1, 2, 3, BACKUP_SCHEMA_VERSION].includes(backup.schemaVersion)) {
     throw new Error("這份備份的版本不受支援。");
   }
   if (!Array.isArray(backup.materials) || !Array.isArray(backup.vocabulary)) {
@@ -244,10 +268,17 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
   if (backup.wordNotes !== undefined && !Array.isArray(backup.wordNotes)) {
     throw new Error("備份的單字筆記格式不正確。");
   }
+  if (backup.contextualWordNotes !== undefined && !Array.isArray(backup.contextualWordNotes)) {
+    throw new Error("備份的位置型單字筆記格式不正確。");
+  }
+  if (backup.schemaVersion >= 4 && !Array.isArray(backup.contextualWordNotes)) {
+    throw new Error("備份缺少位置型單字筆記資料。");
+  }
 
   const isTimestamp = (value: unknown): value is string =>
     typeof value === "string" && Number.isFinite(Date.parse(value));
   const materialIds = new Set<string>();
+  const materialBlocksById = new Map<string, ReturnType<typeof normalizedBlocks>>();
   const referencedAssetIds = new Set<string>();
   const assetMaterialById = new Map<string, string>();
   backup.materials.forEach((material) => {
@@ -294,6 +325,7 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
     }
     validateMaterialContent(material.content);
     materialIds.add(material.id);
+    materialBlocksById.set(material.id, normalizedBlocks(material.content, material.contentBlocks));
   });
 
   if (backup.materialAssets !== undefined && !Array.isArray(backup.materialAssets)) {
@@ -359,6 +391,31 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
     noteWords.add(note.word);
   });
 
+  const contextualNoteIds = new Set<string>();
+  (backup.contextualWordNotes ?? []).forEach((note) => {
+    const isValid = isRecord(note)
+      && typeof note.id === "string"
+      && typeof note.materialId === "string"
+      && typeof note.occurrenceKey === "string"
+      && typeof note.word === "string"
+      && isValidWordNoteContext({
+        materialId: note.materialId,
+        occurrenceKey: note.occurrenceKey,
+        word: note.word,
+      })
+      && note.id === contextualWordNoteId(note)
+      && materialIds.has(note.materialId)
+      && isContextualOccurrenceValid(note, materialBlocksById.get(note.materialId) ?? [])
+      && typeof note.markdown === "string"
+      && note.markdown.length <= 20_000
+      && isTimestamp(note.createdAt)
+      && isTimestamp(note.updatedAt);
+    if (!isValid || contextualNoteIds.has(note.id)) {
+      throw new Error("備份包含格式不正確、重複或沒有教材關聯的位置型單字筆記。");
+    }
+    contextualNoteIds.add(note.id);
+  });
+
   (backup.settings ?? []).forEach((setting) => {
     const isSearchHistory = isRecord(setting)
       && setting.key === "searchHistory"
@@ -420,6 +477,7 @@ export async function previewBackup(backup: LearningBackup): Promise<BackupImpor
     newWords: backup.vocabulary.filter((item) => !words.has(item.word)).length,
     updatedWords: backup.vocabulary.filter((item) => words.has(item.word)).length,
     skippedMaterials: plan.skippedMaterials,
+    skippedLegacyWordNotes: plan.skippedLegacyWordNotes,
     plan,
   };
 }
@@ -429,11 +487,11 @@ export async function importBackup(
 ): Promise<BackupImportResult> {
   const plan = isBackupImportPlan(input) ? input : prepareBackup(input);
   const backup = plan.backup;
-  const [currentMaterials, currentAssets, currentVocabulary, currentWordNotes, currentSettings] = await Promise.all([
+  const [currentMaterials, currentAssets, currentVocabulary, currentContextualWordNotes, currentSettings] = await Promise.all([
     materialsWithContent(),
     readAll(STORES.materialAssets).then((assets) => assets.map(materialAssetFromStoredRecord)),
     readAll(STORES.vocabulary),
-    readAll(STORES.wordNotes),
+    readAll(STORES.contextualWordNotes),
     readAll(STORES.settings),
   ]);
   let vocabulary = mergeNewerRecords(currentVocabulary, backup.vocabulary, "word")
@@ -490,6 +548,9 @@ export async function importBackup(
     throw new Error("備份或現有教材缺少引用的圖片。");
   }
   const learnedWords = new Set(bundles.flatMap((bundle) => bundle.metadata.knownWords));
+  const bundleByMaterialId = new Map(
+    bundles.map((bundle) => [bundle.metadata.id, bundle] as const),
+  );
   const timestamp = new Date().toISOString();
   vocabulary = synchronizeVocabularyRecords(vocabulary, learnedWords, timestamp);
   await writeBackupStores({
@@ -505,7 +566,14 @@ export async function importBackup(
       words: bundle.words,
     })),
     vocabulary,
-    wordNotes: mergeNewerRecords(currentWordNotes, backup.wordNotes ?? [], "word"),
+    contextualWordNotes: mergeNewerRecords(
+      currentContextualWordNotes,
+      backup.contextualWordNotes ?? [],
+      "id",
+    ).filter((note) => {
+      const bundle = bundleByMaterialId.get(note.materialId);
+      return bundle ? isContextualOccurrenceValid(note, bundle.contentBlocks) : false;
+    }),
     settings: mergeNewerRecords(
       currentSettings.filter(({ key }) => key !== "familiarityTrackingVersion"),
       (backup.settings ?? []).filter(({ key }) => ![
@@ -515,5 +583,8 @@ export async function importBackup(
       "key",
     ),
   });
-  return { skippedMaterials: plan.skippedMaterials };
+  return {
+    skippedMaterials: plan.skippedMaterials,
+    skippedLegacyWordNotes: plan.skippedLegacyWordNotes,
+  };
 }

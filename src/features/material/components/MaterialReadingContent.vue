@@ -65,7 +65,7 @@ const emit = defineEmits<{
   activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
   deactivate: [];
   learnParagraph: [words: string[]];
-  lookup: [word: string, rect: DOMRect];
+  lookup: [word: string, rect: DOMRect, key: string];
   toggleReadingParagraph: [paragraphKey: string];
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
@@ -306,7 +306,8 @@ function finishTouch(event: PointerEvent): void {
 function handleDoubleClick(event: MouseEvent): void {
   const element = wordElement(event.target);
   const word = element?.dataset.word;
-  if (element && word) emit("lookup", word, element.getBoundingClientRect());
+  const key = element?.dataset.wordKey;
+  if (element && word && key) emit("lookup", word, element.getBoundingClientRect(), key);
 }
 
 function handleFocusIn(event: FocusEvent): void {
@@ -369,6 +370,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 'is-translation': line.isTranslation,
               }"
               :data-translation-line="line.isTranslation ? line.key : undefined"
+              :data-source-line-key="line.isSource ? line.key : undefined"
             >
             <span
               v-if="editingTranslationLineKey !== line.key"

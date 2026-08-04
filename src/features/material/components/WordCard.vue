@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
-  getWordNote,
-  saveWordNote,
-} from "../../../core/learning/word-note-repository.js";
+  getContextualWordNote,
+  saveContextualWordNote,
+} from "../../../core/learning/contextual-word-note-repository.js";
+import { contextualWordNoteId } from "../../../core/learning/contextual-word-note.js";
+import type { WordNoteContext } from "../../../core/models/models.js";
 import { htmlToMarkdown, renderMarkdown } from "../markdown.js";
 import { useWordCardPosition } from "../use-word-card-position.js";
 import { errorMessage } from "../../../shared/errors.js";
@@ -23,9 +25,11 @@ const emit = defineEmits<{
 const card = ref<HTMLElement | null>(null);
 const editor = ref<HTMLDivElement | null>(null);
 const selectedWord = ref("");
+const selectedNoteContext = ref<WordNoteContext | null>(null);
 const markdown = ref("");
 const savedMarkdown = ref("");
 const saveMessage = ref("");
+const noteLoading = ref(false);
 const visible = ref(false);
 const pinned = ref(false);
 const pointerInteractionActive = ref(false);
@@ -35,7 +39,7 @@ let noteCompositionActive = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
 let releasePageScrollLock: (() => void) | null = null;
-const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
+const NOTE_DRAFT_PREFIX = "english-learning:contextual-word-note-draft:";
 const PAGE_SCROLL_LOCK_MEDIA_QUERY = "(hover: none), (pointer: coarse)";
 const {
   clearAnchor,
@@ -49,29 +53,31 @@ function cancelScheduledSave(): void {
   saveTimer = undefined;
 }
 
-function draftKey(word: string): string {
-  return `${NOTE_DRAFT_PREFIX}${encodeURIComponent(word)}`;
+function draftKey(context: WordNoteContext): string {
+  return `${NOTE_DRAFT_PREFIX}${contextualWordNoteId(context)}`;
 }
 
-function preserveDraft(word: string, value: string): void {
+function preserveDraft(context: WordNoteContext, value: string): void {
   try {
-    sessionStorage.setItem(draftKey(word), value);
+    sessionStorage.setItem(draftKey(context), value);
   } catch {
     // IndexedDB remains the primary store; an unavailable session store only removes crash recovery.
   }
 }
 
-function readDraft(word: string): string | null {
+function readDraft(context: WordNoteContext): string | null {
   try {
-    return sessionStorage.getItem(draftKey(word));
+    return sessionStorage.getItem(draftKey(context));
   } catch {
     return null;
   }
 }
 
-function discardSavedDraft(word: string, value: string): void {
+function discardSavedDraft(context: WordNoteContext, value: string): void {
   try {
-    if (sessionStorage.getItem(draftKey(word)) === value) sessionStorage.removeItem(draftKey(word));
+    if (sessionStorage.getItem(draftKey(context)) === value) {
+      sessionStorage.removeItem(draftKey(context));
+    }
   } catch {
     // An unavailable session store does not invalidate the completed IndexedDB write.
   }
@@ -79,20 +85,21 @@ function discardSavedDraft(word: string, value: string): void {
 
 async function persistNote(): Promise<boolean> {
   cancelScheduledSave();
-  if (!selectedWord.value || markdown.value === savedMarkdown.value) return true;
-  const word = selectedWord.value;
+  const context = selectedNoteContext.value;
+  if (!context || markdown.value === savedMarkdown.value) return true;
+  const noteId = contextualWordNoteId(context);
   const value = markdown.value;
   saveMessage.value = "儲存中…";
   try {
-    await saveWordNote(word, value);
-    discardSavedDraft(word, value);
-    if (word !== selectedWord.value || value !== markdown.value) return true;
+    await saveContextualWordNote(context, value);
+    discardSavedDraft(context, value);
+    if (noteId !== currentNoteId() || value !== markdown.value) return true;
     savedMarkdown.value = value;
     saveMessage.value = "已儲存";
     return true;
   } catch (error) {
-    preserveDraft(word, value);
-    if (word === selectedWord.value) {
+    preserveDraft(context, value);
+    if (noteId === currentNoteId()) {
       saveMessage.value = `${errorMessage(error, "單字筆記儲存失敗。")} 草稿仍保留在此分頁。`;
     }
     return false;
@@ -100,8 +107,10 @@ async function persistNote(): Promise<boolean> {
 }
 
 function scheduleSave(): void {
+  const context = selectedNoteContext.value;
+  if (!context) return;
   saveMessage.value = "尚未儲存";
-  if (selectedWord.value) preserveDraft(selectedWord.value, markdown.value);
+  preserveDraft(context, markdown.value);
   cancelScheduledSave();
   saveTimer = window.setTimeout(() => void persistNote(), 500);
 }
@@ -114,6 +123,7 @@ async function requestClose(): Promise<void> {
   noteCompositionActive = false;
   visible.value = false;
   selectedWord.value = "";
+  selectedNoteContext.value = null;
   clearAnchor();
   unlockPageScroll();
   if (pinned.value) {
@@ -191,33 +201,53 @@ function handleCardFocusOut(event: FocusEvent): void {
   queueMicrotask(closeCardWhenIdle);
 }
 
-async function open(word: string, rect: DOMRect, shouldPin = false): Promise<void> {
+function currentNoteId(): string {
+  return selectedNoteContext.value ? contextualWordNoteId(selectedNoteContext.value) : "";
+}
+
+async function open(
+  word: string,
+  rect: DOMRect,
+  noteContext: WordNoteContext | null,
+  shouldPin = false,
+): Promise<void> {
   const sequence = ++noteSequence;
   if (!await persistNote()) return;
   if (sequence !== noteSequence) return;
   noteEditingActive = false;
   noteCompositionActive = false;
   selectedWord.value = word;
+  selectedNoteContext.value = noteContext;
+  noteLoading.value = noteContext !== null;
   pinned.value = shouldPin;
   if (shouldPin) emit("pinChange", true);
   markdown.value = "";
   savedMarkdown.value = "";
-  saveMessage.value = "";
+  saveMessage.value = noteContext ? "正在載入筆記…" : "此選取沒有固定教材位置，無法儲存筆記。";
   visible.value = true;
   lockPageScroll();
   await nextTick();
   positionAt(rect);
+  if (!noteContext) {
+    if (editor.value) editor.value.innerHTML = "";
+    return;
+  }
   try {
-    const note = await getWordNote(word);
-    if (sequence !== noteSequence || word !== selectedWord.value) return;
+    const noteId = contextualWordNoteId(noteContext);
+    const note = await getContextualWordNote(noteContext);
+    if (sequence !== noteSequence || noteId !== currentNoteId()) return;
     savedMarkdown.value = note?.markdown ?? "";
-    const draft = readDraft(word);
+    const draft = readDraft(noteContext);
     markdown.value = draft ?? savedMarkdown.value;
     saveMessage.value = draft === null ? "" : "尚未儲存的草稿已復原";
+    noteLoading.value = false;
     await nextTick();
     if (editor.value) editor.value.innerHTML = renderMarkdown(markdown.value);
   } catch {
-    if (sequence === noteSequence) saveMessage.value = "無法載入單字筆記。";
+    if (sequence === noteSequence) {
+      noteLoading.value = false;
+      saveMessage.value = "無法載入單字筆記。";
+    }
   }
 }
 
@@ -231,6 +261,7 @@ function speak(): void {
 }
 
 function updateMarkdownFromEditor(): void {
+  if (!selectedNoteContext.value) return;
   if (noteCompositionActive) return;
   if (!editor.value) return;
   markdown.value = htmlToMarkdown(editor.value.innerHTML);
@@ -238,6 +269,7 @@ function updateMarkdownFromEditor(): void {
 }
 
 function beginNoteEditing(): void {
+  if (!selectedNoteContext.value) return;
   noteEditingActive = true;
   keepCardOpen();
 }
@@ -281,8 +313,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelScheduledSave();
   unlockPageScroll();
-  if (selectedWord.value && markdown.value !== savedMarkdown.value) {
-    preserveDraft(selectedWord.value, markdown.value);
+  if (selectedNoteContext.value && markdown.value !== savedMarkdown.value) {
+    preserveDraft(selectedNoteContext.value, markdown.value);
     void persistNote();
   }
   window.speechSynthesis?.cancel();
@@ -348,7 +380,9 @@ onBeforeUnmount(() => {
       <div
         ref="editor"
         class="word-note__editor"
-        contenteditable="true"
+        :class="{ 'is-disabled': !selectedNoteContext || noteLoading }"
+        :contenteditable="selectedNoteContext && !noteLoading ? 'true' : 'false'"
+        :aria-disabled="!selectedNoteContext || noteLoading"
         aria-label="單字 Markdown 筆記"
         data-placeholder="記下解釋、例句或聯想…"
         role="textbox"

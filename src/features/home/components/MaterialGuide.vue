@@ -68,7 +68,6 @@ const prompts = ref<Record<PromptType, string>>({
 const visiblePrompt = ref(TEXT_PROMPT);
 const currentPrompt = computed(() => prompts.value[promptType.value]);
 const isLoadingPrompts = ref(false);
-let promptRenderFrame: number | undefined;
 const promptSaveTimers: Partial<Record<PromptType, number>> = {};
 const pendingPromptSaves = new Set<Promise<void>>();
 
@@ -100,11 +99,7 @@ async function loadPrompts(): Promise<void> {
 function selectPrompt(type: PromptType): void {
   promptType.value = type;
   status.value = "";
-  window.cancelAnimationFrame(promptRenderFrame ?? 0);
-  promptRenderFrame = window.requestAnimationFrame(() => {
-    visiblePrompt.value = currentPrompt.value;
-    promptRenderFrame = undefined;
-  });
+  visiblePrompt.value = currentPrompt.value;
 }
 
 function updatePrompt(event: Event): void {
@@ -159,7 +154,6 @@ async function copyPrompt(): Promise<void> {
 }
 
 onBeforeUnmount(() => {
-  window.cancelAnimationFrame(promptRenderFrame ?? 0);
   flushPromptSaves();
 });
 </script>

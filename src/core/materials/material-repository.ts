@@ -2,6 +2,7 @@ import {
   STORES,
   deleteMaterialBundle,
   readAll,
+  readAllByIndex,
   readMany,
   readOne,
   writeLearningProgress,
@@ -9,6 +10,7 @@ import {
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
+import { isContextualOccurrenceValid } from "../learning/contextual-word-note.js";
 import { materialWithLearningProgress } from "../learning/learning-records.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
 import { classifyReadingContent, sourceWordsForBlocks } from "../learning/reading-content.js";
@@ -154,9 +156,16 @@ export async function updateMaterialTranslation(
     .map((block) => block.text)
     .join("\n\n");
   validateMaterialContent(content);
+  const contextualNotes = await readAllByIndex(STORES.contextualWordNotes, "materialId", id);
+  const retainedContextualNoteIds = new Set(
+    contextualNotes
+      .filter((note) => isContextualOccurrenceValid(note, contentBlocks))
+      .map((note) => note.id),
+  );
   await writeMaterialContent(
     { ...material, updatedAt: new Date().toISOString() },
     { materialId: id, content, contentBlocks },
+    retainedContextualNoteIds,
   );
 }
 

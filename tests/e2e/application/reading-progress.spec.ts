@@ -114,7 +114,7 @@ test("classifies structured reading content and repairs polluted learning data",
       request.addEventListener("error", () => reject(request.error), { once: true });
     });
     const transaction = database.transaction(
-      ["materials", "materialContents", "materialTerms", "vocabulary", "wordNotes", "settings"],
+      ["materials", "materialContents", "materialTerms", "vocabulary", "contextualWordNotes", "settings"],
       "readwrite",
     );
     transaction.objectStore("materials").put({
@@ -144,8 +144,11 @@ test("classifies structured reading content and repairs polluted learning data",
       createdAt: storedTimestamp,
       updatedAt: storedTimestamp,
     }));
-    transaction.objectStore("wordNotes").put({
-      word: "avian",
+    transaction.objectStore("contextualWordNotes").put({
+      id: `${encodeURIComponent(materialId)}::${encodeURIComponent("vocabulary:birds")}`,
+      materialId,
+      occurrenceKey: "vocabulary:birds",
+      word: "birds",
       markdown: "keep this note",
       createdAt: storedTimestamp,
       updatedAt: storedTimestamp,
@@ -246,7 +249,7 @@ test("classifies structured reading content and repairs polluted learning data",
       request.addEventListener("error", () => reject(request.error), { once: true });
     });
     const transaction = database.transaction(
-      ["materials", "materialTerms", "vocabulary", "wordNotes", "settings"],
+      ["materials", "materialTerms", "vocabulary", "contextualWordNotes", "settings"],
       "readonly",
     );
     const read = <T>(store: string, key: IDBValidKey) => new Promise<T>((resolve, reject) => {
@@ -259,7 +262,10 @@ test("classifies structured reading content and repairs polluted learning data",
       read<{ words: string[] }>("materialTerms", materialId),
       read<{ learned: boolean }>("vocabulary", "avian"),
       read<{ learned: boolean }>("vocabulary", "en"),
-      read<{ markdown: string }>("wordNotes", "avian"),
+      read<{ markdown: string }>(
+        "contextualWordNotes",
+        `${encodeURIComponent(materialId)}::${encodeURIComponent("vocabulary:birds")}`,
+      ),
       read<{ value: number }>("settings", "readingContentClassificationVersion"),
     ]);
     database.close();

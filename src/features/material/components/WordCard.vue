@@ -280,6 +280,7 @@ function updateMarkdownFromEditor(): void {
 function beginNoteEditing(): void {
   if (!selectedNoteContext.value) return;
   noteEditingActive = true;
+  pin();
   keepCardOpen();
 }
 

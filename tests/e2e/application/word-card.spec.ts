@@ -82,7 +82,7 @@ test("persists a word note without showing formatting controls", async ({ page }
   await expect(editor).toHaveCSS("resize", "none");
   await expect(editor).toHaveCSS("overflow-y", "auto");
   await editor.click();
-  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
   await page.locator('[data-word="runs"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
   await editor.fill("large animal");
@@ -94,7 +94,7 @@ test("persists a word note without showing formatting controls", async ({ page }
   await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("large animal");
 });
 
-test("keeps an unpinned note card open when IME briefly releases focus", async ({ page }) => {
+test("pins a note card when editing begins and keeps it open through IME focus changes", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await page.locator('[data-word="bear"]').first().hover();
@@ -110,9 +110,9 @@ test("keeps an unpinned note card open when IME briefly releases focus", async (
   await page.waitForTimeout(200);
 
   await expect(wordHeading).toBeVisible();
-  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute(
     "aria-pressed",
-    "false",
+    "true",
   );
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(initialScrollY);
 
@@ -337,6 +337,7 @@ test("keeps notes separate for repeated words and the vocabulary entry", async (
   await editor.fill("first occurrence");
   await expect(page.getByRole("status")).toHaveText("已儲存");
 
+  await page.getByRole("button", { name: "取消釘選單字卡" }).click();
   await editor.evaluate((element) => (element as HTMLElement).blur());
   await page.locator(".word-card").dispatchEvent("pointerleave");
   await repeatedWords.nth(1).focus();
@@ -344,8 +345,6 @@ test("keeps notes separate for repeated words and the vocabulary entry", async (
   await editor.fill("second occurrence");
   await expect(page.getByRole("status")).toHaveText("已儲存");
 
-  await editor.evaluate((element) => (element as HTMLElement).blur());
-  await page.locator(".word-card").dispatchEvent("pointerleave");
   await page.getByRole("button", { name: "教材詞彙" }).click();
   await page.locator(".word-item__lookup", { hasText: "driver" }).click();
   await expect(editor).toHaveText("");
@@ -355,7 +354,6 @@ test("keeps notes separate for repeated words and the vocabulary entry", async (
   await page.reload();
   await repeatedWords.nth(0).focus();
   await expect(editor).toHaveText("first occurrence");
-  await editor.evaluate((element) => (element as HTMLElement).blur());
   await page.locator(".word-card").dispatchEvent("pointerleave");
   await repeatedWords.nth(1).focus();
   await expect(editor).toHaveText("second occurrence");

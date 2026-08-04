@@ -30,6 +30,8 @@ const visible = ref(false);
 const pinned = ref(false);
 const pointerInteractionActive = ref(false);
 let pointerInsideCard = false;
+let noteEditingActive = false;
+let noteCompositionActive = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
 let releasePageScrollLock: (() => void) | null = null;
@@ -108,6 +110,8 @@ async function requestClose(): Promise<void> {
   const sequence = ++noteSequence;
   if (!await persistNote() || sequence !== noteSequence) return;
   window.speechSynthesis?.cancel();
+  noteEditingActive = false;
+  noteCompositionActive = false;
   visible.value = false;
   selectedWord.value = "";
   clearAnchor();
@@ -163,7 +167,7 @@ function keepCardOpen(): void {
 
 function closeCardWhenIdle(): void {
   pointerInsideCard = false;
-  if (pointerInteractionActive.value) return;
+  if (pointerInteractionActive.value || noteEditingActive) return;
   if (card.value?.contains(document.activeElement)) return;
   emit("leave");
 }
@@ -179,7 +183,11 @@ function finishCardInteraction(): void {
   if (!pointerInsideCard) closeCardWhenIdle();
 }
 
-function handleCardFocusOut(): void {
+function handleCardFocusOut(event: FocusEvent): void {
+  const nextTarget = event.relatedTarget;
+  if (nextTarget instanceof Element && !card.value?.contains(nextTarget)) {
+    noteEditingActive = false;
+  }
   queueMicrotask(closeCardWhenIdle);
 }
 
@@ -187,6 +195,8 @@ async function open(word: string, rect: DOMRect, shouldPin = false): Promise<voi
   const sequence = ++noteSequence;
   if (!await persistNote()) return;
   if (sequence !== noteSequence) return;
+  noteEditingActive = false;
+  noteCompositionActive = false;
   selectedWord.value = word;
   pinned.value = shouldPin;
   if (shouldPin) emit("pinChange", true);
@@ -221,9 +231,25 @@ function speak(): void {
 }
 
 function updateMarkdownFromEditor(): void {
+  if (noteCompositionActive) return;
   if (!editor.value) return;
   markdown.value = htmlToMarkdown(editor.value.innerHTML);
   scheduleSave();
+}
+
+function beginNoteEditing(): void {
+  noteEditingActive = true;
+  keepCardOpen();
+}
+
+function beginNoteComposition(): void {
+  noteCompositionActive = true;
+  beginNoteEditing();
+}
+
+function finishNoteComposition(): void {
+  noteCompositionActive = false;
+  updateMarkdownFromEditor();
 }
 
 function pastePlainText(event: ClipboardEvent): void {
@@ -327,7 +353,10 @@ onBeforeUnmount(() => {
         data-placeholder="記下解釋、例句或聯想…"
         role="textbox"
         aria-multiline="true"
+        @focus="beginNoteEditing"
         @input="updateMarkdownFromEditor"
+        @compositionstart="beginNoteComposition"
+        @compositionend="finishNoteComposition"
         @paste="pastePlainText"
         @blur="persistNote"
       />

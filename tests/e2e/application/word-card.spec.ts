@@ -45,6 +45,34 @@ test("persists a word note without showing formatting controls", async ({ page }
   await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("large animal");
 });
 
+test("keeps an unpinned note card open when IME briefly releases focus", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.locator('[data-word="bear"]').first().hover();
+
+  const card = page.locator(".word-card");
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  const wordHeading = page.getByRole("heading", { name: "bear", level: 2 });
+  const initialScrollY = await page.evaluate(() => window.scrollY);
+  await editor.click();
+  await editor.dispatchEvent("compositionstart", { data: "ㄅ" });
+  await card.dispatchEvent("pointerleave", { pointerId: 94, pointerType: "mouse" });
+  await editor.evaluate((element) => (element as HTMLElement).blur());
+  await page.waitForTimeout(200);
+
+  await expect(wordHeading).toBeVisible();
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(initialScrollY);
+
+  await editor.focus();
+  await editor.dispatchEvent("compositionend", { data: "筆記" });
+  await editor.fill("筆記內容");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+});
+
 test("keeps a word note draft visible when IndexedDB persistence fails", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

@@ -388,6 +388,7 @@ export async function writeBackupStores({
   materialContents.forEach((content) => trackRequest(contentStore.put(content)));
   materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
   vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
+  trackRequest(contextualWordNoteStore.clear());
   contextualWordNotes.forEach((record) => trackRequest(contextualWordNoteStore.put(record)));
   settings.forEach((setting) => trackRequest(settingsStore.put(setting)));
   await transactionResult(

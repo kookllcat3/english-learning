@@ -82,7 +82,12 @@ export function useWordCardInteractions(options: WordCardInteractionOptions) {
       : range.endContainer.parentElement;
     const startWord = startElement?.closest<HTMLElement>(".reading-word");
     const endWord = endElement?.closest<HTMLElement>(".reading-word");
-    if (startWord && startWord === endWord && startWord.dataset.wordKey) {
+    if (
+      startWord
+      && startWord === endWord
+      && startWord.dataset.wordKey
+      && normalizeWord(startWord.dataset.word ?? "") === word
+    ) {
       return readingWordOccurrenceKey(startWord.dataset.wordKey);
     }
 
@@ -94,16 +99,20 @@ export function useWordCardInteractions(options: WordCardInteractionOptions) {
     if (!sourceLine || !sourceLine.contains(range.startContainer) || !sourceLine.contains(range.endContainer)) {
       return "";
     }
-    const prefix = range.cloneRange();
-    prefix.selectNodeContents(sourceLine);
-    prefix.setEnd(range.startContainer, range.startOffset);
-    const startOffset = prefix.toString().length;
+    const textOffset = (container: Node, offset: number): number => {
+      const prefix = range.cloneRange();
+      prefix.selectNodeContents(sourceLine);
+      prefix.setEnd(container, offset);
+      return prefix.toString().length;
+    };
+    const startOffset = textOffset(range.startContainer, range.startOffset);
+    const endOffset = textOffset(range.endContainer, range.endOffset);
     return [
       "selection",
       paragraph.dataset.paragraphKey,
       startLine.dataset.sourceLineKey,
       startOffset,
-      startOffset + word.length,
+      endOffset,
     ].join(":");
   }
 

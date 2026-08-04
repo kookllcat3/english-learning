@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { createMaterial, materialContent, materialTitle } from "./test-helpers";
+import {
+  createMaterial,
+  materialContent,
+  materialTitle,
+  storedContextualNotes,
+} from "./test-helpers";
 
 test("reveals a restored note card only after its final position is ready", async ({ page }) => {
   await createMaterial(page);
@@ -227,6 +232,51 @@ test("pins a word card opened from a text selection", async ({ page }) => {
   await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("heading", { name: "bear", level: 2 }).click();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+});
+
+test("persists a partial-word selection with its exact text range", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  async function selectPartialWord(): Promise<void> {
+    await page.locator('[data-word="bear"]').first().evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      const textNodes: Text[] = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+
+      const boundaryAt = (targetOffset: number): { node: Text; offset: number } => {
+        let remaining = targetOffset;
+        for (const node of textNodes) {
+          if (remaining <= node.data.length) return { node, offset: remaining };
+          remaining -= node.data.length;
+        }
+        throw new Error("partial selection boundary not found");
+      };
+      const start = boundaryAt(1);
+      const end = boundaryAt(4);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+  }
+
+  await selectPartialWord();
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  await expect(page.getByRole("heading", { name: "ear", level: 2 })).toBeVisible();
+  await editor.fill("partial-word note");
+  await expect(page.getByRole("status")).toHaveText("已儲存");
+  await expect.poll(async () => storedContextualNotes(page)).toContainEqual({
+    markdown: "partial-word note",
+    occurrenceKey: "selection:0-0-0:0-0-0-0:3:6",
+  });
+
+  await page.reload();
+  await selectPartialWord();
+  await expect(editor).toHaveText("partial-word note");
 });
 
 test("keeps translation text selectable while preserving its blur control", async ({ page }) => {

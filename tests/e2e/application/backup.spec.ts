@@ -1,32 +1,11 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { createMaterial, materialTitle, validWebpBase64 } from "./test-helpers";
-
-interface StoredContextualNote {
-  markdown: string;
-  occurrenceKey: string;
-}
-
-async function storedContextualNotes(page: Page): Promise<StoredContextualNote[]> {
-  return page.evaluate(async () => new Promise<StoredContextualNote[]>((resolve, reject) => {
-    const request = indexedDB.open("english-learning");
-    request.onsuccess = () => {
-      const database = request.result;
-      const records = database.transaction("contextualWordNotes", "readonly")
-        .objectStore("contextualWordNotes")
-        .getAll();
-      records.onsuccess = () => {
-        resolve(records.result.map((record) => ({
-          markdown: record.markdown,
-          occurrenceKey: record.occurrenceKey,
-        })));
-        database.close();
-      };
-      records.onerror = () => reject(records.error);
-    };
-    request.onerror = () => reject(request.error);
-  }));
-}
+import {
+  createMaterial,
+  materialTitle,
+  storedContextualNotes,
+  validWebpBase64,
+} from "./test-helpers";
 
 test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.goto("/");
@@ -153,6 +132,63 @@ test("reports an invalid backup without changing the library", async ({ page }) 
   await expect(dataDialog.getByRole("alert")).toContainText("JSON");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+});
+
+test("removes orphaned contextual notes while merging a backup", async ({ page }) => {
+  const timestamp = "2026-08-05T08:00:00.000Z";
+  await createMaterial(page);
+  await page.evaluate(async ({ timestamp }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const materialRequest = database.transaction("materials", "readonly")
+      .objectStore("materials")
+      .getAll();
+    const materials = await new Promise<Array<{ id: string }>>((resolve, reject) => {
+      materialRequest.addEventListener("success", () => resolve(materialRequest.result), { once: true });
+      materialRequest.addEventListener("error", () => reject(materialRequest.error), { once: true });
+    });
+    const materialId = materials[0]?.id;
+    if (!materialId) throw new Error("test material not found");
+    const transaction = database.transaction("contextualWordNotes", "readwrite");
+    transaction.objectStore("contextualWordNotes").put({
+      id: `${materialId}::reading%3Amissing-position`,
+      materialId,
+      occurrenceKey: "reading:missing-position",
+      word: "orphan",
+      markdown: "orphan note",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
+    });
+    database.close();
+  }, { timestamp });
+  await expect.poll(async () => storedContextualNotes(page)).toHaveLength(1);
+
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "empty-current-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 4,
+      exportedAt: timestamp,
+      materials: [],
+      materialAssets: [],
+      vocabulary: [],
+      contextualWordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
+  await expect.poll(async () => storedContextualNotes(page)).toHaveLength(0);
 });
 
 test("skips an unsupported image material and imports the remaining backup", async ({ page }) => {

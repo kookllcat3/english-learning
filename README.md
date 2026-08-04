@@ -36,7 +36,7 @@ Demo 的資料只會保存在目前的瀏覽器中，不同裝置不會自動同
 
 ### Windows
 
-下載或 clone 專案後，直接雙擊 `start.cmd`。啟動器會優先使用電腦上的 Node.js 20 或更新版本；如果沒有相容版本，會下載並驗證官方可攜版。第一次啟動或 `package-lock.json` 更新後，也會自動安裝鎖定的套件版本，因此首次執行需要網路。
+下載或 clone 專案後，直接雙擊 `start.cmd`。啟動器會優先使用電腦上的 Node.js 24 或更新版本；如果沒有相容版本，會下載並驗證官方可攜版。第一次啟動或 `package-lock.json` 更新後，也會自動安裝鎖定的套件版本，因此首次執行需要網路。
 
 網站會開在：
 
@@ -96,6 +96,7 @@ npm start
 
 - pull request 合併前會執行型別檢查、單元測試、桌面／窄版／觸控 E2E、production E2E、效能與 axe 無障礙檢查，但不會部署。
 - `main` 更新或從 Actions 手動執行 workflow 時，會執行 `npm run check:full`；同時必須通過 high 以上 npm audit 與 CodeQL 分析 job 才會發布 `dist/`。
+- CI 與本機啟動器以 Node.js 24 為最低支援版本；Pages、artifact、部署及 Node 設定皆使用支援 Node.js 24 runtime 的 GitHub 官方 Action 版本。
 - Playwright 失敗時才會從 `.artifacts/playwright/` 保存 HTML report、trace、截圖與 `test-results` Artifact，方便從 Actions 下載定位問題。
 - Dependabot 會追蹤 npm 與 GitHub Actions 依賴更新；PR／main 品質 workflow 會執行 CodeQL，另有每週排程掃描。
 - 部署使用 GitHub Pages artifact，不需要 `gh-pages` 分支，也不會使用 Firebase。

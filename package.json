@@ -19,7 +19,7 @@
     "check:full": "npm run check && npm run test:e2e && npm run test:e2e:production"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "dependencies": {
     "pinia": "4.0.2",

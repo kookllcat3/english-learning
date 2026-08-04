@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $runtimeVersion = "24.16.0"
-$minimumNodeMajor = 20
+$minimumNodeMajor = 24
 
 function Get-SystemArchitecture {
   $architecture = if ($env:PROCESSOR_ARCHITEW6432) {

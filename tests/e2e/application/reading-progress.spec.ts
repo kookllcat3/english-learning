@@ -322,6 +322,31 @@ test("returns to the marked paragraph on the first click after entering from hom
   await expect(markedButton).toHaveClass(/is-active/);
 });
 
+test("centers the marked paragraph on the first click immediately after reloading", async ({ page }) => {
+  const paragraphs = Array.from(
+    { length: 90 },
+    (_, index) => `Paragraph ${index + 1} contains enough words for reading.\n這是第 ${index + 1} 段翻譯。`,
+  ).join("\n\n");
+  await createMaterial(page, materialTitle, paragraphs);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const markedParagraph = page.locator("[data-reading-paragraph]").nth(52);
+  const markedButton = markedParagraph.getByRole("button", { name: "標記目前閱讀段落" });
+  await markedButton.scrollIntoViewIfNeeded();
+  await markedButton.click();
+  await expect(markedButton).toHaveAttribute("aria-pressed", "true");
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.reload();
+  await page.getByRole("button", { name: "回到閱讀位置" }).click();
+
+  await expect.poll(async () => markedParagraph.evaluate((paragraph) => {
+    const bounds = paragraph.getBoundingClientRect();
+    return Math.abs((bounds.top + bounds.bottom) / 2 - window.innerHeight / 2);
+  })).toBeLessThan(80);
+  await expect(markedButton).toBeFocused();
+});
+
 test("ignores an orphaned reading position stored in IndexedDB", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

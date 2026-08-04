@@ -16,8 +16,10 @@ function findReadingParagraph(panel: HTMLElement | null, paragraphKey: string): 
     .find((candidate) => candidate.dataset.paragraphKey === paragraphKey) ?? null;
 }
 
-function waitForLayout(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+function waitForStableLayout(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 const FLOATING_ACTION_TOP_PX = 80;
@@ -64,17 +66,18 @@ export function useReadingPosition(options: ReadingPositionOptions) {
   async function returnToPosition(): Promise<void> {
     const paragraphKey = currentParagraphKey.value;
     if (!paragraphKey) return;
+    await waitForStableLayout();
+    if (currentParagraphKey.value !== paragraphKey) return;
+
     let paragraph = findReadingParagraph(options.readingPanel.value, paragraphKey);
     if (!paragraph) return;
-
     paragraph.scrollIntoView({ behavior: "auto", block: "center" });
-    await waitForLayout();
+    await waitForStableLayout();
     if (currentParagraphKey.value !== paragraphKey) return;
 
     paragraph = findReadingParagraph(options.readingPanel.value, paragraphKey);
     if (!paragraph) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    paragraph.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+    paragraph.scrollIntoView({ behavior: "auto", block: "center" });
     paragraph.querySelector<HTMLElement>('[aria-label="標記目前閱讀段落"]')
       ?.focus({ preventScroll: true });
   }

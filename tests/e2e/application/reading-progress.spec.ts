@@ -229,6 +229,14 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(page.locator('[data-word="birds"]')).toHaveCount(1);
   await expect(page.locator('[data-word="en"]')).toHaveCount(0);
   await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
+  await page.getByRole("button", { name: /編輯這段中文解釋/ }).click();
+  const translationEditor = page.getByRole("textbox", { name: /編輯這段中文解釋/ });
+  await translationEditor.fill("birds 是鳥類，這是修正後的解釋。");
+  await translationEditor.press("Control+Enter");
+  await expect(page.locator(".reading-line-wrap.is-translation")).toContainText(
+    "birds 是鳥類，這是修正後的解釋。",
+  );
+  await expect(page.getByRole("textbox", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
 
   const migrated = await page.evaluate(async (materialId) => {

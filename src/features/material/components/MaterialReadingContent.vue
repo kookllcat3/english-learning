@@ -57,6 +57,7 @@ const props = defineProps<{
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
   familiarityLevels: FamiliarityLevel[];
+  updateTranslation: (lineKey: string, text: string) => Promise<void>;
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
@@ -69,6 +70,10 @@ const emit = defineEmits<{
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const hiddenTranslationLines = ref(new Set<string>());
+const editingTranslationLineKey = ref<string | null>(null);
+const translationDraft = ref("");
+const translationSaveError = ref("");
+const translationSaving = ref(false);
 const copyFeedback = ref<{ key: string; status: "error" | "success" } | null>(null);
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -211,6 +216,47 @@ function toggleTranslationOnClick(lineKey: string, event: MouseEvent): void {
   toggleTranslation(lineKey, event);
 }
 
+function startTranslationEdit(lineKey: string, text: string): void {
+  editingTranslationLineKey.value = lineKey;
+  translationDraft.value = text;
+  translationSaveError.value = "";
+}
+
+function cancelTranslationEdit(): void {
+  if (translationSaving.value) return;
+  editingTranslationLineKey.value = null;
+  translationSaveError.value = "";
+}
+
+async function saveTranslationEdit(lineKey: string): Promise<void> {
+  if (translationSaving.value) return;
+  const nextText = translationDraft.value.trim();
+  if (!nextText) {
+    translationSaveError.value = "中文解釋不能留空。";
+    return;
+  }
+  translationSaving.value = true;
+  translationSaveError.value = "";
+  try {
+    await props.updateTranslation(lineKey, nextText);
+    editingTranslationLineKey.value = null;
+  } catch (error) {
+    translationSaveError.value = error instanceof Error ? error.message : "中文解釋儲存失敗。";
+  } finally {
+    translationSaving.value = false;
+  }
+}
+
+function handleTranslationEditorKeydown(event: KeyboardEvent, lineKey: string): void {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    cancelTranslationEdit();
+  } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    void saveTranslationEdit(lineKey);
+  }
+}
+
 function wordElement(target: EventTarget | null): HTMLElement | null {
   return target instanceof Element ? target.closest<HTMLElement>(".reading-word") : null;
 }
@@ -325,6 +371,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :data-translation-line="line.isTranslation ? line.key : undefined"
             >
             <span
+              v-if="editingTranslationLineKey !== line.key"
               class="reading-line"
               :class="{ 'translation-mask': line.isTranslation && isTranslationHidden(line.key) }"
             >
@@ -355,6 +402,34 @@ function handleWordKeydown(event: KeyboardEvent): void {
               v-else
             >{{ segment.label }}</span>
             </template>
+            </span>
+            <span
+              v-else
+              class="translation-editor"
+              @pointerdown.stop
+            >
+              <textarea
+                v-model="translationDraft"
+                rows="2"
+                :aria-label="`編輯這段中文解釋：${line.segments.map((segment) => segment.label).join('')}`"
+                :disabled="translationSaving"
+                @keydown="handleTranslationEditorKeydown($event, line.key)"
+              />
+              <span class="translation-editor__actions">
+                <button
+                  type="button"
+                  :disabled="translationSaving"
+                  @click.stop="saveTranslationEdit(line.key)"
+                >儲存</button>
+                <button
+                  type="button"
+                  :disabled="translationSaving"
+                  @click.stop="cancelTranslationEdit"
+                >取消</button>
+              </span>
+              <span v-if="translationSaveError" class="translation-editor__error" role="alert">
+                {{ translationSaveError }}
+              </span>
             </span>
             <span
               v-if="line.key === paragraph.lastOriginalLineKey && paragraph.words.length > 0"
@@ -424,7 +499,23 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :class="{ 'is-error': copyFeedback.status === 'error' }"
               :role="copyFeedback.status === 'error' ? 'alert' : 'status'"
             >{{ copyFeedback.status === "success" ? "已複製" : "複製失敗" }}</span>
-            <span v-if="line.isTranslation" class="translation-control-anchor">
+            <span
+              v-if="line.isTranslation && editingTranslationLineKey !== line.key"
+              class="translation-control-anchor"
+            >
+              <button
+                class="translation-edit-toggle"
+                type="button"
+                :aria-label="`編輯這段中文解釋：${line.segments.map((segment) => segment.label).join('')}`"
+                title="編輯這段中文解釋"
+                @pointerdown.stop
+                @click.stop="startTranslationEdit(line.key, line.segments.map((segment) => segment.label).join(''))"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="m4 16-.8 4.8L8 20l4.8-.8L20 4.8a2.8 2.8 0 0 0-4-4L4 16Z" />
+                  <path d="m14 6 4 4" />
+                </svg>
+              </button>
               <button
                 class="translation-visibility-toggle"
                 type="button"

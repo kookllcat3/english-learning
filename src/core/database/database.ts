@@ -206,6 +206,20 @@ export async function writeOne<K extends StoreName>(
   return value;
 }
 
+export async function writeMaterialContent(
+  material: MaterialRecord,
+  content: MaterialContentRecord,
+): Promise<void> {
+  const database = await openDatabase();
+  const transaction = database.transaction(
+    [STORES.materials, STORES.materialContents],
+    "readwrite",
+  );
+  transaction.objectStore(STORES.materials).put(material);
+  transaction.objectStore(STORES.materialContents).put(content);
+  await transactionResult(transaction);
+}
+
 export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<void> {
   const assetsToStore = await Promise.all(
     bundles.flatMap((bundle) => bundle.assets ?? []).map(storedAsset),

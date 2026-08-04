@@ -118,10 +118,41 @@
   position: relative;
   z-index: 3;
   display: inline-flex;
-  width: 24px;
+  width: auto;
   height: 24px;
   margin-left: 6px;
+  gap: 4px;
   vertical-align: middle;
+}
+.translation-edit-toggle {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--card);
+  box-shadow: 0 2px 8px rgb(32 45 70 / 12%);
+  cursor: pointer;
+  touch-action: manipulation;
+  place-items: center;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.translation-edit-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+.translation-edit-toggle:hover,
+.translation-edit-toggle:focus-visible {
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  outline: none;
 }
 .translation-visibility-toggle {
   position: static;
@@ -163,6 +194,53 @@
   border-color: var(--accent-soft);
   background: var(--accent-soft);
   outline: none;
+}
+.translation-editor {
+  display: inline-flex;
+  max-width: min(100%, 620px);
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+  vertical-align: top;
+}
+.translation-editor textarea {
+  width: min(620px, calc(100vw - 96px));
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--card);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+.translation-editor__actions {
+  display: inline-flex;
+  gap: 6px;
+  font: 700 .78rem/1.2 Inter, system-ui, sans-serif;
+}
+.translation-editor__actions button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--card);
+  cursor: pointer;
+}
+.translation-editor__actions button:first-child {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+.translation-editor__actions button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+.translation-editor__error {
+  color: var(--danger);
+  font: 700 .78rem/1.3 Inter, system-ui, sans-serif;
 }
 .reading-content .reading-line {
   display: inline;

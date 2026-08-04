@@ -34,6 +34,7 @@ let noteSequence = 0;
 let saveTimer: number | undefined;
 let releasePageScrollLock: (() => void) | null = null;
 const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
+const PAGE_SCROLL_LOCK_MEDIA_QUERY = "(hover: none), (pointer: coarse)";
 const {
   clearAnchor,
   positionAt,
@@ -123,6 +124,10 @@ function close(): void {
 }
 
 function lockPageScroll(): void {
+  if (!window.matchMedia(PAGE_SCROLL_LOCK_MEDIA_QUERY).matches) {
+    unlockPageScroll();
+    return;
+  }
   releasePageScrollLock ??= acquirePageScrollLock();
 }
 

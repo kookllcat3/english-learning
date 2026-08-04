@@ -87,8 +87,9 @@ test("keeps the word card open while a pointer interaction is active", async ({ 
   const bearHeading = page.getByRole("heading", { name: "bear", level: 2 });
   await bearWord.hover();
   await expect(bearHeading).toBeHidden();
-  await page.waitForTimeout(1050);
-  await expect(bearHeading).toBeVisible();
+  await page.waitForTimeout(400);
+  await expect(bearHeading).toBeHidden();
+  await expect(bearHeading).toBeVisible({ timeout: 800 });
   await page.locator('[data-word="runs"]').first().hover();
   await expect(page.getByRole("heading", { name: "runs", level: 2 })).toBeVisible();
 
@@ -103,7 +104,7 @@ test("keeps the word card open while a pointer interaction is active", async ({ 
   });
 });
 
-test("locks page scrolling while the word card is open", async ({ page }) => {
+test("keeps desktop scrolling responsive while the word card is open", async ({ page }) => {
   const longContent = Array.from({ length: 40 }, () => materialContent).join("\n");
   await createMaterial(page, "Word card scroll lock", longContent);
   await page.locator(".material-card .button--primary").first().click();
@@ -115,22 +116,17 @@ test("locks page scrolling while the word card is open", async ({ page }) => {
 
   const readingPosition = await page.evaluate(() => window.scrollY);
   await page.mouse.wheel(0, 600);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(readingPosition);
-  await page.keyboard.press("PageDown");
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(readingPosition);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(readingPosition);
 
   await page.locator("h1").click();
   await expect(wordHeading).toBeHidden();
-  await page.mouse.wheel(0, 600);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(readingPosition);
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.locator(".material-view-switcher__button").nth(1).click();
   await page.locator(".word-item__lookup").first().click();
   await expect(page.locator(".word-card h2")).toBeVisible();
-  const vocabularyPosition = await page.evaluate(() => window.scrollY);
-  await page.mouse.wheel(0, 600);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(vocabularyPosition);
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).position))
+    .not.toBe("fixed");
 });
 
 test("pins a word card opened from a text selection", async ({ page }) => {

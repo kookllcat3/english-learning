@@ -54,6 +54,7 @@ const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
 const familiarityHelpOpen = ref(false);
 const familiarityLegend = ref<HTMLElement | null>(null);
 const readingPanel = ref<HTMLElement | null>(null);
+const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
 
 const knownWords = computed(() => new Set(
@@ -84,10 +85,17 @@ function materialId(): string {
 
 const {
   currentParagraphKey,
+  returnActionFloating: readingPositionReturnFloating,
   returnToPosition: returnToReadingPosition,
   showReturnAction: showReadingPositionReturn,
   toggle: toggleReadingParagraph,
-} = useReadingPosition({ actionError, activeView, materialId, readingPanel });
+} = useReadingPosition({
+  actionError,
+  activeView,
+  materialId,
+  readingPanel,
+  returnActionAnchor: readingPositionReturnAnchor,
+});
 
 const {
   activeWord,
@@ -271,11 +279,12 @@ onBeforeUnmount(() => {
           :style="readingPanelStyle"
         >
           <div class="panel__heading">
-            <div class="reading-panel__title-row">
+            <div ref="readingPositionReturnAnchor" class="reading-panel__title-row">
               <h2>教材內容</h2>
               <button
                 v-if="showReadingPositionReturn"
                 class="reading-position-return"
+                :class="{ 'is-floating': readingPositionReturnFloating }"
                 type="button"
                 @click="returnToReadingPosition"
               >

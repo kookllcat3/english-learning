@@ -87,6 +87,13 @@
   font-weight: 750;
   cursor: pointer;
 }
+.reading-position-return.is-floating {
+  position: fixed;
+  z-index: 8;
+  top: 80px;
+  left: max(48px, calc((100vw - 1080px) / 2 + 24px));
+  box-shadow: 0 6px 18px rgb(32 37 54 / 18%);
+}
 .reading-position-return:focus-visible {
   outline: 3px solid rgb(83 58 130 / 22%);
   outline-offset: 2px;
@@ -579,9 +586,6 @@
     padding: 0;
   }
   .material-view-switcher {
-    position: sticky;
-    z-index: 4;
-    top: 80px;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px;
@@ -594,6 +598,7 @@
   .material-view-switcher__button {
     border-radius: 10px;
   }
+  .reading-position-return.is-floating { left: 40px; }
   .detail-layout > .panel {
     position: relative;
     display: block;

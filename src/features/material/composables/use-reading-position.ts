@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
 
 import { setMaterialReadingParagraph } from "../../../core/learning/learning-repository.js";
 import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
@@ -8,6 +8,7 @@ interface ReadingPositionOptions {
   activeView: Ref<"reading" | "vocabulary">;
   materialId: () => string;
   readingPanel: Ref<HTMLElement | null>;
+  returnActionAnchor: Ref<HTMLElement | null>;
 }
 
 function findReadingParagraph(panel: HTMLElement | null, paragraphKey: string): HTMLElement | null {
@@ -19,10 +20,33 @@ function waitForLayout(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+const FLOATING_ACTION_TOP_PX = 80;
+
 export function useReadingPosition(options: ReadingPositionOptions) {
   const currentParagraphKey = ref<string | null>(null);
+  const returnActionFloating = ref(false);
   const showReturnAction = computed(() =>
     options.activeView.value === "reading" && currentParagraphKey.value !== null);
+  let returnActionObserver: IntersectionObserver | null = null;
+
+  function observeReturnAction(anchor: HTMLElement | null): void {
+    returnActionObserver?.disconnect();
+    returnActionObserver = null;
+    returnActionFloating.value = false;
+    if (!anchor || typeof IntersectionObserver === "undefined") return;
+
+    returnActionObserver = new IntersectionObserver(([entry]) => {
+      returnActionFloating.value = !entry.isIntersecting
+        && entry.boundingClientRect.top < FLOATING_ACTION_TOP_PX;
+    }, { rootMargin: `-${FLOATING_ACTION_TOP_PX}px 0px 0px` });
+    returnActionObserver.observe(anchor);
+  }
+
+  watch(options.returnActionAnchor, observeReturnAction);
+  watch(showReturnAction, (visible) => {
+    if (!visible) returnActionFloating.value = false;
+  });
+  onBeforeUnmount(() => returnActionObserver?.disconnect());
 
   async function toggle(paragraphKey: string): Promise<void> {
     const previousParagraphKey = currentParagraphKey.value;
@@ -57,6 +81,7 @@ export function useReadingPosition(options: ReadingPositionOptions) {
 
   return {
     currentParagraphKey,
+    returnActionFloating,
     returnToPosition,
     showReturnAction,
     toggle,

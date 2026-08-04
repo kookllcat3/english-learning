@@ -31,6 +31,7 @@ const savedMarkdown = ref("");
 const saveMessage = ref("");
 const noteLoading = ref(false);
 const visible = ref(false);
+const positionReady = ref(false);
 const pinned = ref(false);
 const pointerInteractionActive = ref(false);
 let pointerInsideCard = false;
@@ -121,6 +122,7 @@ async function requestClose(): Promise<void> {
   window.speechSynthesis?.cancel();
   noteEditingActive = false;
   noteCompositionActive = false;
+  positionReady.value = false;
   visible.value = false;
   selectedWord.value = "";
   selectedNoteContext.value = null;
@@ -205,6 +207,14 @@ function currentNoteId(): string {
   return selectedNoteContext.value ? contextualWordNoteId(selectedNoteContext.value) : "";
 }
 
+async function revealPositionedCard(rect: DOMRect, sequence: number): Promise<void> {
+  await nextTick();
+  if (sequence !== noteSequence) return;
+  if (editor.value) editor.value.innerHTML = renderMarkdown(markdown.value);
+  positionAt(rect);
+  positionReady.value = true;
+}
+
 async function open(
   word: string,
   rect: DOMRect,
@@ -224,12 +234,11 @@ async function open(
   markdown.value = "";
   savedMarkdown.value = "";
   saveMessage.value = noteContext ? "正在載入筆記…" : "此選取沒有固定教材位置，無法儲存筆記。";
+  positionReady.value = false;
   visible.value = true;
   lockPageScroll();
-  await nextTick();
-  positionAt(rect);
   if (!noteContext) {
-    if (editor.value) editor.value.innerHTML = "";
+    await revealPositionedCard(rect, sequence);
     return;
   }
   try {
@@ -241,12 +250,12 @@ async function open(
     markdown.value = draft ?? savedMarkdown.value;
     saveMessage.value = draft === null ? "" : "尚未儲存的草稿已復原";
     noteLoading.value = false;
-    await nextTick();
-    if (editor.value) editor.value.innerHTML = renderMarkdown(markdown.value);
+    await revealPositionedCard(rect, sequence);
   } catch {
     if (sequence === noteSequence) {
       noteLoading.value = false;
       saveMessage.value = "無法載入單字筆記。";
+      await revealPositionedCard(rect, sequence);
     }
   }
 }
@@ -330,6 +339,7 @@ onBeforeUnmount(() => {
     v-show="visible"
     ref="card"
     class="word-card"
+    :class="{ 'is-position-ready': positionReady }"
     aria-labelledby="word-card-title"
     @pointerenter="keepCardOpen"
     @pointerleave="closeCardWhenIdle"

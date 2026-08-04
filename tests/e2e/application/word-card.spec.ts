@@ -2,6 +2,55 @@ import { expect, test } from "@playwright/test";
 
 import { createMaterial, materialContent, materialTitle } from "./test-helpers";
 
+test("reveals a restored note card only after its final position is ready", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const word = page.locator('[data-word="bear"]').first();
+  const editor = page.getByLabel("單字 Markdown 筆記");
+  const note = "A long restored note ".repeat(30);
+  await word.hover();
+  await editor.fill(note);
+  await page.waitForTimeout(700);
+  await page.reload();
+  await expect(page.locator(".word-card")).toBeAttached();
+
+  await page.evaluate(() => {
+    const card = document.querySelector<HTMLElement>(".word-card");
+    if (!card) throw new Error("word card not found");
+    const samples: Array<{ text: string; top: number; left: number }> = [];
+    (window as typeof window & { __wordCardRevealSamples?: typeof samples })
+      .__wordCardRevealSamples = samples;
+    const captureFrames = (remaining: number): void => {
+      const rect = card.getBoundingClientRect();
+      const noteEditor = card.querySelector<HTMLElement>(".word-note__editor");
+      samples.push({ text: noteEditor?.innerText ?? "", top: rect.top, left: rect.left });
+      if (remaining > 1) requestAnimationFrame(() => captureFrames(remaining - 1));
+    };
+    new MutationObserver(() => {
+      if (card.classList.contains("is-position-ready") && samples.length === 0) captureFrames(8);
+    }).observe(card, { attributes: true, attributeFilter: ["class"] });
+  });
+
+  await word.hover();
+  await expect(page.locator(".word-card")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (
+    (window as typeof window & {
+      __wordCardRevealSamples?: Array<{ text: string; top: number; left: number }>;
+    }).__wordCardRevealSamples?.length ?? 0
+  ))).toBe(8);
+  const samples = await page.evaluate(() => (
+    (window as typeof window & {
+      __wordCardRevealSamples?: Array<{ text: string; top: number; left: number }>;
+    }).__wordCardRevealSamples ?? []
+  ));
+  expect(samples[0]?.text).toContain("A long restored note");
+  expect(Math.max(...samples.map(({ top }) => top)) - Math.min(...samples.map(({ top }) => top)))
+    .toBeLessThan(1);
+  expect(Math.max(...samples.map(({ left }) => left)) - Math.min(...samples.map(({ left }) => left)))
+    .toBeLessThan(1);
+});
+
 test("persists a word note without showing formatting controls", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

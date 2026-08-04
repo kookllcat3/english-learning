@@ -485,6 +485,7 @@
 .word-card {
   position: fixed;
   z-index: 10;
+  visibility: hidden;
   display: flex;
   width: min(380px, calc(100vw - 24px));
   max-height: min(560px, calc(100vh - 24px));
@@ -498,6 +499,7 @@
   background: white;
   box-shadow: 0 18px 52px rgb(23 32 51 / 24%);
 }
+.word-card.is-position-ready { visibility: visible; }
 .word-card-backdrop {
   position: fixed;
   z-index: 9;

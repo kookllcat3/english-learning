@@ -6,6 +6,7 @@ import {
   setMaterialGuidePrompt,
   type MaterialGuidePromptType,
 } from "../../../core/settings/settings-repository.js";
+import { APP_VERSION } from "../../../core/app/app-version.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 import type { DialogController } from "../../../shared/components/base-dialog.js";
 
@@ -240,7 +241,10 @@ onBeforeUnmount(() => {
         rows="22"
         @input="updatePrompt"
       />
-      <p class="copy-status" role="status">{{ status }}</p>
+      <p class="copy-status" role="status">
+        <span class="copy-status__version">v{{ APP_VERSION }}</span>
+        <span v-if="status" class="copy-status__message">{{ status }}</span>
+      </p>
     </section>
   </BaseDialog>
 </template>

@@ -5,7 +5,20 @@ const DEFAULT_FAMILIARITY_COLOR = "#d86b48";
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const SEARCH_HISTORY_LIMIT = 8;
 const AI_PROMPT_KEY = "aiPrompt";
-export const AI_PROMPT_MAX_LENGTH = 20_000;
+const PROMPT_MAX_LENGTH = 20_000;
+export const AI_PROMPT_MAX_LENGTH = PROMPT_MAX_LENGTH;
+
+export type MaterialGuidePromptType = "text" | "docx";
+
+const MATERIAL_GUIDE_PROMPT_KEYS: Record<MaterialGuidePromptType, string> = {
+  text: "materialGuideTextPrompt",
+  docx: "materialGuideDocxPrompt",
+};
+
+export const MATERIAL_GUIDE_PROMPT_SETTING_KEYS = Object.values(
+  MATERIAL_GUIDE_PROMPT_KEYS,
+);
+export const MATERIAL_GUIDE_PROMPT_MAX_LENGTH = PROMPT_MAX_LENGTH;
 
 export async function getFamiliarityColor(): Promise<string> {
   const record = await readOne(STORES.settings, "familiarityColor");
@@ -74,6 +87,31 @@ export async function setAiPrompt(prompt: string): Promise<SettingRecord> {
   }
   return writeOne(STORES.settings, {
     key: AI_PROMPT_KEY,
+    value: normalizedPrompt,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function getMaterialGuidePrompt(
+  type: MaterialGuidePromptType,
+  defaultPrompt: string,
+): Promise<string> {
+  const record = await readOne(STORES.settings, MATERIAL_GUIDE_PROMPT_KEYS[type]);
+  return typeof record?.value === "string" && record.value.trim()
+    ? record.value
+    : defaultPrompt;
+}
+
+export async function setMaterialGuidePrompt(
+  type: MaterialGuidePromptType,
+  prompt: string,
+): Promise<SettingRecord> {
+  const normalizedPrompt = prompt.trim();
+  if (!normalizedPrompt || normalizedPrompt.length > MATERIAL_GUIDE_PROMPT_MAX_LENGTH) {
+    throw new Error("教材生成提示詞不可留白，且不得超過 20,000 個字元。");
+  }
+  return writeOne(STORES.settings, {
+    key: MATERIAL_GUIDE_PROMPT_KEYS[type],
     value: normalizedPrompt,
     updatedAt: new Date().toISOString(),
   });

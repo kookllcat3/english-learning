@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
+import {
+  getMaterialGuidePrompt,
+  MATERIAL_GUIDE_PROMPT_MAX_LENGTH,
+  setMaterialGuidePrompt,
+  type MaterialGuidePromptType,
+} from "../../../core/settings/settings-repository.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 import type { DialogController } from "../../../shared/components/base-dialog.js";
 
-type PromptType = "docx" | "text";
+type PromptType = MaterialGuidePromptType;
 
 const TEXT_PROMPT = `你是一位專業的英語教材編輯。請依照我提供的主題或原始內容，製作一份內容充實、可直接匯入英文學習網站的純文字教材。
 
@@ -54,13 +60,40 @@ const DOCX_PROMPT = `你是一位專業的英語教材編輯與圖文文件設�
 const dialog = ref<DialogController | null>(null);
 const promptType = ref<PromptType>("text");
 const status = ref("");
+const prompts = ref<Record<PromptType, string>>({
+  text: TEXT_PROMPT,
+  docx: DOCX_PROMPT,
+});
 const visiblePrompt = ref(TEXT_PROMPT);
-const currentPrompt = computed(() => promptType.value === "text" ? TEXT_PROMPT : DOCX_PROMPT);
+const currentPrompt = computed(() => prompts.value[promptType.value]);
+const isLoadingPrompts = ref(false);
 let promptRenderFrame: number | undefined;
+const promptSaveTimers: Partial<Record<PromptType, number>> = {};
+const pendingPromptSaves = new Set<Promise<void>>();
 
 function openDialog(): void {
   status.value = "";
   dialog.value?.showModal();
+  void loadPrompts();
+}
+
+async function loadPrompts(): Promise<void> {
+  isLoadingPrompts.value = true;
+  try {
+    await Promise.all(pendingPromptSaves);
+    const [text, docx] = await Promise.all([
+      getMaterialGuidePrompt("text", TEXT_PROMPT),
+      getMaterialGuidePrompt("docx", DOCX_PROMPT),
+    ]);
+    prompts.value = { text, docx };
+    visiblePrompt.value = prompts.value[promptType.value];
+  } catch {
+    prompts.value = { text: TEXT_PROMPT, docx: DOCX_PROMPT };
+    visiblePrompt.value = prompts.value[promptType.value];
+    status.value = "無法讀取已儲存的提示詞，目前顯示預設內容。";
+  } finally {
+    isLoadingPrompts.value = false;
+  }
 }
 
 function selectPrompt(type: PromptType): void {
@@ -73,7 +106,49 @@ function selectPrompt(type: PromptType): void {
   });
 }
 
+function updatePrompt(event: Event): void {
+  const value = (event.target as HTMLTextAreaElement).value;
+  visiblePrompt.value = value;
+  prompts.value[promptType.value] = value;
+  schedulePromptSave(promptType.value, value);
+}
+
+function schedulePromptSave(type: PromptType, value: string): void {
+  window.clearTimeout(promptSaveTimers[type]);
+  promptSaveTimers[type] = window.setTimeout(() => {
+    delete promptSaveTimers[type];
+    startPromptSave(type, value);
+  }, 400);
+}
+
+function startPromptSave(type: PromptType, value: string): void {
+  const request = persistPrompt(type, value);
+  pendingPromptSaves.add(request);
+  void request.finally(() => pendingPromptSaves.delete(request));
+}
+
+async function persistPrompt(type: PromptType, value: string): Promise<void> {
+  try {
+    await setMaterialGuidePrompt(type, value);
+    status.value = `${type === "text" ? "純文字" : "圖文"}提示詞已儲存。`;
+  } catch {
+    status.value = "提示詞儲存失敗，請確認內容不是空白且未超過 20,000 個字元。";
+  }
+}
+
+function flushPromptSaves(): void {
+  (Object.keys(promptSaveTimers) as PromptType[]).forEach((type) => {
+    window.clearTimeout(promptSaveTimers[type]);
+    delete promptSaveTimers[type];
+    startPromptSave(type, prompts.value[type]);
+  });
+}
+
 async function copyPrompt(): Promise<void> {
+  if (!currentPrompt.value.trim()) {
+    status.value = "提示詞不可留白。";
+    return;
+  }
   try {
     await navigator.clipboard.writeText(currentPrompt.value);
     status.value = "已複製，可貼到你慣用的 AI 工具。";
@@ -84,6 +159,7 @@ async function copyPrompt(): Promise<void> {
 
 onBeforeUnmount(() => {
   window.cancelAnimationFrame(promptRenderFrame ?? 0);
+  flushPromptSaves();
 });
 </script>
 
@@ -107,6 +183,7 @@ onBeforeUnmount(() => {
     dialog-class="material-guide-dialog"
     eyebrow="Material guide"
     title="如何製作學習教材"
+    @close="flushPromptSaves"
   >
     <ol class="guide-steps">
       <li><strong>選擇想學的英文內容</strong><p>文章、對話、逐字稿或你想練習的句子都可以。</p></li>
@@ -155,7 +232,14 @@ onBeforeUnmount(() => {
           圖文
         </button>
       </div>
-      <textarea :value="visiblePrompt" readonly rows="22" />
+      <textarea
+        :value="visiblePrompt"
+        :aria-label="promptType === 'text' ? '純文字教材生成提示詞' : '圖文教材生成提示詞'"
+        :disabled="isLoadingPrompts"
+        :maxlength="MATERIAL_GUIDE_PROMPT_MAX_LENGTH"
+        rows="22"
+        @input="updatePrompt"
+      />
       <p class="copy-status" role="status">{{ status }}</p>
     </section>
   </BaseDialog>

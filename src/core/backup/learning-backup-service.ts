@@ -14,7 +14,11 @@ import {
 } from "../learning/material-migrations.js";
 import { materialAssetFromStoredRecord } from "../materials/material-repository.js";
 import { isValidWord } from "../text/text.js";
-import { AI_PROMPT_MAX_LENGTH } from "../settings/settings-repository.js";
+import {
+  AI_PROMPT_MAX_LENGTH,
+  MATERIAL_GUIDE_PROMPT_MAX_LENGTH,
+  MATERIAL_GUIDE_PROMPT_SETTING_KEYS,
+} from "../settings/settings-repository.js";
 import type {
   BackupMaterial,
   LearningBackup,
@@ -373,12 +377,25 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
       && setting.value.trim().length > 0
       && setting.value.length <= AI_PROMPT_MAX_LENGTH
       && isTimestamp(setting.updatedAt);
+    const isMaterialGuidePrompt = isRecord(setting)
+      && typeof setting.key === "string"
+      && MATERIAL_GUIDE_PROMPT_SETTING_KEYS.includes(setting.key)
+      && typeof setting.value === "string"
+      && setting.value.trim().length > 0
+      && setting.value.length <= MATERIAL_GUIDE_PROMPT_MAX_LENGTH
+      && isTimestamp(setting.updatedAt);
     // Accepted only so backups made during the former view-count experiment remain importable.
     const isLegacyFamiliarityTrackingVersion = isRecord(setting)
       && setting.key === "familiarityTrackingVersion"
       && Number.isInteger(setting.value)
       && isTimestamp(setting.updatedAt);
-    if (!isSearchHistory && !isFamiliarityColor && !isAiPrompt && !isLegacyFamiliarityTrackingVersion) {
+    if (
+      !isSearchHistory
+      && !isFamiliarityColor
+      && !isAiPrompt
+      && !isMaterialGuidePrompt
+      && !isLegacyFamiliarityTrackingVersion
+    ) {
       throw new Error("備份包含不受支援的設定資料。");
     }
   });

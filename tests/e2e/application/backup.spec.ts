@@ -3,6 +3,15 @@ import { expect, test } from "@playwright/test";
 import { createMaterial, materialTitle, validWebpBase64 } from "./test-helpers";
 
 test("exports, removes, and restores a complete backup", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "查看教材製作教學" }).click();
+  const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
+  await guideDialog.getByLabel("純文字教材生成提示詞").fill("備份中的純文字教材提示詞");
+  await guideDialog.getByRole("tab", { name: "圖文" }).click();
+  await guideDialog.getByLabel("圖文教材生成提示詞").fill("備份中的圖文教材提示詞");
+  await expect(guideDialog.getByRole("status")).toContainText("圖文提示詞已儲存");
+  await guideDialog.getByRole("button", { name: "關閉" }).click();
+
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
@@ -20,6 +29,24 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   expect(backupPath).not.toBeNull();
   await expect(page.getByRole("status")).toContainText("備份已下載");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
+
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction("settings", "readwrite");
+    const settings = transaction.objectStore("settings");
+    settings.delete("aiPrompt");
+    settings.delete("materialGuideTextPrompt");
+    settings.delete("materialGuideDocxPrompt");
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
+    });
+    database.close();
+  });
 
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("article")
@@ -43,6 +70,14 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
     .toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
   await expect(page.getByLabel("可編輯提示詞")).toHaveValue("備份中的自訂 AI 提示詞");
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
+  await page.getByRole("button", { name: "查看教材製作教學" }).click();
+  await expect(guideDialog.getByLabel("純文字教材生成提示詞"))
+    .toHaveValue("備份中的純文字教材提示詞");
+  await guideDialog.getByRole("tab", { name: "圖文" }).click();
+  await expect(guideDialog.getByLabel("圖文教材生成提示詞"))
+    .toHaveValue("備份中的圖文教材提示詞");
 });
 
 test("reports an invalid backup without changing the library", async ({ page }) => {

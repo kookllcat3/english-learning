@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import type {
   ContentBlock,
   VocabularyRecord,
@@ -40,6 +40,7 @@ interface RenderedTextBlock {
       segments: TextSegment[];
     }>;
     role: ReadingTextRole;
+    sourceText: string;
     words: string[];
   }>;
   type: "text";
@@ -68,6 +69,30 @@ const emit = defineEmits<{
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const hiddenTranslationLines = ref(new Set<string>());
+const copyFeedback = ref<{ key: string; status: "error" | "success" } | null>(null);
+let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setCopyFeedback(key: string, status: "error" | "success"): void {
+  if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+  copyFeedback.value = { key, status };
+  copyFeedbackTimer = setTimeout(() => {
+    copyFeedback.value = null;
+    copyFeedbackTimer = null;
+  }, 1600);
+}
+
+async function copyParagraph(key: string, text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    setCopyFeedback(key, "success");
+  } catch {
+    setCopyFeedback(key, "error");
+  }
+}
+
+onBeforeUnmount(() => {
+  if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+});
 
 function textSegments(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
@@ -115,6 +140,11 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
           segments: lineSegments(line),
         })),
         role: section.role,
+        sourceText: section.lines
+          .filter((line) => line.role === "source")
+          .map((line) => line.text.trim())
+          .filter(Boolean)
+          .join("\n"),
         words: section.words,
       }],
     };
@@ -334,6 +364,34 @@ function handleWordKeydown(event: KeyboardEvent): void {
             >
               <button
                 class="reading-paragraph-control"
+                :class="{
+                  'is-copy-error': copyFeedback?.key === paragraph.key && copyFeedback.status === 'error',
+                  'is-copy-success': copyFeedback?.key === paragraph.key && copyFeedback.status === 'success',
+                }"
+                type="button"
+                :aria-label="copyFeedback?.key === paragraph.key && copyFeedback.status === 'success'
+                  ? '已複製整段英文'
+                  : '複製整段英文'"
+                :title="copyFeedback?.key === paragraph.key && copyFeedback.status === 'success'
+                  ? '已複製整段英文'
+                  : '複製整段英文'"
+                @pointerdown.stop
+                @click.stop="copyParagraph(paragraph.key, paragraph.sourceText)"
+              >
+                <svg
+                  v-if="copyFeedback?.key === paragraph.key && copyFeedback.status === 'success'"
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+                <svg v-else aria-hidden="true" viewBox="0 0 24 24">
+                  <rect x="8" y="8" width="11" height="11" rx="2" />
+                  <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+                </svg>
+              </button>
+              <button
+                class="reading-paragraph-control"
                 type="button"
                 aria-label="將本段單字標記為認識"
                 title="將本段單字標記為認識"
@@ -360,6 +418,12 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 </svg>
               </button>
             </span>
+            <span
+              v-if="line.key === paragraph.lastOriginalLineKey && copyFeedback?.key === paragraph.key"
+              class="reading-copy-feedback"
+              :class="{ 'is-error': copyFeedback.status === 'error' }"
+              :role="copyFeedback.status === 'error' ? 'alert' : 'status'"
+            >{{ copyFeedback.status === "success" ? "已複製" : "複製失敗" }}</span>
             <span v-if="line.isTranslation" class="translation-control-anchor">
               <button
                 class="translation-visibility-toggle"

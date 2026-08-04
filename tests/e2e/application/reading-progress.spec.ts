@@ -3,6 +3,16 @@ import { expect, test } from "@playwright/test";
 import { createMaterial, materialTitle } from "./test-helpers";
 
 test("marks paragraph words and keeps one reading position", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (window as unknown as { copiedParagraph?: string }).copiedParagraph = text;
+        },
+      },
+    });
+  });
   await createMaterial(
     page,
     materialTitle,
@@ -14,6 +24,24 @@ test("marks paragraph words and keeps one reading position", async ({ page }) =>
   await expect(paragraphs).toHaveCount(2);
   await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(2);
   await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "複製整段英文" })).toHaveCount(2);
+
+  const firstCopyButton = paragraphs.nth(0).getByRole("button", { name: "複製整段英文" });
+  await firstCopyButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(paragraphs.nth(0).getByRole("status")).toHaveText("已複製");
+  expect(await page.evaluate(() =>
+    (window as unknown as { copiedParagraph?: string }).copiedParagraph)).toBe("A bear runs.");
+  await expect(firstCopyButton).toHaveAccessibleName("已複製整段英文");
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => Promise.reject(new Error("clipboard denied")) },
+    });
+  });
+  await paragraphs.nth(1).getByRole("button", { name: "複製整段英文" }).click();
+  await expect(paragraphs.nth(1).getByRole("alert")).toHaveText("複製失敗");
 
   await paragraphs.nth(0).getByRole("button", { name: "將本段單字標記為認識" }).click();
   await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);

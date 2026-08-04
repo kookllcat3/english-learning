@@ -60,6 +60,22 @@
   background: #533a82;
   outline: none;
 }
+.reading-paragraph-control.is-copy-success {
+  color: #087a4b;
+  background: rgb(8 122 75 / 10%);
+}
+.reading-paragraph-control.is-copy-error {
+  color: var(--danger);
+  background: rgb(184 51 42 / 10%);
+}
+.reading-copy-feedback {
+  display: inline-block;
+  margin-left: 6px;
+  color: #087a4b;
+  font: 700 .72rem/1.2 Inter, system-ui, sans-serif;
+  vertical-align: middle;
+}
+.reading-copy-feedback.is-error { color: var(--danger); }
 .reading-paragraph-control:focus-visible {
   box-shadow: 0 0 0 3px rgb(32 45 70 / 18%);
 }

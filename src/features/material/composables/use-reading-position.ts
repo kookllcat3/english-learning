@@ -10,6 +10,15 @@ interface ReadingPositionOptions {
   readingPanel: Ref<HTMLElement | null>;
 }
 
+function findReadingParagraph(panel: HTMLElement | null, paragraphKey: string): HTMLElement | null {
+  return [...(panel?.querySelectorAll<HTMLElement>("[data-paragraph-key]") ?? [])]
+    .find((candidate) => candidate.dataset.paragraphKey === paragraphKey) ?? null;
+}
+
+function waitForLayout(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 export function useReadingPosition(options: ReadingPositionOptions) {
   const currentParagraphKey = ref<string | null>(null);
   const showReturnAction = computed(() =>
@@ -28,12 +37,17 @@ export function useReadingPosition(options: ReadingPositionOptions) {
     }
   }
 
-  function returnToPosition(): void {
+  async function returnToPosition(): Promise<void> {
     const paragraphKey = currentParagraphKey.value;
     if (!paragraphKey) return;
-    const paragraph = [...(options.readingPanel.value
-      ?.querySelectorAll<HTMLElement>("[data-paragraph-key]") ?? [])]
-      .find((candidate) => candidate.dataset.paragraphKey === paragraphKey);
+    let paragraph = findReadingParagraph(options.readingPanel.value, paragraphKey);
+    if (!paragraph) return;
+
+    paragraph.scrollIntoView({ behavior: "auto", block: "center" });
+    await waitForLayout();
+    if (currentParagraphKey.value !== paragraphKey) return;
+
+    paragraph = findReadingParagraph(options.readingPanel.value, paragraphKey);
     if (!paragraph) return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     paragraph.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });

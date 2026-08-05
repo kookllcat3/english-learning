@@ -485,10 +485,12 @@ function handleWordKeydown(event: KeyboardEvent): void {
             >{{ copyFeedback.status === "success" ? "已複製" : "複製失敗" }}</span>
             <span
               v-if="line.isTranslation && editingTranslationLineKey !== line.key"
-              class="translation-control-anchor"
+              class="reading-paragraph-controls translation-control-anchor"
+              role="group"
+              aria-label="中文解釋控制"
             >
               <button
-                class="translation-edit-toggle"
+                class="reading-paragraph-control translation-edit-toggle"
                 type="button"
                 :aria-label="`編輯這段中文解釋：${line.segments.map((segment) => segment.label).join('')}`"
                 title="編輯這段中文解釋"
@@ -501,7 +503,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 </svg>
               </button>
               <button
-                class="translation-visibility-toggle"
+                class="reading-paragraph-control translation-visibility-toggle"
                 type="button"
                 :aria-label="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
                 :aria-pressed="isTranslationHidden(line.key)"

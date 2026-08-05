@@ -227,6 +227,11 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(page.locator('[data-word="birds"]')).toHaveCount(1);
   await expect(page.locator('[data-word="en"]')).toHaveCount(0);
   await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
+  const translationControls = page.getByRole("group", { name: "中文解釋控制" });
+  await expect(translationControls).toHaveClass(/reading-paragraph-controls/);
+  await expect(translationControls.getByRole("button")).toHaveCount(2);
+  await expect(translationControls.getByRole("button").first()).toHaveClass(/reading-paragraph-control/);
+  await expect(translationControls.getByRole("button").last()).toHaveClass(/reading-paragraph-control/);
   await page.getByRole("button", { name: /編輯這段中文解釋/ }).click();
   const translationEditor = page.getByRole("textbox", { name: /編輯這段中文解釋/ });
   await translationEditor.fill("birds 是鳥類，這是修正後的解釋。");

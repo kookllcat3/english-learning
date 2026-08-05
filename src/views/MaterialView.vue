@@ -351,7 +351,6 @@ onBeforeUnmount(() => {
             @lookup="openWordCard"
             @activate="openWordCard"
             @deactivate="scheduleWordCardClose"
-            @learn-paragraph="updateWords($event, true)"
             @toggle-reading-paragraph="toggleReadingParagraph"
           />
         </article>

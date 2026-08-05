@@ -64,7 +64,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
   deactivate: [];
-  learnParagraph: [words: string[]];
   lookup: [word: string, rect: DOMRect, key: string];
   toggleReadingParagraph: [paragraphKey: string];
 }>();
@@ -185,10 +184,6 @@ function presentationFor(segment: TextSegment): WordPresentation | undefined {
 
 function hasFamiliarity(segment: TextSegment): boolean {
   return (presentationFor(segment)?.level.level ?? 0) > 0;
-}
-
-function isParagraphKnown(words: string[]): boolean {
-  return words.length > 0 && words.every((word) => props.vocabularyProgress.get(word)?.learned);
 }
 
 function isTranslationHidden(lineKey: string): boolean {
@@ -465,19 +460,6 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 <svg v-else aria-hidden="true" viewBox="0 0 24 24">
                   <rect x="8" y="8" width="11" height="11" rx="2" />
                   <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-                </svg>
-              </button>
-              <button
-                class="reading-paragraph-control"
-                type="button"
-                aria-label="將本段單字標記為認識"
-                title="將本段單字標記為認識"
-                :disabled="isParagraphKnown(paragraph.words)"
-                @pointerdown.stop
-                @click.stop="emit('learnParagraph', paragraph.words)"
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="m5 12 4 4L19 6" />
                 </svg>
               </button>
               <button

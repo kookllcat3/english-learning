@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { createMaterial, materialTitle } from "./test-helpers";
 
-test("marks paragraph words and keeps one reading position", async ({ page }) => {
+test("copies paragraphs and keeps one reading position", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -22,7 +22,7 @@ test("marks paragraph words and keeps one reading position", async ({ page }) =>
 
   const paragraphs = page.locator("[data-reading-paragraph]");
   await expect(paragraphs).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(2);
   await expect(page.getByRole("button", { name: "複製整段英文" })).toHaveCount(2);
 
@@ -42,10 +42,6 @@ test("marks paragraph words and keeps one reading position", async ({ page }) =>
   });
   await paragraphs.nth(1).getByRole("button", { name: "複製整段英文" }).click();
   await expect(paragraphs.nth(1).getByRole("alert")).toHaveText("複製失敗");
-
-  await paragraphs.nth(0).getByRole("button", { name: "將本段單字標記為認識" }).click();
-  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
-  await expect(page.locator('[data-word="fox"]').first()).not.toHaveClass(/known-word/);
 
   const firstMarker = paragraphs.nth(0).getByRole("button", { name: "標記目前閱讀段落" });
   const secondMarker = paragraphs.nth(1).getByRole("button", { name: "標記目前閱讀段落" });
@@ -226,7 +222,6 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(readingGroup).toHaveCount(1);
   await expect(readingGroup).toContainText("EN Birds can fly.");
   await expect(readingGroup).toContainText("中 birds 是鳥類。");
-  await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(1);
   await expect(page.locator(".reading-line-wrap.is-translation")).toHaveCount(1);
   await expect(page.locator('[data-word="birds"]')).toHaveCount(1);

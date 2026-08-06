@@ -7,7 +7,7 @@ import {
   storedWordNotes,
 } from "./test-helpers";
 
-test("reveals a restored note card only after its final position is ready", async ({ page }) => {
+test("positions a restored note card before its note has loaded", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
@@ -50,11 +50,11 @@ test("reveals a restored note card only after its final position is ready", asyn
       __wordCardRevealSamples?: Array<{ text: string; top: number; left: number }>;
     }).__wordCardRevealSamples ?? []
   ));
-  expect(samples[0]?.text).toContain("A long restored note");
   expect(Math.max(...samples.map(({ top }) => top)) - Math.min(...samples.map(({ top }) => top)))
     .toBeLessThan(1);
   expect(Math.max(...samples.map(({ left }) => left)) - Math.min(...samples.map(({ left }) => left)))
     .toBeLessThan(1);
+  await expect(editor).toContainText("A long restored note");
 });
 
 test("persists a word note without showing formatting controls", async ({ page }) => {
@@ -67,14 +67,12 @@ test("persists a word note without showing formatting controls", async ({ page }
   await expect(wordHeading.locator("a")).toHaveCount(0);
   await expect(wordHeading).not.toHaveCSS("user-select", "none");
   const leftHeaderActions = page.locator(".word-card__word").getByRole("button");
-  await expect(leftHeaderActions.nth(0)).toHaveAccessibleName("播放單字發音");
-  await expect(leftHeaderActions.nth(1)).toHaveAccessibleName("標記為已認識");
+  await expect(leftHeaderActions).toHaveCount(0);
   const rightHeaderActions = page.locator(".word-card__actions").getByRole("button");
-  await expect(rightHeaderActions.nth(0)).toHaveAccessibleName("釘選單字卡");
-  await expect(rightHeaderActions).toHaveCount(1);
-  await leftHeaderActions.nth(1).click();
-  await expect(leftHeaderActions.nth(1)).toHaveAccessibleName("標記為不認識");
-  await expect(leftHeaderActions.nth(1)).toHaveClass(/is-active/);
+  await expect(rightHeaderActions.nth(0)).toHaveAccessibleName("播放單字發音");
+  await expect(rightHeaderActions.nth(1)).toHaveAccessibleName("釘選單字卡");
+  await expect(rightHeaderActions).toHaveCount(2);
+  await expect(page.getByRole("button", { name: /標記為(已認識|不認識)/ })).toHaveCount(0);
   for (const control of await page.locator(".word-card__heading button").all()) {
     await expect(control).toHaveCSS("height", "36px");
   }
@@ -372,7 +370,7 @@ test("unpins a pinned word card before its natural outside close", async ({ page
   await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
-  const pinButton = page.locator(".word-card__actions .icon-button");
+  const pinButton = page.getByRole("button", { name: "釘選單字卡" });
   await pinButton.click();
   const nextWord = page.locator('.reading-word:not([data-word="bear"])').first();
   const nextWordText = await nextWord.getAttribute("data-word");

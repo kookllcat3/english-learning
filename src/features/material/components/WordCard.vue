@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   getWordNote,
   saveWordNote,
@@ -10,15 +10,11 @@ import { useWordCardPosition } from "../use-word-card-position.js";
 import { errorMessage } from "../../../shared/errors.js";
 import { acquirePageScrollLock } from "../../../shared/page-scroll-lock.js";
 
-const props = defineProps<{
-  knownWords: Set<string>;
-}>();
 const emit = defineEmits<{
   close: [];
   enter: [];
   leave: [];
   pinChange: [pinned: boolean];
-  toggleKnown: [word: string];
 }>();
 
 const card = ref<HTMLElement | null>(null);
@@ -44,8 +40,6 @@ const {
   clearAnchor,
   positionAt,
 } = useWordCardPosition(card);
-
-const isKnown = computed(() => props.knownWords.has(selectedWord.value));
 
 function cancelScheduledSave(): void {
   window.clearTimeout(saveTimer);
@@ -207,10 +201,14 @@ function currentNoteId(): string {
   return normalizeWord(selectedWord.value);
 }
 
+function renderNoteEditor(): void {
+  if (editor.value) editor.value.innerHTML = renderMarkdown(markdown.value);
+}
+
 async function revealPositionedCard(rect: DOMRect, sequence: number): Promise<void> {
   await nextTick();
   if (sequence !== noteSequence) return;
-  if (editor.value) editor.value.innerHTML = renderMarkdown(markdown.value);
+  renderNoteEditor();
   positionAt(rect);
   positionReady.value = true;
 }
@@ -232,9 +230,12 @@ async function open(
   markdown.value = "";
   savedMarkdown.value = "";
   saveMessage.value = "正在載入筆記…";
-  positionReady.value = false;
+  positionReady.value = visible.value;
   visible.value = true;
+  renderNoteEditor();
   lockPageScroll();
+  await revealPositionedCard(rect, sequence);
+  if (sequence !== noteSequence) return;
   try {
     const noteId = normalizeWord(word);
     const note = await getWordNote(word);
@@ -244,12 +245,11 @@ async function open(
     markdown.value = draft ?? savedMarkdown.value;
     saveMessage.value = draft === null ? "" : "尚未儲存的草稿已復原";
     noteLoading.value = false;
-    await revealPositionedCard(rect, sequence);
+    renderNoteEditor();
   } catch {
     if (sequence === noteSequence) {
       noteLoading.value = false;
       saveMessage.value = "無法載入單字筆記。";
-      await revealPositionedCard(rect, sequence);
     }
   }
 }
@@ -343,25 +343,14 @@ onBeforeUnmount(() => {
     <div class="word-card__heading">
       <div class="word-card__word">
         <h2 id="word-card-title" lang="en">{{ selectedWord }}</h2>
+      </div>
+      <div class="word-card__actions">
         <button class="icon-button word-card__pronounce" type="button" aria-label="播放單字發音" title="播放發音" @click="speak">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 10v4h3l4 3V7l-4 3H5Z" />
             <path d="M16 9.5a4 4 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10" />
           </svg>
         </button>
-        <button
-          class="icon-button word-card__known"
-          type="button"
-          :class="{ 'is-active': isKnown }"
-          :aria-label="isKnown ? '標記為不認識' : '標記為已認識'"
-          :title="isKnown ? '標記為不認識' : '標記為已認識'"
-          :aria-pressed="isKnown"
-          @click="emit('toggleKnown', selectedWord)"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
-        </button>
-      </div>
-      <div class="word-card__actions">
         <button
           class="icon-button"
           type="button"

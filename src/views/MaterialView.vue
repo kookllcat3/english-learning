@@ -412,12 +412,10 @@ onBeforeUnmount(() => {
       <WordCard
         ref="wordCard"
         :style="readingPanelStyle"
-        :known-words="knownWords"
         @close="handleWordCardClosed"
         @enter="keepWordCardOpen"
         @leave="scheduleWordCardClose"
         @pin-change="setWordCardPinned"
-        @toggle-known="toggleWord"
       />
       <AiAssistantDialog :material="material" />
     </template>

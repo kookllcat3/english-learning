@@ -23,7 +23,7 @@ test("uses one Vue app and persists learning progress through routed views", asy
 
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
   await expect(page).toHaveURL(/#\/?$/);
-  const knownWordMetric = page.getByRole("article").filter({ hasText: "已認識詞彙" });
+  const knownWordMetric = page.getByRole("article").filter({ hasText: "已認識單字" });
   await expect(knownWordMetric.getByRole("strong")).toHaveText("1");
 });
 

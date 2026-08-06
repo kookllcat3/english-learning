@@ -13,7 +13,7 @@ const {
 <template>
   <section class="dashboard" aria-label="學習統計">
     <article class="metric-card">
-      <span class="metric-card__label">已認識詞彙</span>
+      <span class="metric-card__label">已認識單字</span>
       <strong class="metric-card__value">{{ knownWordCount }}</strong>
       <span class="metric-card__unit">個</span>
     </article>

@@ -102,12 +102,9 @@ function isSourceText(text: string): boolean {
   return !isTitleCaseLabel(words);
 }
 
-function isLikelyTranslation(text: string): boolean {
+function isDirectChineseTranslation(text: string): boolean {
   const trimmed = text.trim();
-  if (!CJK_PATTERN.test(trimmed) || isReferenceText(trimmed)) return false;
-  return /^中(?:文)?(?:\s*[:：·|—-])?\s*/u.test(trimmed)
-    || /[。！？](?:[”」』】）)]|\s)*$/u.test(trimmed)
-    || trimmed.length >= 12;
+  return Boolean(trimmed) && CJK_PATTERN.test(trimmed) && !isReferenceText(trimmed);
 }
 
 function paragraphCandidates(
@@ -148,7 +145,7 @@ function sourceSection(candidate: ParagraphCandidate): ReadingTextSection | null
     return {
       interactiveTextStart: 0,
       key: line.key,
-      role: reachedTranslation && isLikelyTranslation(line.text)
+      role: reachedTranslation && isDirectChineseTranslation(line.text)
         ? "translation" as const
         : "mixed-reference" as const,
       text: line.text,
@@ -192,7 +189,7 @@ function attachTranslation(
 ): boolean {
   const previous = sections.at(-1);
   if (!previous || previous.type !== "text" || previous.role !== "source") return false;
-  if (!candidate.lines.every((line) => isLikelyTranslation(line.text))) return false;
+  if (!candidate.lines.every((line) => isDirectChineseTranslation(line.text))) return false;
   previous.lines.push(...candidate.lines.map((line) => ({
     interactiveTextStart: 0,
     key: line.key,

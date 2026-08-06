@@ -28,6 +28,50 @@ describe("reading content classification", () => {
     });
   });
 
+  it("attaches an adjacent short Chinese text block as a source translation", () => {
+    const sections = classifyReadingContent([
+      { type: "text", order: 0, text: "That Arizona sky" },
+      { type: "text", order: 1, text: "亞利桑那州的天空" },
+    ]);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]).toMatchObject({
+      key: "0-0-0",
+      lines: [
+        { role: "source", text: "That Arizona sky" },
+        { role: "translation", text: "亞利桑那州的天空" },
+      ],
+      words: ["arizona", "sky", "that"],
+    });
+  });
+
+  it("classifies a short Chinese line immediately after source text as a translation", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: "That Arizona sky\n亞利桑那州的天空",
+    }]);
+
+    expect(sections[0]).toMatchObject({
+      lines: [
+        { role: "source", text: "That Arizona sky" },
+        { role: "translation", text: "亞利桑那州的天空" },
+      ],
+    });
+  });
+
+  it("keeps an adjacent labeled Chinese reference outside a source group", () => {
+    const sections = classifyReadingContent([
+      { type: "text", order: 0, text: "That Arizona sky" },
+      { type: "text", order: 1, text: "學習方法：想像畫面來記憶單字" },
+    ]);
+
+    expect(sections).toMatchObject([
+      { role: "source", lines: [{ role: "source" }] },
+      { role: "mixed-reference", lines: [{ role: "mixed-reference" }] },
+    ]);
+  });
+
   it("keeps DOCX headings, bilingual labels, and references outside source text", () => {
     const blocks: ContentBlock[] = [
       { type: "text", order: 0, text: "A1 ENGLISH · 30 UNITS" },

@@ -529,26 +529,26 @@
 }
 .word-note__status { margin-top: 4px; color: var(--muted); text-align: right; }
 .ai-assistant-dialog {
+  --dialog-edge-space: clamp(16px, 7dvh, 64px);
+
   width: min(720px, calc(100% - 32px));
-  max-height: min(860px, calc(100vh - 32px));
-  max-height: min(860px, calc(100dvh - 32px));
+  max-height: min(
+    860px,
+    calc(100dvh - var(--dialog-edge-space) - var(--dialog-edge-space))
+  );
 }
+.ai-assistant-dialog .dialog__body { box-sizing: border-box; max-height: inherit; }
 .ai-dialog-intro { margin: 16px 0 20px; color: var(--muted); }
 .ai-guide { padding: 16px 18px; border-radius: 12px; background: #f1f4f9; }
 .ai-guide ol { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 22px; color: #4d586f; font-size: .86rem; }
 .ai-prompt-field { margin-bottom: 14px; }
 .ai-prompt-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-prompt-actions { display: flex; align-items: center; gap: 8px; }
+.ai-prompt-actions > button { box-sizing: border-box; height: 44px; }
+.ai-prompt-actions .button { padding: 6px 10px; font-size: .78rem; }
 .ai-prompt-label .text-button { font-size: .75rem; padding: 4px 8px; }
 .ai-prompt-field textarea { min-height: 230px; font: .84rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .ai-prompt-field small.is-warning { color: #9a5a14; font-weight: 700; }
-.ai-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
 .ai-recovery { margin-top: 20px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 11px; }
 .ai-recovery summary { color: var(--navy); font-weight: 800; cursor: pointer; }
 .ai-recovery p { margin: 10px 0 8px; color: var(--muted); font-size: .84rem; }

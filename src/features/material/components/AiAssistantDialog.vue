@@ -124,12 +124,22 @@ onBeforeUnmount(() => window.clearTimeout(promptSaveTimer));
     <div class="field ai-prompt-field">
       <span class="ai-prompt-label">
         <label for="ai-assistant-prompt">可編輯提示詞</label>
-        <button class="text-button" type="button" @click="restoreDefaultPrompt">恢復預設</button>
+        <span class="ai-prompt-actions">
+          <button
+            class="button button--primary"
+            type="button"
+            @click="copy(`${prompt.trim()}\n\n${materialBlock()}`, '學習提示詞已生成並複製，可貼到任意 AI 服務。')"
+          >
+            複製提示詞
+          </button>
+          <button class="text-button" type="button" @click="restoreDefaultPrompt">恢復預設</button>
+        </span>
       </span>
       <textarea id="ai-assistant-prompt" v-model="prompt" rows="10" />
       <small :class="{ 'is-warning': props.material.content.length > 50_000 }">
         {{ materialSizeMessage }}
       </small>
+      <p v-if="status" class="copy-status" :class="{ 'is-error': statusIsError }" role="status">{{ status }}</p>
     </div>
     <details class="ai-recovery">
       <summary>AI 忘記或偏離教材時怎麼辦？</summary>
@@ -143,15 +153,5 @@ onBeforeUnmount(() => window.clearTimeout(promptSaveTimer));
         複製重新提醒
       </button>
     </details>
-    <p class="copy-status" :class="{ 'is-error': statusIsError }" role="status">{{ status }}</p>
-    <div class="ai-actions">
-      <button
-        class="button button--primary"
-        type="button"
-        @click="copy(`${prompt.trim()}\n\n${materialBlock()}`, '學習提示詞已生成並複製，可貼到任意 AI 服務。')"
-      >
-        生成並複製完整學習提示詞
-      </button>
-    </div>
   </BaseDialog>
 </template>

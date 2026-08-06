@@ -411,7 +411,6 @@ onBeforeUnmount(() => {
 
       <WordCard
         ref="wordCard"
-        :style="readingPanelStyle"
         @close="handleWordCardClosed"
         @enter="keepWordCardOpen"
         @leave="scheduleWordCardClose"

@@ -184,6 +184,9 @@ function closeCardWhenIdle(): void {
 function beginCardInteraction(event: PointerEvent): void {
   if (event.button !== 0) return;
   pointerInteractionActive.value = true;
+  if (event.target instanceof Element && event.target.closest("#word-card-title")) {
+    pin();
+  }
   emit("enter");
 }
 

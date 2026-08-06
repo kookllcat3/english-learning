@@ -315,6 +315,15 @@ test("pins the word card when its word is selected", async ({ page }) => {
   const word = page.locator('[data-word="bear"]').first();
   await word.hover();
   await expect(page.getByRole("heading", { name: "bear", level: 2 })).toBeVisible();
+  await page.getByRole("heading", { name: "bear", level: 2 }).dispatchEvent("pointerdown", {
+    button: 0,
+    pointerId: 92,
+    pointerType: "mouse",
+  });
+  await expect(page.getByRole("button", { name: "取消釘選單字卡" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "取消釘選單字卡" }).click();
+  await expect(page.getByRole("button", { name: "釘選單字卡" })).toHaveAttribute("aria-pressed", "false");
   await page.evaluate(() => {
     const heading = document.querySelector<HTMLElement>(".word-card__heading h2");
     if (!heading) throw new Error("word card heading not found");

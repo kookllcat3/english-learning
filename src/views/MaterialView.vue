@@ -112,7 +112,7 @@ const {
   scheduleSelectionLookup,
   setPinned: setWordCardPinned,
   wordCard,
-} = useWordCardInteractions({ materialId });
+} = useWordCardInteractions();
 
 async function refreshKnownWords(): Promise<void> {
   if (!materialId()) return;

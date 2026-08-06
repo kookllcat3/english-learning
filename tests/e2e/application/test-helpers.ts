@@ -9,6 +9,32 @@ export interface StoredContextualNote {
   occurrenceKey: string;
 }
 
+export interface StoredWordNote {
+  markdown: string;
+  word: string;
+}
+
+export async function storedWordNotes(page: Page): Promise<StoredWordNote[]> {
+  return page.evaluate(async () => new Promise<StoredWordNote[]>((resolve, reject) => {
+    const request = indexedDB.open("english-learning");
+    request.addEventListener("success", () => {
+      const database = request.result;
+      const records = database.transaction("wordNotes", "readonly")
+        .objectStore("wordNotes")
+        .getAll();
+      records.addEventListener("success", () => {
+        resolve(records.result.map((record) => ({
+          markdown: record.markdown,
+          word: record.word,
+        })));
+        database.close();
+      }, { once: true });
+      records.addEventListener("error", () => reject(records.error), { once: true });
+    }, { once: true });
+    request.addEventListener("error", () => reject(request.error), { once: true });
+  }));
+}
+
 export async function storedContextualNotes(page: Page): Promise<StoredContextualNote[]> {
   return page.evaluate(async () => new Promise<StoredContextualNote[]>((resolve, reject) => {
     const request = indexedDB.open("english-learning");

@@ -4,7 +4,7 @@ import {
   createMaterial,
   materialContent,
   materialTitle,
-  storedContextualNotes,
+  storedWordNotes,
 } from "./test-helpers";
 
 test("reveals a restored note card only after its final position is ready", async ({ page }) => {
@@ -15,6 +15,7 @@ test("reveals a restored note card only after its final position is ready", asyn
   const editor = page.getByLabel("單字 Markdown 筆記");
   const note = "A long restored note ".repeat(30);
   await word.hover();
+  await expect(editor).toHaveAttribute("data-placeholder", "這是「bear」的共用筆記，所有教材都會顯示…");
   await editor.fill(note);
   await page.waitForTimeout(700);
   await page.reload();
@@ -139,7 +140,7 @@ test("keeps a word note draft visible when IndexedDB persistence fails", async (
       IDBObjectStore.prototype.put = originalPut;
     };
     IDBObjectStore.prototype.put = function put(value, key) {
-      if (this.name === "contextualWordNotes") {
+      if (this.name === "wordNotes") {
         throw new DOMException("Simulated write failure", "UnknownError");
       }
       return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
@@ -269,9 +270,9 @@ test("persists a partial-word selection with its exact text range", async ({ pag
   await expect(page.getByRole("heading", { name: "ear", level: 2 })).toBeVisible();
   await editor.fill("partial-word note");
   await expect(page.getByRole("status")).toHaveText("已儲存");
-  await expect.poll(async () => storedContextualNotes(page)).toContainEqual({
+  await expect.poll(async () => storedWordNotes(page)).toContainEqual({
     markdown: "partial-word note",
-    occurrenceKey: "selection:0-0-0:0-0-0-0:3:6",
+    word: "ear",
   });
 
   await page.reload();
@@ -373,10 +374,10 @@ test("unpins a pinned word card before its natural outside close", async ({ page
   await expect(pinButton).toHaveAttribute("aria-pressed", "false");
 });
 
-test("keeps notes separate for repeated words and the vocabulary entry", async ({ page }) => {
+test("shares a word note across repeated words and the vocabulary entry", async ({ page }) => {
   await createMaterial(
     page,
-    "Repeated contextual notes",
+    "Shared word notes",
     "The driver waits.\n司機正在等待。\n\nThe driver leaves.\n司機離開了。",
   );
   await page.getByRole("link", { name: "開始閱讀" }).click();
@@ -384,27 +385,25 @@ test("keeps notes separate for repeated words and the vocabulary entry", async (
   const repeatedWords = page.locator('[data-word="driver"]');
   const editor = page.getByLabel("單字 Markdown 筆記");
   await repeatedWords.nth(0).focus();
-  await editor.fill("first occurrence");
+  await editor.fill("first shared note");
   await expect(page.getByRole("status")).toHaveText("已儲存");
 
   await page.getByRole("button", { name: "取消釘選單字卡" }).click();
   await editor.evaluate((element) => (element as HTMLElement).blur());
   await page.locator(".word-card").dispatchEvent("pointerleave");
   await repeatedWords.nth(1).focus();
-  await expect(editor).toHaveText("");
-  await editor.fill("second occurrence");
-  await expect(page.getByRole("status")).toHaveText("已儲存");
+  await expect(editor).toHaveText("first shared note");
 
   await page.getByRole("button", { name: "教材詞彙" }).click();
   await page.locator(".word-item__lookup", { hasText: "driver" }).click();
-  await expect(editor).toHaveText("");
-  await editor.fill("vocabulary entry");
+  await expect(editor).toHaveText("first shared note");
+  await editor.fill("updated shared note");
   await expect(page.getByRole("status")).toHaveText("已儲存");
 
   await page.reload();
   await repeatedWords.nth(0).focus();
-  await expect(editor).toHaveText("first occurrence");
+  await expect(editor).toHaveText("updated shared note");
   await page.locator(".word-card").dispatchEvent("pointerleave");
   await repeatedWords.nth(1).focus();
-  await expect(editor).toHaveText("second occurrence");
+  await expect(editor).toHaveText("updated shared note");
 });

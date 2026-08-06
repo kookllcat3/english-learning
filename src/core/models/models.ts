@@ -72,12 +72,14 @@ export interface VocabularyRecord {
   lastSeenAt?: string;
 }
 
-export interface LegacyWordNoteRecord {
+export interface WordNoteRecord {
   word: string;
   markdown: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export type LegacyWordNoteRecord = WordNoteRecord;
 
 export interface WordNoteContext {
   materialId: string;
@@ -113,6 +115,7 @@ export interface BackupStoreRecords {
   materialTerms: MaterialTermsRecord[];
   vocabulary: VocabularyRecord[];
   contextualWordNotes: ContextualWordNoteRecord[];
+  wordNotes?: WordNoteRecord[];
   settings: SettingRecord[];
 }
 
@@ -132,7 +135,7 @@ export interface LearningBackup {
   materialAssets?: BackupMaterialAsset[];
   vocabulary: VocabularyRecord[];
   contextualWordNotes?: ContextualWordNoteRecord[];
-  wordNotes?: LegacyWordNoteRecord[];
+  wordNotes?: WordNoteRecord[];
   settings?: SettingRecord[];
 }
 

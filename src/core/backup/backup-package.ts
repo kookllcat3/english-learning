@@ -146,7 +146,7 @@ export async function createBackupPackage(backup: LearningBackup): Promise<Blob>
   const files = new Map<string, Uint8Array>();
   const materials = new TextEncoder().encode(jsonText(backup.materials));
   const vocabulary = new TextEncoder().encode(jsonText(backup.vocabulary));
-  const usesContextualWordNotes = backup.schemaVersion >= 4;
+  const usesContextualWordNotes = backup.schemaVersion === 4;
   const noteFile = usesContextualWordNotes ? CONTEXTUAL_WORD_NOTES_FILE : LEGACY_WORD_NOTES_FILE;
   const notes = new TextEncoder().encode(jsonText(
     usesContextualWordNotes ? backup.contextualWordNotes ?? [] : backup.wordNotes ?? [],
@@ -254,7 +254,7 @@ export async function readBackupPackage(file: Blob): Promise<BackupPackagePrevie
     settings: decodeJson(verifiedFile(SETTINGS_FILE)) as LearningBackup["settings"],
     materialAssets: [],
   };
-  if (manifest.schemaVersion >= 4) {
+  if (manifest.schemaVersion === 4) {
     backup.contextualWordNotes = decodeJson(verifiedFile(CONTEXTUAL_WORD_NOTES_FILE)) as LearningBackup["contextualWordNotes"];
   } else {
     backup.wordNotes = decodeJson(verifiedFile(LEGACY_WORD_NOTES_FILE)) as LearningBackup["wordNotes"];

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
-  getContextualWordNote,
-  saveContextualWordNote,
-} from "../../../core/learning/contextual-word-note-repository.js";
-import { contextualWordNoteId } from "../../../core/learning/contextual-word-note.js";
-import type { WordNoteContext } from "../../../core/models/models.js";
+  getWordNote,
+  saveWordNote,
+} from "../../../core/learning/word-note-repository.js";
+import { normalizeWord } from "../../../core/text/text.js";
 import { htmlToMarkdown, renderMarkdown } from "../markdown.js";
 import { useWordCardPosition } from "../use-word-card-position.js";
 import { errorMessage } from "../../../shared/errors.js";
@@ -25,7 +24,6 @@ const emit = defineEmits<{
 const card = ref<HTMLElement | null>(null);
 const editor = ref<HTMLDivElement | null>(null);
 const selectedWord = ref("");
-const selectedNoteContext = ref<WordNoteContext | null>(null);
 const markdown = ref("");
 const savedMarkdown = ref("");
 const saveMessage = ref("");
@@ -40,7 +38,7 @@ let noteCompositionActive = false;
 let noteSequence = 0;
 let saveTimer: number | undefined;
 let releasePageScrollLock: (() => void) | null = null;
-const NOTE_DRAFT_PREFIX = "english-learning:contextual-word-note-draft:";
+const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
 const PAGE_SCROLL_LOCK_MEDIA_QUERY = "(hover: none), (pointer: coarse)";
 const {
   clearAnchor,
@@ -54,30 +52,30 @@ function cancelScheduledSave(): void {
   saveTimer = undefined;
 }
 
-function draftKey(context: WordNoteContext): string {
-  return `${NOTE_DRAFT_PREFIX}${contextualWordNoteId(context)}`;
+function draftKey(word: string): string {
+  return `${NOTE_DRAFT_PREFIX}${normalizeWord(word)}`;
 }
 
-function preserveDraft(context: WordNoteContext, value: string): void {
+function preserveDraft(word: string, value: string): void {
   try {
-    sessionStorage.setItem(draftKey(context), value);
+    sessionStorage.setItem(draftKey(word), value);
   } catch {
     // IndexedDB remains the primary store; an unavailable session store only removes crash recovery.
   }
 }
 
-function readDraft(context: WordNoteContext): string | null {
+function readDraft(word: string): string | null {
   try {
-    return sessionStorage.getItem(draftKey(context));
+    return sessionStorage.getItem(draftKey(word));
   } catch {
     return null;
   }
 }
 
-function discardSavedDraft(context: WordNoteContext, value: string): void {
+function discardSavedDraft(word: string, value: string): void {
   try {
-    if (sessionStorage.getItem(draftKey(context)) === value) {
-      sessionStorage.removeItem(draftKey(context));
+    if (sessionStorage.getItem(draftKey(word)) === value) {
+      sessionStorage.removeItem(draftKey(word));
     }
   } catch {
     // An unavailable session store does not invalidate the completed IndexedDB write.
@@ -86,20 +84,20 @@ function discardSavedDraft(context: WordNoteContext, value: string): void {
 
 async function persistNote(): Promise<boolean> {
   cancelScheduledSave();
-  const context = selectedNoteContext.value;
-  if (!context || markdown.value === savedMarkdown.value) return true;
-  const noteId = contextualWordNoteId(context);
+  const word = selectedWord.value;
+  if (!word || markdown.value === savedMarkdown.value) return true;
+  const noteId = normalizeWord(word);
   const value = markdown.value;
   saveMessage.value = "儲存中…";
   try {
-    await saveContextualWordNote(context, value);
-    discardSavedDraft(context, value);
+    await saveWordNote(word, value);
+    discardSavedDraft(word, value);
     if (noteId !== currentNoteId() || value !== markdown.value) return true;
     savedMarkdown.value = value;
     saveMessage.value = "已儲存";
     return true;
   } catch (error) {
-    preserveDraft(context, value);
+    preserveDraft(word, value);
     if (noteId === currentNoteId()) {
       saveMessage.value = `${errorMessage(error, "單字筆記儲存失敗。")} 草稿仍保留在此分頁。`;
     }
@@ -108,10 +106,10 @@ async function persistNote(): Promise<boolean> {
 }
 
 function scheduleSave(): void {
-  const context = selectedNoteContext.value;
-  if (!context) return;
+  const word = selectedWord.value;
+  if (!word) return;
   saveMessage.value = "尚未儲存";
-  preserveDraft(context, markdown.value);
+  preserveDraft(word, markdown.value);
   cancelScheduledSave();
   saveTimer = window.setTimeout(() => void persistNote(), 500);
 }
@@ -125,7 +123,6 @@ async function requestClose(): Promise<void> {
   positionReady.value = false;
   visible.value = false;
   selectedWord.value = "";
-  selectedNoteContext.value = null;
   clearAnchor();
   unlockPageScroll();
   if (pinned.value) {
@@ -204,7 +201,7 @@ function handleCardFocusOut(event: FocusEvent): void {
 }
 
 function currentNoteId(): string {
-  return selectedNoteContext.value ? contextualWordNoteId(selectedNoteContext.value) : "";
+  return normalizeWord(selectedWord.value);
 }
 
 async function revealPositionedCard(rect: DOMRect, sequence: number): Promise<void> {
@@ -218,7 +215,6 @@ async function revealPositionedCard(rect: DOMRect, sequence: number): Promise<vo
 async function open(
   word: string,
   rect: DOMRect,
-  noteContext: WordNoteContext | null,
   shouldPin = false,
 ): Promise<void> {
   const sequence = ++noteSequence;
@@ -227,26 +223,21 @@ async function open(
   noteEditingActive = false;
   noteCompositionActive = false;
   selectedWord.value = word;
-  selectedNoteContext.value = noteContext;
-  noteLoading.value = noteContext !== null;
+  noteLoading.value = true;
   pinned.value = shouldPin;
   if (shouldPin) emit("pinChange", true);
   markdown.value = "";
   savedMarkdown.value = "";
-  saveMessage.value = noteContext ? "正在載入筆記…" : "此選取沒有固定教材位置，無法儲存筆記。";
+  saveMessage.value = "正在載入筆記…";
   positionReady.value = false;
   visible.value = true;
   lockPageScroll();
-  if (!noteContext) {
-    await revealPositionedCard(rect, sequence);
-    return;
-  }
   try {
-    const noteId = contextualWordNoteId(noteContext);
-    const note = await getContextualWordNote(noteContext);
+    const noteId = normalizeWord(word);
+    const note = await getWordNote(word);
     if (sequence !== noteSequence || noteId !== currentNoteId()) return;
     savedMarkdown.value = note?.markdown ?? "";
-    const draft = readDraft(noteContext);
+    const draft = readDraft(word);
     markdown.value = draft ?? savedMarkdown.value;
     saveMessage.value = draft === null ? "" : "尚未儲存的草稿已復原";
     noteLoading.value = false;
@@ -270,7 +261,6 @@ function speak(): void {
 }
 
 function updateMarkdownFromEditor(): void {
-  if (!selectedNoteContext.value) return;
   if (noteCompositionActive) return;
   if (!editor.value) return;
   markdown.value = htmlToMarkdown(editor.value.innerHTML);
@@ -278,7 +268,6 @@ function updateMarkdownFromEditor(): void {
 }
 
 function beginNoteEditing(): void {
-  if (!selectedNoteContext.value) return;
   noteEditingActive = true;
   pin();
   keepCardOpen();
@@ -323,8 +312,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelScheduledSave();
   unlockPageScroll();
-  if (selectedNoteContext.value && markdown.value !== savedMarkdown.value) {
-    preserveDraft(selectedNoteContext.value, markdown.value);
+  if (selectedWord.value && markdown.value !== savedMarkdown.value) {
+    preserveDraft(selectedWord.value, markdown.value);
     void persistNote();
   }
   window.speechSynthesis?.cancel();
@@ -391,11 +380,11 @@ onBeforeUnmount(() => {
       <div
         ref="editor"
         class="word-note__editor"
-        :class="{ 'is-disabled': !selectedNoteContext || noteLoading }"
-        :contenteditable="selectedNoteContext && !noteLoading ? 'true' : 'false'"
-        :aria-disabled="!selectedNoteContext || noteLoading"
+        :class="{ 'is-disabled': noteLoading }"
+        :contenteditable="!noteLoading ? 'true' : 'false'"
+        :aria-disabled="noteLoading"
         aria-label="單字 Markdown 筆記"
-        data-placeholder="記下解釋、例句或聯想…"
+        :data-placeholder="`這是「${selectedWord}」的共用筆記，所有教材都會顯示…`"
         role="textbox"
         aria-multiline="true"
         @focus="beginNoteEditing"

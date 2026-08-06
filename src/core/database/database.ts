@@ -9,12 +9,12 @@ import type {
   SettingRecord,
   StoredMaterialAssetRecord,
   VocabularyRecord,
+  WordNoteRecord,
 } from "../models/models.js";
 
 const DATABASE_NAME = "english-learning";
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 const BACKUP_TRANSACTION_TIMEOUT_MS = 60_000;
-const LEGACY_WORD_NOTES_STORE = "wordNotes";
 
 export const STORES = Object.freeze({
   contextualWordNotes: "contextualWordNotes",
@@ -24,6 +24,7 @@ export const STORES = Object.freeze({
   materials: "materials",
   settings: "settings",
   vocabulary: "vocabulary",
+  wordNotes: "wordNotes",
 });
 
 type StoreName = typeof STORES[keyof typeof STORES];
@@ -36,6 +37,7 @@ interface StoreRecordMap {
   materials: MaterialRecord;
   settings: SettingRecord;
   vocabulary: VocabularyRecord;
+  wordNotes: WordNoteRecord;
 }
 
 let databasePromise: Promise<IDBDatabase> | undefined;
@@ -143,12 +145,12 @@ function createSchema(database: IDBDatabase): void {
     const materialAssets = database.createObjectStore(STORES.materialAssets, { keyPath: "id" });
     materialAssets.createIndex("materialId", "materialId");
   }
+  if (!database.objectStoreNames.contains(STORES.wordNotes)) {
+    database.createObjectStore(STORES.wordNotes, { keyPath: "word" });
+  }
   if (!database.objectStoreNames.contains(STORES.contextualWordNotes)) {
     const notes = database.createObjectStore(STORES.contextualWordNotes, { keyPath: "id" });
     notes.createIndex("materialId", "materialId");
-  }
-  if (database.objectStoreNames.contains(LEGACY_WORD_NOTES_STORE)) {
-    database.deleteObjectStore(LEGACY_WORD_NOTES_STORE);
   }
 }
 
@@ -363,6 +365,7 @@ export async function writeBackupStores({
   materialTerms,
   vocabulary,
   contextualWordNotes,
+  wordNotes = [],
   settings,
 }: BackupStoreRecords): Promise<void> {
   const assetsToStore = await Promise.all(materialAssets.map(storedAsset));
@@ -379,6 +382,7 @@ export async function writeBackupStores({
   const vocabularyStore = transaction.objectStore(STORES.vocabulary);
   const settingsStore = transaction.objectStore(STORES.settings);
   const contextualWordNoteStore = transaction.objectStore(STORES.contextualWordNotes);
+  const wordNoteStore = transaction.objectStore(STORES.wordNotes);
   const contentStore = transaction.objectStore(STORES.materialContents);
   const termStore = transaction.objectStore(STORES.materialTerms);
 
@@ -390,6 +394,8 @@ export async function writeBackupStores({
   vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
   trackRequest(contextualWordNoteStore.clear());
   contextualWordNotes.forEach((record) => trackRequest(contextualWordNoteStore.put(record)));
+  trackRequest(wordNoteStore.clear());
+  wordNotes.forEach((record) => trackRequest(wordNoteStore.put(record)));
   settings.forEach((setting) => trackRequest(settingsStore.put(setting)));
   await transactionResult(
     transaction,

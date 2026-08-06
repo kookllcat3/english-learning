@@ -1,10 +1,5 @@
 import { ref } from "vue";
 
-import {
-  readingWordOccurrenceKey,
-  vocabularyWordOccurrenceKey,
-} from "../../../core/learning/contextual-word-note.js";
-import type { WordNoteContext } from "../../../core/models/models.js";
 import { isValidWord, normalizeWord } from "../../../core/text/text.js";
 
 export interface WordCardController {
@@ -12,21 +7,16 @@ export interface WordCardController {
   open(
     word: string,
     rect: DOMRect,
-    noteContext: WordNoteContext | null,
     shouldPin?: boolean,
   ): Promise<void>;
   unpin(): void;
-}
-
-interface WordCardInteractionOptions {
-  materialId: () => string;
 }
 
 const CLOSE_DELAY_MS = 120;
 const HOVER_DELAY_MS = 600;
 const SELECTION_DELAY_MS = 220;
 
-export function useWordCardInteractions(options: WordCardInteractionOptions) {
+export function useWordCardInteractions() {
   const wordCard = ref<WordCardController | null>(null);
   const activeWord = ref("");
   const pinned = ref(false);
@@ -51,69 +41,14 @@ export function useWordCardInteractions(options: WordCardInteractionOptions) {
       return;
     }
     activeWord.value = key;
-    const occurrenceKey = key ? readingWordOccurrenceKey(key) : "";
-    const noteContext = occurrenceKey ? createNoteContext(word, occurrenceKey) : null;
-    void wordCard.value?.open(word, rect, noteContext, trigger === "selection");
-  }
-
-  function createNoteContext(word: string, occurrenceKey: string): WordNoteContext | null {
-    const currentMaterialId = options.materialId();
-    if (!currentMaterialId || !occurrenceKey) return null;
-    return { materialId: currentMaterialId, occurrenceKey, word };
+    void wordCard.value?.open(word, rect, trigger === "selection");
   }
 
   function openVocabularyWord(word: string, rect: DOMRect): void {
     window.clearTimeout(hoverTimer);
     window.clearTimeout(closeTimer);
     activeWord.value = "";
-    void wordCard.value?.open(
-      word,
-      rect,
-      createNoteContext(word, vocabularyWordOccurrenceKey(word)),
-    );
-  }
-
-  function selectedOccurrenceKey(range: Range, word: string): string {
-    const startElement = range.startContainer instanceof Element
-      ? range.startContainer
-      : range.startContainer.parentElement;
-    const endElement = range.endContainer instanceof Element
-      ? range.endContainer
-      : range.endContainer.parentElement;
-    const startWord = startElement?.closest<HTMLElement>(".reading-word");
-    const endWord = endElement?.closest<HTMLElement>(".reading-word");
-    if (
-      startWord
-      && startWord === endWord
-      && startWord.dataset.wordKey
-      && normalizeWord(startWord.dataset.word ?? "") === word
-    ) {
-      return readingWordOccurrenceKey(startWord.dataset.wordKey);
-    }
-
-    const startLine = startElement?.closest<HTMLElement>("[data-source-line-key]");
-    const endLine = endElement?.closest<HTMLElement>("[data-source-line-key]");
-    const paragraph = startElement?.closest<HTMLElement>("[data-paragraph-key]");
-    if (!startLine || startLine !== endLine || !paragraph?.dataset.paragraphKey) return "";
-    const sourceLine = startLine.querySelector<HTMLElement>(".reading-line");
-    if (!sourceLine || !sourceLine.contains(range.startContainer) || !sourceLine.contains(range.endContainer)) {
-      return "";
-    }
-    const textOffset = (container: Node, offset: number): number => {
-      const prefix = range.cloneRange();
-      prefix.selectNodeContents(sourceLine);
-      prefix.setEnd(container, offset);
-      return prefix.toString().length;
-    };
-    const startOffset = textOffset(range.startContainer, range.startOffset);
-    const endOffset = textOffset(range.endContainer, range.endOffset);
-    return [
-      "selection",
-      paragraph.dataset.paragraphKey,
-      startLine.dataset.sourceLineKey,
-      startOffset,
-      endOffset,
-    ].join(":");
+    void wordCard.value?.open(word, rect);
   }
 
   function scheduleClose(): void {
@@ -165,14 +100,12 @@ export function useWordCardInteractions(options: WordCardInteractionOptions) {
     const word = normalizeWord(selection.toString());
     if (!isValidWord(word)) return;
     const range = selection.getRangeAt(0);
-    const occurrenceKey = selectedOccurrenceKey(range, word);
     window.clearTimeout(hoverTimer);
     window.clearTimeout(closeTimer);
     activeWord.value = "";
     void wordCard.value?.open(
       word,
       range.getBoundingClientRect(),
-      createNoteContext(word, occurrenceKey),
       true,
     );
   }

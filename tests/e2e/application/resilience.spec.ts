@@ -92,7 +92,7 @@ test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
   await expect(page.getByText("Animal", { exact: true })).toBeVisible();
 });
 
-test("replaces the legacy word note store during the version 7 upgrade", async ({ page }) => {
+test("preserves the legacy word note store during the version 8 upgrade", async ({ page }) => {
   await page.goto("/tests/e2e/fixtures/same-origin.html");
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
@@ -131,29 +131,33 @@ test("replaces the legacy word note store during the version 7 upgrade", async (
   const state = await page.evaluate(async () => new Promise<{
     stores: string[];
     version: number;
+    preservedNote: unknown;
     preservedSetting: unknown;
   }>((resolve, reject) => {
     const request = indexedDB.open("english-learning");
     request.onsuccess = () => {
       const database = request.result;
-      const transaction = database.transaction("settings", "readonly");
+      const transaction = database.transaction(["settings", "wordNotes"], "readonly");
       const settingRequest = transaction.objectStore("settings").get("searchHistory");
-      settingRequest.onsuccess = () => {
+      const noteRequest = transaction.objectStore("wordNotes").get("driver");
+      transaction.oncomplete = () => {
         resolve({
           stores: [...database.objectStoreNames],
           version: database.version,
+          preservedNote: noteRequest.result,
           preservedSetting: settingRequest.result,
         });
         database.close();
       };
-      settingRequest.onerror = () => reject(settingRequest.error);
+      transaction.onerror = () => reject(transaction.error);
     };
     request.onerror = () => reject(request.error);
   }));
 
-  expect(state.version).toBe(7);
+  expect(state.version).toBe(8);
   expect(state.stores).toContain("contextualWordNotes");
-  expect(state.stores).not.toContain("wordNotes");
+  expect(state.stores).toContain("wordNotes");
+  expect(state.preservedNote).toMatchObject({ markdown: "legacy global note", word: "driver" });
   expect(state.preservedSetting).toMatchObject({ value: ["preserved"] });
 });
 
@@ -208,4 +212,5 @@ test("reports a blocked database upgrade and succeeds after the old connection c
     });
   });
   expect(stores).toContain("contextualWordNotes");
+  expect(stores).toContain("wordNotes");
 });

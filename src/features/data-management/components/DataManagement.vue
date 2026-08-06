@@ -175,7 +175,14 @@ function chooseBackupFile(): void {
           <h3>匯入並合併</h3>
           <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
           <button class="button button--secondary" type="button" :disabled="isBackupBusy" @click="chooseBackupFile">選擇備份</button>
-          <input ref="backupFile" type="file" hidden :disabled="isBackupBusy" @change="handleBackupFile">
+          <input
+            ref="backupFile"
+            type="file"
+            accept=".elpkg,.json,application/zip,application/json,application/octet-stream"
+            hidden
+            :disabled="isBackupBusy"
+            @change="handleBackupFile"
+          >
         </div>
       </section>
     </div>

@@ -56,7 +56,7 @@ test("allows a current backup package to be chosen on mobile", async ({ page }) 
   await page.goto("/");
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   const backupInput = page.locator('.data-management-dialog input[type="file"]');
-  await expect(backupInput).not.toHaveAttribute("accept", /.+/);
+  await expect(backupInput).toHaveAttribute("accept", /\.elpkg.*\.json/);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "下載備份" }).click();

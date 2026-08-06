@@ -178,7 +178,7 @@ function chooseBackupFile(): void {
           <input
             ref="backupFile"
             type="file"
-            accept=".elpkg,.json,application/zip,application/json,application/octet-stream"
+            accept=".elpkg,.json"
             hidden
             :disabled="isBackupBusy"
             @change="handleBackupFile"

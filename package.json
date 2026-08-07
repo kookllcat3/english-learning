@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "npm run test:unit",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e-tests.mjs",
     "test:e2e:production": "node scripts/run-production-tests.mjs",
     "typecheck": "vue-tsc --noEmit",
     "check": "npm run typecheck && npm run test:unit && vite build",
@@ -28,12 +28,12 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
-    "@playwright/test": "1.62.0",
+    "@playwright/test": "1.62.1",
     "@types/node": "26.1.2",
     "@vitejs/plugin-vue": "6.0.8",
     "typescript": "6.0.3",
-    "vite": "8.1.5",
+    "vite": "8.2.0",
     "vitest": "4.1.10",
-    "vue-tsc": "3.3.8"
+    "vue-tsc": "3.3.9"
   }
 }

@@ -41,29 +41,31 @@
 .material-sort-options {
   display: flex;
   max-width: 100%;
-  gap: 8px;
+  gap: 2px;
   margin: 0;
-  padding: 0 0 3px;
+  padding: 4px;
   overflow-x: auto;
   border: 0;
+  border-radius: 12px;
+  background: #e9e7e1;
   scrollbar-width: thin;
 }
 .material-sort-options label {
   position: relative;
   flex: 0 0 auto;
   padding: 7px 12px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 9px;
   color: #4e5668;
-  background: #eeece7;
+  background: transparent;
   font-size: .8rem;
   font-weight: 750;
   cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
 }
+.material-sort-options label:hover { background: rgb(255 255 255 / 55%); }
 .material-sort-options label:has(input:checked) {
-  border-color: #b7dfca;
-  color: #126b42;
-  background: #dff4e8;
+  color: white;
+  background: var(--navy);
 }
 .material-sort-options input {
   position: absolute;
@@ -74,7 +76,9 @@
   opacity: 0;
   cursor: pointer;
 }
-.material-sort-options label:focus-within { outline: 3px solid rgb(31 183 104 / 18%); outline-offset: 2px; }
+.material-sort-options label:has(input:focus-visible) {
+  box-shadow: inset 0 0 0 2px white, inset 0 0 0 4px #61708e;
+}
 .material-search {
   display: flex;
   width: 100%;

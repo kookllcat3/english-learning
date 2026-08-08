@@ -14,10 +14,6 @@ import {
   setWordsKnown,
 } from "../core/learning/learning-repository.js";
 import {
-  getFamiliarityColor,
-  setFamiliarityColor,
-} from "../core/settings/settings-repository.js";
-import {
   notifyLearningDataChanged,
 } from "../core/learning/learning-sync.js";
 import { sourceWordsForBlocks } from "../core/learning/reading-content.js";
@@ -26,7 +22,6 @@ import { errorMessage as getErrorMessage } from "../shared/errors.js";
 import { useLearningDataRefresh } from "../app/composables/use-learning-data-refresh.js";
 import AiAssistantDialog from "../features/material/components/AiAssistantDialog.vue";
 import {
-  familiarityColors,
   loadFamiliarityLevels,
   type FamiliarityLevel,
 } from "../features/material/familiarity.js";
@@ -44,7 +39,6 @@ const material = ref<BackupMaterial | null>(null);
 const materialWords = ref<string[]>([]);
 const vocabularyProgress = ref(new Map<string, VocabularyRecord>());
 const familiarityLevels = ref<FamiliarityLevel[]>([]);
-const familiarityColor = ref("#d86b48");
 const activeView = ref<MaterialViewMode>("reading");
 const searchQuery = ref("");
 const loading = ref(true);
@@ -71,14 +65,6 @@ const visibleWords = computed(() => {
     : materialWords.value;
 });
 const displayedWords = computed(() => visibleWords.value.slice(0, visibleWordLimit.value));
-const readingPanelStyle = computed(() => {
-  const colors = familiarityColors(familiarityColor.value);
-  return {
-    "--familiarity-base-rgb": colors.base,
-    "--familiarity-glow-rgb": colors.glow,
-  };
-});
-
 function materialId(): string {
   return String(route.params.id ?? "");
 }
@@ -134,16 +120,14 @@ async function loadMaterialPage(): Promise<void> {
   }
 
   try {
-    const [loadedMaterial, progress, color, levels] = await Promise.all([
+    const [loadedMaterial, progress, levels] = await Promise.all([
       getMaterial(id),
       getVocabularyProgress(id),
-      getFamiliarityColor(),
       loadFamiliarityLevels(),
     ]);
     if (sequence !== loadSequence) return;
     material.value = loadedMaterial;
     vocabularyProgress.value = progress;
-    familiarityColor.value = color;
     familiarityLevels.value = levels;
     currentParagraphKey.value = loadedMaterial.readingParagraphKey ?? null;
     materialWords.value = sourceWordsForBlocks(loadedMaterial.contentBlocks);
@@ -170,15 +154,6 @@ async function updateWords(words: string[], learned: boolean): Promise<void> {
 
 function toggleWord(word: string): void {
   void updateWords([word], !knownWords.value.has(word));
-}
-
-async function saveFamiliarityColor(): Promise<void> {
-  actionError.value = "";
-  try {
-    await setFamiliarityColor(familiarityColor.value);
-  } catch (error) {
-    actionError.value = getErrorMessage(error, "無法更新熟悉度顏色。");
-  }
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -277,7 +252,6 @@ onBeforeUnmount(() => {
           ref="readingPanel"
           class="panel reading-panel"
           :hidden="activeView !== 'reading'"
-          :style="readingPanelStyle"
         >
           <div class="panel__heading">
             <div ref="readingPositionReturnAnchor" class="reading-panel__title-row">
@@ -302,16 +276,7 @@ onBeforeUnmount(() => {
               >
                 熟悉度標記
               </button>
-              <label class="familiarity-color-picker">
-                <span class="sr-only">選擇已學標記顏色</span>
-                <span class="familiarity-legend__scale" aria-hidden="true" />
-                <input
-                  v-model="familiarityColor"
-                  type="color"
-                  aria-label="選擇已學標記顏色"
-                  @change="saveFamiliarityColor"
-                >
-              </label>
+              <span class="familiarity-legend__scale" aria-hidden="true" />
               <span
                 id="familiarity-tooltip"
                 class="familiarity-tooltip"
@@ -320,7 +285,7 @@ onBeforeUnmount(() => {
               >
                 熟悉度依單字在幾份教材中被你勾選為認識來計算，同一份教材只算一次。
                 尚未建立熟悉度時不顯示效果；隨著認識這個單字的教材增加，標記深度、流光與光暈會逐步增強。
-                點擊旁邊色帶可以自訂標記顏色。
+                熟悉度使用固定的深靛藍標記與淡金流光，方便與螢光筆背景區分。
               </span>
             </p>
           </div>

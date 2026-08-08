@@ -15,7 +15,8 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
 
   const translationLine = page.locator(".reading-line-wrap.is-translation").first();
   const translationText = translationLine.locator(".reading-line");
-  const toggle = translationLine.locator(".translation-visibility-toggle");
+  const firstParagraph = page.locator(".reading-paragraph").first();
+  const toggle = firstParagraph.getByRole("button", { name: "隱藏這段中文翻譯" });
 
   await expect(toggle).toHaveCSS("pointer-events", "auto");
   await toggle.tap();

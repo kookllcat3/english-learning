@@ -1,8 +1,6 @@
 import { STORES, readOne, writeOne } from "../database/database.js";
 import type { SettingRecord } from "../models/models.js";
 
-const DEFAULT_FAMILIARITY_COLOR = "#d86b48";
-const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const SEARCH_HISTORY_LIMIT = 8;
 const AI_PROMPT_KEY = "aiPrompt";
 const PROMPT_MAX_LENGTH = 20_000;
@@ -19,24 +17,6 @@ export const MATERIAL_GUIDE_PROMPT_SETTING_KEYS = Object.values(
   MATERIAL_GUIDE_PROMPT_KEYS,
 );
 export const MATERIAL_GUIDE_PROMPT_MAX_LENGTH = PROMPT_MAX_LENGTH;
-
-export async function getFamiliarityColor(): Promise<string> {
-  const record = await readOne(STORES.settings, "familiarityColor");
-  return typeof record?.value === "string" && HEX_COLOR_PATTERN.test(record.value)
-    ? record.value
-    : DEFAULT_FAMILIARITY_COLOR;
-}
-
-export async function setFamiliarityColor(color: string): Promise<SettingRecord> {
-  if (!HEX_COLOR_PATTERN.test(color)) {
-    throw new Error("熟悉度標記顏色格式不正確。");
-  }
-  return writeOne(STORES.settings, {
-    key: "familiarityColor",
-    value: color.toLocaleLowerCase(),
-    updatedAt: new Date().toISOString(),
-  });
-}
 
 export async function getSearchHistory(): Promise<string[]> {
   const record = await readOne(STORES.settings, "searchHistory");

@@ -74,12 +74,17 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
   await page.getByRole("checkbox", { name: /bear/ }).check();
   await page.getByRole("button", { name: "閱讀內容" }).click();
 
-  const animationName = await page.locator('[data-known-word="bear"]')
+  const familiarityPresentation = await page.locator('[data-known-word="bear"]')
     .evaluate((element) => {
       const glyph = element.querySelector(".known-word__glyph");
-      return glyph ? getComputedStyle(glyph).animationName : "";
+      const style = glyph ? getComputedStyle(glyph) : null;
+      return {
+        animationName: style?.animationName ?? "",
+        textShadow: style?.textShadow ?? "none",
+      };
     });
-  expect(animationName).toBe("none");
+  expect(familiarityPresentation.animationName).toBe("none");
+  expect(familiarityPresentation.textShadow).not.toBe("none");
 });
 
 test("primary pages and data dialog remain responsive at supported breakpoints", async ({

@@ -36,6 +36,25 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
 
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction("settings", "readwrite");
+    transaction.objectStore("settings").put({
+      key: "familiarityColor",
+      value: "#abcdef",
+      updatedAt: new Date().toISOString(),
+    });
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
+    });
+    database.close();
+  });
+
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "下載備份" }).click();
@@ -56,6 +75,7 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
     settings.delete("aiPrompt");
     settings.delete("materialGuideTextPrompt");
     settings.delete("materialGuideDocxPrompt");
+    settings.delete("familiarityColor");
     await new Promise<void>((resolve, reject) => {
       transaction.addEventListener("complete", () => resolve(), { once: true });
       transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
@@ -115,6 +135,22 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await guideDialog.getByRole("tab", { name: "圖文" }).click();
   await expect(guideDialog.getByLabel("圖文教材生成提示詞"))
     .toHaveValue("備份中的圖文教材提示詞");
+  const restoredLegacyColor = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const request = database.transaction("settings", "readonly")
+      .objectStore("settings").get("familiarityColor");
+    const result = await new Promise<{ value?: unknown } | undefined>((resolve, reject) => {
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    database.close();
+    return result?.value;
+  });
+  expect(restoredLegacyColor).toBe("#abcdef");
 });
 
 test("reports an invalid backup without changing the library", async ({ page }) => {

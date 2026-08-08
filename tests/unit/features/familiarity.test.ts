@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  familiarityColors,
   familiarityDelay,
   familiarityLevel,
   type FamiliarityLevel,
@@ -34,12 +33,5 @@ describe("familiarity presentation rules", () => {
   it("creates stable animation offsets per word", () => {
     expect(familiarityDelay("animal")).toBe(familiarityDelay("animal"));
     expect(familiarityDelay("animal")).toBeLessThanOrEqual(0);
-  });
-
-  it("derives base and glow color channels", () => {
-    expect(familiarityColors("#d86b48")).toEqual({
-      base: "216 107 72",
-      glow: "229 157 134",
-    });
   });
 });

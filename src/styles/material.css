@@ -148,6 +148,9 @@
 .reading-image-loading,
 .reading-image-error { padding: 18px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }
 .familiarity-legend {
+  --familiarity-base-rgb: 63 75 120;
+  --familiarity-glow-rgb: 233 190 99;
+
   position: relative;
   display: flex;
   align-items: center;
@@ -201,41 +204,16 @@
   display: block;
   width: 54px;
   height: 6px;
+  flex: none;
   border-radius: 999px;
   background: linear-gradient(
     90deg,
-    rgb(var(--familiarity-glow-rgb, 242 193 78) / 52%),
-    rgb(var(--familiarity-base-rgb, 216 107 72) / 76%) 55%,
-    rgb(var(--familiarity-base-rgb, 216 107 72))
+    rgb(var(--familiarity-glow-rgb) / 52%),
+    rgb(var(--familiarity-base-rgb) / 76%) 55%,
+    rgb(var(--familiarity-base-rgb))
   );
   background-size: 180% 100%;
-  box-shadow: 0 0 7px rgb(var(--familiarity-base-rgb, 216 107 72) / 34%);
-}
-.familiarity-color-picker {
-  position: relative;
-  display: block;
-  width: 54px;
-  padding-block: 5px;
-  cursor: pointer;
-}
-.familiarity-color-picker input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.familiarity-color-picker:hover .familiarity-legend__scale {
-  box-shadow: 0 0 10px rgb(var(--familiarity-base-rgb, 216 107 72) / 52%);
-}
-.familiarity-color-picker:focus-within {
-  border-radius: 6px;
-  outline: 2px solid rgb(var(--familiarity-base-rgb, 216 107 72) / 38%);
-  outline-offset: 2px;
+  box-shadow: 0 0 7px rgb(var(--familiarity-base-rgb) / 34%);
 }
 .reading-word {
   position: relative;
@@ -243,19 +221,27 @@
   outline: none;
   cursor: pointer;
 }
-.reading-word:focus-visible { box-shadow: 0 0 0 2px rgb(var(--familiarity-base-rgb, 216 107 72) / 35%); }
+.reading-word:focus-visible { box-shadow: 0 0 0 2px rgb(63 75 120 / 35%); }
 .known-word {
   --outline-flow-duration: .8s;
   --outline-flow-opacity: 1;
   --outline-offset-x: 2.25px;
   --outline-offset-y: 1px;
-  --familiarity-color: var(--familiarity-base-rgb, 216 107 72);
-  --familiarity-glow: var(--familiarity-glow-rgb, 242 193 78);
+  --familiarity-color: 63 75 120;
+  --familiarity-glow: 233 190 99;
+  --familiarity-separator-color: var(--card);
   --familiarity-outline-opacity: .18;
   color: inherit;
 }
 .known-word__glyph {
   text-shadow:
+    calc(var(--outline-offset-x, 1px) - .75px)
+    calc(var(--outline-offset-y, 1px) - .35px) 0
+    color-mix(
+      in srgb,
+      var(--familiarity-separator-color) calc(var(--familiarity-outline-opacity) * 100%),
+      transparent
+    ),
     var(--outline-offset-x, 1px) var(--outline-offset-y, 1px) 0
     rgb(var(--familiarity-color) / var(--familiarity-outline-opacity));
 }
@@ -266,13 +252,27 @@
 @keyframes familiarity-outline-flow {
   0%, 34%, 66%, 100% {
     text-shadow:
+      calc(var(--outline-offset-x, 1px) - .75px)
+      calc(var(--outline-offset-y, 1px) - .35px) 0
+      color-mix(
+        in srgb,
+        var(--familiarity-separator-color) calc(var(--familiarity-outline-opacity) * 100%),
+        transparent
+      ),
       var(--outline-offset-x, 1px) var(--outline-offset-y, 1px) 0
       rgb(var(--familiarity-color) / var(--familiarity-outline-opacity));
   }
   48%, 52% {
     text-shadow:
+      calc(var(--outline-offset-x, 1px) - .75px)
+      calc(var(--outline-offset-y, 1px) - .35px) 0
+      color-mix(
+        in srgb,
+        var(--familiarity-separator-color) calc(var(--familiarity-outline-opacity) * 100%),
+        transparent
+      ),
       var(--outline-offset-x, 1px) var(--outline-offset-y, 1px) 0
-      rgb(255 255 255 / var(--outline-flow-opacity, .82)),
+      rgb(var(--familiarity-glow) / var(--outline-flow-opacity, .82)),
       var(--outline-offset-x, 1px) var(--outline-offset-y, 1px) var(--outline-glow-blur, 2px)
       rgb(var(--familiarity-glow) / var(--outline-flow-opacity, .82));
   }

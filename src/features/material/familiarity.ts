@@ -68,19 +68,3 @@ export function familiarityDelay(word: string): number {
   );
   return -(hash % 2600);
 }
-
-export function familiarityColors(hexColor: string): {
-  base: string;
-  glow: string;
-} {
-  const channels = [1, 3, 5].map(
-    (offset) => Number.parseInt(hexColor.slice(offset, offset + 2), 16),
-  );
-  const glowChannels = channels.map(
-    (channel) => Math.round(channel + (255 - channel) * 0.34),
-  );
-  return {
-    base: channels.join(" "),
-    glow: glowChannels.join(" "),
-  };
-}

@@ -147,74 +147,6 @@
 .reading-figure figcaption { margin-top: 8px; color: var(--muted); font: .86rem/1.5 system-ui, sans-serif; }
 .reading-image-loading,
 .reading-image-error { padding: 18px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }
-.familiarity-legend {
-  --familiarity-base-rgb: 63 75 120;
-  --familiarity-glow-rgb: 233 190 99;
-
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: .72rem;
-  white-space: nowrap;
-}
-.familiarity-help {
-  padding: 2px 0;
-  border: 0;
-  border-bottom: 1px dashed rgb(103 112 133 / 55%);
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  cursor: help;
-}
-.familiarity-help:focus-visible {
-  border-radius: 3px;
-  outline: 2px solid rgb(39 52 78 / 24%);
-  outline-offset: 2px;
-}
-.familiarity-tooltip {
-  position: absolute;
-  z-index: 12;
-  top: calc(100% + 10px);
-  right: 0;
-  width: min(310px, calc(100vw - 48px));
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--ink);
-  background: white;
-  box-shadow: 0 12px 30px rgb(23 32 51 / 16%);
-  font-size: .78rem;
-  line-height: 1.65;
-  opacity: 0;
-  pointer-events: none;
-  text-align: left;
-  white-space: normal;
-  transform: translateY(-4px);
-  transition: opacity 140ms ease, transform 140ms ease;
-}
-.familiarity-help:hover ~ .familiarity-tooltip,
-.familiarity-tooltip:hover,
-.familiarity-tooltip.is-open {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-.familiarity-legend__scale {
-  display: block;
-  width: 54px;
-  height: 6px;
-  flex: none;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    rgb(var(--familiarity-glow-rgb) / 52%),
-    rgb(var(--familiarity-base-rgb) / 76%) 55%,
-    rgb(var(--familiarity-base-rgb))
-  );
-  background-size: 180% 100%;
-  box-shadow: 0 0 7px rgb(var(--familiarity-base-rgb) / 34%);
-}
 .reading-word {
   position: relative;
   border-radius: 3px;
@@ -286,7 +218,6 @@
     animation-duration: 0.01ms;
     transition-duration: 0.01ms;
   }
-  .familiarity-legend__scale,
   .known-word.is-active .known-word__glyph {
     animation: none;
   }

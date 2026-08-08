@@ -65,7 +65,8 @@ test("shows global familiarity in an unread material", async ({ page }) => {
   await expect(unreadBear).toHaveClass(/known-word/);
   await expect(unreadBear.locator(".known-word__glyph")).toHaveCount(4);
   await expect(page.locator('input[type="color"]')).toHaveCount(0);
-  await expect(page.locator(".familiarity-legend__scale")).toHaveCount(1);
+  await expect(page.locator(".familiarity-legend")).toHaveCount(0);
+  await expect(page.getByText("熟悉度標記", { exact: true })).toHaveCount(0);
   const familiarityTokens = await unreadBear.evaluate((element) => {
     const style = getComputedStyle(element);
     return {

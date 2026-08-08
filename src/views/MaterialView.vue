@@ -45,8 +45,6 @@ const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
 const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
-const familiarityHelpOpen = ref(false);
-const familiarityLegend = ref<HTMLElement | null>(null);
 const readingPanel = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
@@ -159,14 +157,12 @@ function toggleWord(word: string): void {
 function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
-  if (!familiarityLegend.value?.contains(target)) familiarityHelpOpen.value = false;
   handleWordCardPointerDown(event);
 }
 
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
   wordCard.value?.close();
-  familiarityHelpOpen.value = false;
 }
 
 function closeTransientWordCard(): void {
@@ -266,28 +262,6 @@ onBeforeUnmount(() => {
                 回到閱讀位置
               </button>
             </div>
-            <p ref="familiarityLegend" class="familiarity-legend">
-              <button
-                class="familiarity-help"
-                type="button"
-                aria-describedby="familiarity-tooltip"
-                :aria-expanded="familiarityHelpOpen"
-                @click="familiarityHelpOpen = !familiarityHelpOpen"
-              >
-                熟悉度標記
-              </button>
-              <span class="familiarity-legend__scale" aria-hidden="true" />
-              <span
-                id="familiarity-tooltip"
-                class="familiarity-tooltip"
-                :class="{ 'is-open': familiarityHelpOpen }"
-                role="tooltip"
-              >
-                熟悉度依單字在幾份教材中被你勾選為認識來計算，同一份教材只算一次。
-                尚未建立熟悉度時不顯示效果；隨著認識這個單字的教材增加，標記深度、流光與光暈會逐步增強。
-                熟悉度使用固定的深靛藍標記與淡金流光，方便與螢光筆背景區分。
-              </span>
-            </p>
           </div>
           <MaterialReadingContent
             :active-word="activeWord"

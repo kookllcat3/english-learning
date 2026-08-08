@@ -130,7 +130,9 @@ test("marks every word in the material as known from the footer action", async (
   await completionButton.scrollIntoViewIfNeeded();
   await completionButton.click();
 
-  await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
+  const completedButton = page.getByRole("button", { name: "本篇單字已全部認識" });
+  await expect(completedButton).toBeDisabled();
+  await expect(completedButton).toHaveCSS("cursor", "not-allowed");
   await expect(page.getByRole("status")).toHaveText("已將本篇全部單字標記為認識。");
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "runs", "sleeps", "the"]);

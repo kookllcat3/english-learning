@@ -323,7 +323,9 @@ onUnmounted(() => {
           </RouterLink>
           <button
             class="button button--danger"
+            :class="{ 'is-loading': removingMaterialId === material.id }"
             type="button"
+            :aria-busy="removingMaterialId === material.id"
             :disabled="removingMaterialId === material.id"
             @click="removeSelectedMaterial(material)"
           >

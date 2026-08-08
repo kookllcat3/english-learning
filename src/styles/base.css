@@ -77,4 +77,5 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .button--primary:hover { background: #3a4c6e; }
 .button--secondary { color: var(--navy); border-color: var(--line); background: white; }
 .button--danger { color: var(--danger); border-color: #edc9bc; background: white; }
-.button:disabled { cursor: wait; opacity: .65; }
+.button:disabled { cursor: not-allowed; opacity: .65; }
+.button.is-loading:disabled { cursor: wait; }

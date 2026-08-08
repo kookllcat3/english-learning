@@ -250,8 +250,12 @@ onBeforeUnmount(() => {
         <div class="material-completion__action">
           <button
             class="button material-completion__button"
-            :class="{ 'is-complete': allMaterialWordsKnown }"
+            :class="{
+              'is-complete': allMaterialWordsKnown,
+              'is-loading': markingAllWords,
+            }"
             type="button"
+            :aria-busy="markingAllWords"
             :disabled="markingAllWords || allMaterialWordsKnown || !hasMaterialWords"
             @click="markAllMaterialWordsKnown"
           >

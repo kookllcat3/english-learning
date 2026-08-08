@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import {
   createBackup,
@@ -14,11 +14,13 @@ import { errorMessage } from "../../../shared/errors.js";
 
 const MAX_BACKUP_BYTES = 100 * 1024 * 1024;
 type BackupStatusKind = "idle" | "pending" | "success" | "error";
+type BackupAction = "export" | "import";
 
 const backupFile = ref<HTMLInputElement | null>(null);
 const backupStatus = ref("");
 const backupStatusKind = ref<BackupStatusKind>("idle");
-const isBackupBusy = ref(false);
+const activeBackupAction = ref<BackupAction | null>(null);
+const isBackupBusy = computed(() => activeBackupAction.value !== null);
 const dialog = ref<DialogController | null>(null);
 const storageUsage = ref("正在估算目前網站使用的儲存空間…");
 
@@ -51,7 +53,7 @@ function openDialog(): void {
 async function exportBackup(): Promise<void> {
   backupStatus.value = "";
   backupStatusKind.value = "idle";
-  isBackupBusy.value = true;
+  activeBackupAction.value = "export";
   try {
     const backup = await createBackup();
     const blob = await createBackupPackage(backup);
@@ -66,14 +68,14 @@ async function exportBackup(): Promise<void> {
     backupStatus.value = `備份匯出失敗：${errorMessage(error)}`;
     backupStatusKind.value = "error";
   } finally {
-    isBackupBusy.value = false;
+    activeBackupAction.value = null;
   }
 }
 
 async function importBackupFile(file: File): Promise<void> {
   backupStatus.value = "正在讀取並驗證備份…";
   backupStatusKind.value = "pending";
-  isBackupBusy.value = true;
+  activeBackupAction.value = "import";
   try {
     if (file.size > MAX_BACKUP_BYTES) {
       throw new Error("備份檔案請控制在 100 MB 以內。");
@@ -120,7 +122,7 @@ async function importBackupFile(file: File): Promise<void> {
     backupStatus.value = `備份匯入失敗：${errorMessage(error)}`;
     backupStatusKind.value = "error";
   } finally {
-    isBackupBusy.value = false;
+    activeBackupAction.value = null;
   }
 }
 
@@ -167,14 +169,32 @@ function chooseBackupFile(): void {
         <div>
           <h3>匯出完整備份</h3>
           <p>下載一份可持續擴充的備份封裝，包含教材、進度、筆記、設定與圖片。</p>
-          <button class="button button--primary" type="button" :disabled="isBackupBusy" @click="exportBackup">下載備份</button>
+          <button
+            class="button button--primary"
+            :class="{ 'is-loading': activeBackupAction === 'export' }"
+            type="button"
+            :aria-busy="activeBackupAction === 'export'"
+            :disabled="isBackupBusy"
+            @click="exportBackup"
+          >
+            下載備份
+          </button>
         </div>
       </section>
       <section class="data-action-card">
         <div>
           <h3>匯入並合併</h3>
           <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
-          <button class="button button--secondary" type="button" :disabled="isBackupBusy" @click="chooseBackupFile">選擇備份</button>
+          <button
+            class="button button--secondary"
+            :class="{ 'is-loading': activeBackupAction === 'import' }"
+            type="button"
+            :aria-busy="activeBackupAction === 'import'"
+            :disabled="isBackupBusy"
+            @click="chooseBackupFile"
+          >
+            選擇備份
+          </button>
           <input
             ref="backupFile"
             type="file"

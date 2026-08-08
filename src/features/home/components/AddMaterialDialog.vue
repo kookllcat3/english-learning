@@ -136,7 +136,15 @@ defineExpose({ open });
       </label>
       <p class="form-message" role="alert">{{ message }}</p>
       <div class="dialog__actions dialog__actions--centered">
-        <button class="button button--primary" type="submit" :disabled="saving">儲存教材</button>
+        <button
+          class="button button--primary"
+          :class="{ 'is-loading': saving }"
+          type="submit"
+          :aria-busy="saving"
+          :disabled="saving"
+        >
+          儲存教材
+        </button>
       </div>
     </form>
   </BaseDialog>

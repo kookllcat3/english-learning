@@ -14,6 +14,37 @@ export interface StoredWordNote {
   word: string;
 }
 
+export async function storedCurrentMaterialKnownWords(
+  page: Page,
+): Promise<string[]> {
+  return page.evaluate(async () => new Promise<string[]>((resolve, reject) => {
+    const materialId = location.hash.match(/^#\/materials\/([^/?]+)/)?.[1];
+    if (!materialId) {
+      reject(new Error("Material route was not active."));
+      return;
+    }
+    const request = indexedDB.open("english-learning");
+    request.addEventListener("success", () => {
+      const database = request.result;
+      const materialRequest = database.transaction("materials", "readonly")
+        .objectStore("materials")
+        .get(materialId);
+      materialRequest.addEventListener("success", () => {
+        const material = materialRequest.result;
+        if (!material) {
+          database.close();
+          reject(new Error("Stored material was not found."));
+          return;
+        }
+        resolve(material.knownWords ?? []);
+        database.close();
+      }, { once: true });
+      materialRequest.addEventListener("error", () => reject(materialRequest.error), { once: true });
+    }, { once: true });
+    request.addEventListener("error", () => reject(request.error), { once: true });
+  }));
+}
+
 export async function storedWordNotes(page: Page): Promise<StoredWordNote[]> {
   return page.evaluate(async () => new Promise<StoredWordNote[]>((resolve, reject) => {
     const request = indexedDB.open("english-learning");

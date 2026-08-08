@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { createMaterial, materialTitle } from "./test-helpers";
+import {
+  createMaterial,
+  materialTitle,
+  storedCurrentMaterialKnownWords,
+} from "./test-helpers";
 
 test("copies paragraphs and keeps one reading position", async ({ page }) => {
   await page.addInitScript(() => {
@@ -114,6 +118,27 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(reloadedMarkers.nth(0)).toHaveAttribute("aria-pressed", "false");
   await expect(reloadedMarkers.nth(1)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("marks every word in the material as known from the footer action", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  await expect(page.getByText("完成這篇教材", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("將這篇教材的全部英文單字標記為認識，並更新學習進度。", { exact: true })).toHaveCount(0);
+  const completionButton = page.getByRole("button", { name: "完成本次學習" });
+  await completionButton.scrollIntoViewIfNeeded();
+  await completionButton.click();
+
+  await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
+  await expect(page.getByRole("status")).toHaveText("已將本篇全部單字標記為認識。");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["a", "bear", "runs", "sleeps", "the"]);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
+  await expect(storedCurrentMaterialKnownWords(page))
+    .resolves.toEqual(["a", "bear", "runs", "sleeps", "the"]);
 });
 
 test("classifies structured reading content and repairs polluted learning data", async ({ page }) => {

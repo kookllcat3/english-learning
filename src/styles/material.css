@@ -1,6 +1,6 @@
 .material-page .page-shell {
   width: min(100% - 48px, 960px);
-  padding-block: clamp(32px, 5vw, 52px) 64px;
+  padding-block: clamp(32px, 5vw, 52px) 0;
 }
 .material-heading {
   margin-bottom: clamp(28px, 5vw, 48px);
@@ -34,6 +34,36 @@
   contain-intrinsic-size: auto 180px;
 }
 .reading-content .reading-paragraph:last-child { margin-bottom: 0; }
+.material-completion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: clamp(48px, 8vw, 80px);
+  padding-block: clamp(20px, 3vw, 28px);
+  border-top: 1px solid var(--line);
+}
+.material-completion__action { flex: none; text-align: center; }
+.material-completion__button {
+  min-width: 168px;
+  color: #fff;
+  background: #533a82;
+  box-shadow: 0 8px 18px rgb(83 58 130 / 20%);
+}
+.material-completion__button:hover:not(:disabled) { background: #65499a; }
+.material-completion__button.is-complete {
+  color: #155f43;
+  border-color: rgb(21 95 67 / 24%);
+  background: #e7f4ed;
+  box-shadow: none;
+  opacity: 1;
+}
+.material-completion__status {
+  max-width: 220px;
+  margin: 8px 0 0;
+  color: #155f43;
+  font-size: .82rem;
+}
+.material-completion__status.is-error { color: var(--danger); }
 .reading-content .reading-line-wrap {
   position: relative;
   display: block;
@@ -438,10 +468,16 @@
   .word-card { max-height: min(65vh, 520px); }
   .material-page .page-shell {
     width: min(100% - 32px, 960px);
-    padding-block: 28px 44px;
+    padding-block: 28px 0;
   }
   .material-heading { margin-bottom: 26px; padding-bottom: 20px; }
   .reading-position-return.is-floating { left: 16px; }
   .reading-content { line-height: 1.85; }
   .reading-content .reading-paragraph { margin-bottom: 1.4em; }
+  .material-completion {
+    margin-top: 48px;
+    padding-block: 20px;
+  }
+  .material-completion__button { min-height: 48px; }
+  .material-completion__status { max-width: none; text-align: center; }
 }

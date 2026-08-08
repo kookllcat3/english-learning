@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  computed,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -10,6 +11,7 @@ import { RouterLink, useRoute } from "vue-router";
 import {
   getMaterial,
   getVocabularyProgress,
+  setWordsKnown,
 } from "../core/learning/learning-repository.js";
 import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
 import { errorMessage as getErrorMessage } from "../shared/errors.js";
@@ -31,9 +33,23 @@ const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
+const markingAllWords = ref(false);
+const completionMessage = ref("");
+const completionMessageIsError = ref(false);
 const readingContainer = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
+
+const hasMaterialWords = computed(() => vocabularyProgress.value.size > 0);
+const allMaterialWordsKnown = computed(() => (
+  hasMaterialWords.value
+  && [...vocabularyProgress.value.values()].every((record) => record.learned)
+));
+const completionButtonLabel = computed(() => {
+  if (markingAllWords.value) return "標記中…";
+  if (allMaterialWordsKnown.value) return "本篇單字已全部認識";
+  return hasMaterialWords.value ? "完成本次學習" : "沒有可標記的單字";
+});
 
 function materialId(): string {
   return String(route.params.id ?? "");
@@ -79,6 +95,9 @@ async function loadMaterialPage(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   actionError.value = "";
+  markingAllWords.value = false;
+  completionMessage.value = "";
+  completionMessageIsError.value = false;
   if (!id) {
     loading.value = false;
     errorMessage.value = "找不到這份教材";
@@ -110,6 +129,34 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
   handleWordCardPointerDown(event);
+}
+
+async function markAllMaterialWordsKnown(): Promise<void> {
+  if (
+    !material.value
+    || markingAllWords.value
+    || !hasMaterialWords.value
+    || allMaterialWordsKnown.value
+  ) return;
+  markingAllWords.value = true;
+  completionMessage.value = "";
+  completionMessageIsError.value = false;
+  try {
+    const id = material.value.id;
+    await setWordsKnown(id, [...vocabularyProgress.value.keys()], true);
+    const [updatedMaterial, updatedProgress] = await Promise.all([
+      getMaterial(id),
+      getVocabularyProgress(id),
+    ]);
+    material.value = updatedMaterial;
+    vocabularyProgress.value = updatedProgress;
+    completionMessage.value = "已將本篇全部單字標記為認識。";
+  } catch (error) {
+    completionMessageIsError.value = true;
+    completionMessage.value = getErrorMessage(error, "無法更新本篇單字，請稍後再試。");
+  } finally {
+    markingAllWords.value = false;
+  }
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -198,6 +245,28 @@ onBeforeUnmount(() => {
           @toggle-reading-paragraph="toggleReadingParagraph"
         />
       </article>
+
+      <footer class="material-completion" aria-label="教材完成操作">
+        <div class="material-completion__action">
+          <button
+            class="button material-completion__button"
+            :class="{ 'is-complete': allMaterialWordsKnown }"
+            type="button"
+            :disabled="markingAllWords || allMaterialWordsKnown || !hasMaterialWords"
+            @click="markAllMaterialWordsKnown"
+          >
+            {{ completionButtonLabel }}
+          </button>
+          <p
+            v-if="completionMessage"
+            class="material-completion__status"
+            :class="{ 'is-error': completionMessageIsError }"
+            :role="completionMessageIsError ? 'alert' : 'status'"
+          >
+            {{ completionMessage }}
+          </p>
+        </div>
+      </footer>
 
       <WordCard
         ref="wordCard"

@@ -44,13 +44,6 @@ export function useWordCardInteractions() {
     void wordCard.value?.open(word, rect, trigger === "selection");
   }
 
-  function openVocabularyWord(word: string, rect: DOMRect): void {
-    window.clearTimeout(hoverTimer);
-    window.clearTimeout(closeTimer);
-    activeWord.value = "";
-    void wordCard.value?.open(word, rect);
-  }
-
   function scheduleClose(): void {
     window.clearTimeout(hoverTimer);
     if (pinned.value) return;
@@ -127,11 +120,10 @@ export function useWordCardInteractions() {
         open(word, readingWord.getBoundingClientRect(), key);
         return;
       }
-      if (target.closest(".word-item__lookup")) return;
       scheduleClose();
       return;
     }
-    if (!target.closest(".reading-word, .word-item__lookup")) wordCard.value?.close();
+    if (!target.closest(".reading-word")) wordCard.value?.close();
   }
 
   function dispose(): void {
@@ -150,7 +142,6 @@ export function useWordCardInteractions() {
     handleSelection,
     keepOpen,
     open,
-    openVocabularyWord,
     pinned,
     scheduleClose,
     scheduleSelectionLookup,

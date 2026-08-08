@@ -230,11 +230,6 @@ test("keeps desktop scrolling responsive while the word card is open", async ({ 
 
   await page.locator("h1").click();
   await expect(wordHeading).toBeHidden();
-
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.locator(".material-view-switcher__button").nth(1).click();
-  await page.locator(".word-item__lookup").first().click();
-  await expect(page.locator(".word-card h2")).toBeVisible();
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).position))
     .not.toBe("fixed");
 });
@@ -408,7 +403,7 @@ test("unpins a pinned word card before its natural outside close", async ({ page
   await expect(pinButton).toHaveAttribute("aria-pressed", "false");
 });
 
-test("shares a word note across repeated words and the vocabulary entry", async ({ page }) => {
+test("shares a word note across repeated reading words", async ({ page }) => {
   await createMaterial(
     page,
     "Shared word notes",
@@ -428,9 +423,6 @@ test("shares a word note across repeated words and the vocabulary entry", async 
   await repeatedWords.nth(1).focus();
   await expect(editor).toHaveText("first shared note");
 
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  await page.locator(".word-item__lookup", { hasText: "driver" }).click();
-  await expect(editor).toHaveText("first shared note");
   await editor.fill("updated shared note");
   await expect(page.getByRole("status")).toHaveText("已儲存");
 

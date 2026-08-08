@@ -344,7 +344,7 @@ test("offers a return action whenever a reading position is marked", async ({ pa
   expect(await returnAction.evaluate((button) => Boolean(button.closest(".panel__heading")))).toBe(true);
   await expect(returnAction).toHaveClass(/is-floating/);
   await expect(returnAction).toHaveCSS("position", "fixed");
-  await expect(page.locator(".material-view-switcher")).toHaveCSS("position", "static");
+  await expect(page.locator(".material-view-switcher")).toHaveCount(0);
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(lastMarker).not.toBeInViewport();

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const MAX_FIRST_CONTENTFUL_PAINT_MS = 2_000;
-const MAX_LARGE_MATERIAL_INTERACTION_MS = 2_000;
+const MAX_LARGE_MATERIAL_OPEN_MS = 2_000;
 const MAX_DIALOG_OPEN_MS = 120;
 const MAX_PROMPT_TAB_SWITCH_MS = 150;
 
@@ -10,7 +10,7 @@ async function waitForDialogOpen(dialog: import("@playwright/test").Locator): Pr
   await expect(dialog).toHaveAttribute("open", "");
 }
 
-test("keeps startup and large-list interaction within the performance baseline", async ({
+test("keeps startup and large-material opening within the performance baseline", async ({
   page,
 }, testInfo) => {
   await page.goto("/");
@@ -31,14 +31,13 @@ test("keeps startup and large-list interaction within the performance baseline",
 
   const interactionStart = Date.now();
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  await expect(page.getByRole("checkbox")).toHaveCount(300);
-  const largeMaterialInteraction = Date.now() - interactionStart;
-  expect(largeMaterialInteraction).toBeLessThan(MAX_LARGE_MATERIAL_INTERACTION_MS);
+  await expect(page.locator(".reading-word")).toHaveCount(350);
+  const largeMaterialOpen = Date.now() - interactionStart;
+  expect(largeMaterialOpen).toBeLessThan(MAX_LARGE_MATERIAL_OPEN_MS);
 
   testInfo.annotations.push(
     { type: "first-contentful-paint", description: `${Math.round(firstContentfulPaint)} ms` },
-    { type: "large-material-interaction", description: `${largeMaterialInteraction} ms` },
+    { type: "large-material-open", description: `${largeMaterialOpen} ms` },
   );
 });
 

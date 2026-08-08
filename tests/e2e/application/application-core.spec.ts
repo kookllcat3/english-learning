@@ -1,8 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { createMaterial, materialTitle } from "./test-helpers";
+import {
+  createMaterial,
+  materialTitle,
+  seedKnownWordsForCurrentMaterial,
+} from "./test-helpers";
 
-test("uses one Vue app and persists learning progress through routed views", async ({ page }) => {
+test("uses one Vue app and keeps reading as the only material view", async ({ page }) => {
   await createMaterial(page);
 
   await expect(page.locator("#app")).toHaveCount(1);
@@ -10,16 +14,13 @@ test("uses one Vue app and persists learning progress through routed views", asy
   await expect(page).toHaveURL(/#\/materials\/.+/);
   await expect(page.getByRole("heading", { name: materialTitle, level: 1 })).toBeVisible();
 
-  await page.getByRole("button", { name: "教材詞彙" }).click();
+  await expect(page.locator(".material-view-switcher")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "教材詞彙" })).toHaveCount(0);
+  await expect(page.locator(".vocabulary-panel")).toHaveCount(0);
 
-  const bearCheckbox = page.getByRole("checkbox", { name: /bear/ });
-  await bearCheckbox.check();
-  await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
-
+  await seedKnownWordsForCurrentMaterial(page, ["bear"]);
   await page.reload();
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
-  await expect(page.getByText(/已認識\s+1\s+\/\s+5\s+個/)).toBeVisible();
+  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
 
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
   await expect(page).toHaveURL(/#\/?$/);
@@ -35,8 +36,9 @@ test("shows global familiarity in an unread material", async ({ page }) => {
 
   const learnedMaterialCard = page.getByRole("article").filter({ hasText: learnedMaterialTitle });
   await learnedMaterialCard.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  await page.getByRole("checkbox", { name: /bear/ }).check();
+  await expect(page).toHaveURL(/#\/materials\/.+/);
+  await seedKnownWordsForCurrentMaterial(page, ["bear"]);
+  await page.reload();
   await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
   await page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {

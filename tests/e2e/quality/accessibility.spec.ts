@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { seedKnownWordsForCurrentMaterial } from "../application/test-helpers";
+
 async function createAccessibleMaterial(
   page: Page,
   content = "A bear reads a book.",
@@ -70,9 +72,9 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await createAccessibleMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  await page.getByRole("checkbox", { name: /bear/ }).check();
-  await page.getByRole("button", { name: "閱讀內容" }).click();
+  await expect(page).toHaveURL(/#\/materials\/.+/);
+  await seedKnownWordsForCurrentMaterial(page, ["bear"]);
+  await page.reload();
 
   const familiarityPresentation = await page.locator('[data-known-word="bear"]')
     .evaluate((element) => {
@@ -117,7 +119,6 @@ test("primary pages and data dialog remain responsive at supported breakpoints",
 
     await page.getByRole("link", { name: "開始閱讀" }).click();
     await expectNoHorizontalOverflow(page);
-    await page.getByRole("button", { name: "教材詞彙" }).click();
-    await expectNoHorizontalOverflow(page);
+    await expect(page.getByRole("button", { name: "教材詞彙" })).toHaveCount(0);
   }
 });

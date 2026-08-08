@@ -56,14 +56,49 @@ export async function storedContextualNotes(page: Page): Promise<StoredContextua
   }));
 }
 
-export function alphabeticWord(index: number): string {
-  let value = index;
-  let word = "";
-  do {
-    word = String.fromCharCode(97 + (value % 26)) + word;
-    value = Math.floor(value / 26) - 1;
-  } while (value >= 0);
-  return `word${word}`;
+export async function seedKnownWordsForCurrentMaterial(
+  page: Page,
+  words: string[],
+): Promise<void> {
+  await page.evaluate(async (knownWords) => {
+    const materialId = location.hash.match(/^#\/materials\/([^/?]+)/)?.[1];
+    if (!materialId) throw new Error("Material route was not active.");
+    await new Promise<void>((resolve, reject) => {
+      const openRequest = indexedDB.open("english-learning");
+      openRequest.addEventListener("success", () => {
+        const database = openRequest.result;
+        const transaction = database.transaction(["materials", "vocabulary"], "readwrite");
+        const materialStore = transaction.objectStore("materials");
+        const vocabularyStore = transaction.objectStore("vocabulary");
+        const materialRequest = materialStore.get(materialId);
+        materialRequest.addEventListener("success", () => {
+          const material = materialRequest.result;
+          if (!material) {
+            transaction.abort();
+            return;
+          }
+          const timestamp = new Date().toISOString();
+          const mergedWords = [...new Set([...(material.knownWords ?? []), ...knownWords])];
+          materialStore.put({ ...material, knownWords: mergedWords, updatedAt: timestamp });
+          knownWords.forEach((word) => vocabularyStore.put({
+            learned: true,
+            learnedAt: timestamp,
+            updatedAt: timestamp,
+            word,
+          }));
+        }, { once: true });
+        transaction.addEventListener("complete", () => {
+          database.close();
+          resolve();
+        }, { once: true });
+        transaction.addEventListener("abort", () => {
+          database.close();
+          reject(transaction.error ?? new Error("Unable to seed known words."));
+        }, { once: true });
+      }, { once: true });
+      openRequest.addEventListener("error", () => reject(openRequest.error), { once: true });
+    });
+  }, words);
 }
 
 export async function createMaterial(

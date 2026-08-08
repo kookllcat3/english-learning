@@ -5,7 +5,6 @@ import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
 
 interface ReadingPositionOptions {
   actionError: Ref<string>;
-  activeView: Ref<"reading" | "vocabulary">;
   materialId: () => string;
   readingPanel: Ref<HTMLElement | null>;
   returnActionAnchor: Ref<HTMLElement | null>;
@@ -27,8 +26,7 @@ const FLOATING_ACTION_TOP_PX = 80;
 export function useReadingPosition(options: ReadingPositionOptions) {
   const currentParagraphKey = ref<string | null>(null);
   const returnActionFloating = ref(false);
-  const showReturnAction = computed(() =>
-    options.activeView.value === "reading" && currentParagraphKey.value !== null);
+  const showReturnAction = computed(() => currentParagraphKey.value !== null);
   let returnActionObserver: IntersectionObserver | null = null;
 
   function observeReturnAction(anchor: HTMLElement | null): void {

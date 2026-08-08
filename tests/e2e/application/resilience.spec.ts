@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { seedKnownWordsForCurrentMaterial } from "./test-helpers";
+
 async function createMaterial(page: Page, title: string, content: string): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "新增教材" }).click();
@@ -26,21 +28,16 @@ test("keeps local learning progress writable while offline", async ({ page, cont
   await createMaterial(page, "離線教材", "A bear sleeps.");
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("heading", { name: "離線教材", level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  const bearCheckbox = page.getByRole("checkbox", { name: /bear/ });
-  await expect(bearCheckbox).toBeVisible();
 
   await context.setOffline(true);
   try {
-    await bearCheckbox.check();
-    await expect(page.getByText(/已認識\s+1\s+\/\s+3\s+個/)).toBeVisible();
+    await seedKnownWordsForCurrentMaterial(page, ["bear"]);
   } finally {
     await context.setOffline(false);
   }
 
   await page.reload();
-  await page.getByRole("button", { name: "教材詞彙" }).click();
-  await expect(page.getByRole("checkbox", { name: /bear/ })).toBeChecked();
+  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
 });
 
 test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  computed,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -11,12 +10,7 @@ import { RouterLink, useRoute } from "vue-router";
 import {
   getMaterial,
   getVocabularyProgress,
-  setWordsKnown,
 } from "../core/learning/learning-repository.js";
-import {
-  notifyLearningDataChanged,
-} from "../core/learning/learning-sync.js";
-import { sourceWordsForBlocks } from "../core/learning/reading-content.js";
 import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
 import { errorMessage as getErrorMessage } from "../shared/errors.js";
 import { useLearningDataRefresh } from "../app/composables/use-learning-data-refresh.js";
@@ -30,39 +24,17 @@ import WordCard from "../features/material/components/WordCard.vue";
 import { useReadingPosition } from "../features/material/composables/use-reading-position.js";
 import { useWordCardInteractions } from "../features/material/composables/use-word-card-interactions.js";
 
-type MaterialViewMode = "reading" | "vocabulary";
-
-const INITIAL_VISIBLE_WORD_LIMIT = 300;
-
 const route = useRoute();
 const material = ref<BackupMaterial | null>(null);
-const materialWords = ref<string[]>([]);
 const vocabularyProgress = ref(new Map<string, VocabularyRecord>());
 const familiarityLevels = ref<FamiliarityLevel[]>([]);
-const activeView = ref<MaterialViewMode>("reading");
-const searchQuery = ref("");
 const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
-const visibleWordLimit = ref(INITIAL_VISIBLE_WORD_LIMIT);
 const readingPanel = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
 
-const knownWords = computed(() => new Set(
-  [...vocabularyProgress.value.values()]
-    .filter((record) => record.learned)
-    .map((record) => record.word),
-));
-const knownCount = computed(() =>
-  materialWords.value.filter((word) => knownWords.value.has(word)).length);
-const visibleWords = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase("en");
-  return query
-    ? materialWords.value.filter((word) => word.includes(query))
-    : materialWords.value;
-});
-const displayedWords = computed(() => visibleWords.value.slice(0, visibleWordLimit.value));
 function materialId(): string {
   return String(route.params.id ?? "");
 }
@@ -75,7 +47,6 @@ const {
   toggle: toggleReadingParagraph,
 } = useReadingPosition({
   actionError,
-  activeView,
   materialId,
   readingPanel,
   returnActionAnchor: readingPositionReturnAnchor,
@@ -90,7 +61,6 @@ const {
   handleSelection: handleWordSelection,
   keepOpen: keepWordCardOpen,
   open: openWordCard,
-  openVocabularyWord,
   scheduleClose: scheduleWordCardClose,
   scheduleSelectionLookup,
   setPinned: setWordCardPinned,
@@ -109,8 +79,6 @@ async function loadMaterialPage(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   actionError.value = "";
-  searchQuery.value = "";
-  activeView.value = "reading";
   if (!id) {
     loading.value = false;
     errorMessage.value = "找不到這份教材";
@@ -128,7 +96,6 @@ async function loadMaterialPage(): Promise<void> {
     vocabularyProgress.value = progress;
     familiarityLevels.value = levels;
     currentParagraphKey.value = loadedMaterial.readingParagraphKey ?? null;
-    materialWords.value = sourceWordsForBlocks(loadedMaterial.contentBlocks);
     document.title = `${loadedMaterial.title}｜英文學習庫`;
   } catch {
     if (sequence !== loadSequence) return;
@@ -137,21 +104,6 @@ async function loadMaterialPage(): Promise<void> {
   } finally {
     if (sequence === loadSequence) loading.value = false;
   }
-}
-
-async function updateWords(words: string[], learned: boolean): Promise<void> {
-  actionError.value = "";
-  try {
-    await setWordsKnown(materialId(), words, learned);
-    await refreshKnownWords();
-    notifyLearningDataChanged("vocabulary");
-  } catch (error) {
-    actionError.value = getErrorMessage(error, "無法更新單字進度。");
-  }
-}
-
-function toggleWord(word: string): void {
-  void updateWords([word], !knownWords.value.has(word));
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -180,9 +132,6 @@ useLearningDataRefresh({
   refresh: refreshLearningProgress,
 });
 watch(() => route.params.id, () => void loadMaterialPage());
-watch(searchQuery, () => {
-  visibleWordLimit.value = INITIAL_VISIBLE_WORD_LIMIT;
-});
 onMounted(() => {
   document.body.classList.add("material-page");
   document.addEventListener("pointerdown", handleDocumentPointerDown);
@@ -223,32 +172,7 @@ onBeforeUnmount(() => {
       <p v-if="actionError" class="form-message is-error" role="alert">{{ actionError }}</p>
 
       <div class="detail-layout">
-        <nav class="material-view-switcher" aria-label="教材檢視">
-          <button
-            class="material-view-switcher__button"
-            :class="{ 'is-active': activeView === 'reading' }"
-            type="button"
-            :aria-pressed="activeView === 'reading'"
-            @click="activeView = 'reading'"
-          >
-            閱讀內容
-          </button>
-          <button
-            class="material-view-switcher__button"
-            :class="{ 'is-active': activeView === 'vocabulary' }"
-            type="button"
-            :aria-pressed="activeView === 'vocabulary'"
-            @click="activeView = 'vocabulary'"
-          >
-            教材詞彙
-          </button>
-        </nav>
-
-        <article
-          ref="readingPanel"
-          class="panel reading-panel"
-          :hidden="activeView !== 'reading'"
-        >
+        <article ref="readingPanel" class="panel reading-panel">
           <div class="panel__heading">
             <div ref="readingPositionReturnAnchor" class="reading-panel__title-row">
               <h2>教材內容</h2>
@@ -278,59 +202,6 @@ onBeforeUnmount(() => {
             @toggle-reading-paragraph="toggleReadingParagraph"
           />
         </article>
-
-        <aside
-          class="panel vocabulary-panel"
-          :hidden="activeView !== 'vocabulary'"
-        >
-          <div class="panel__heading">
-            <div>
-              <h2>教材詞彙</h2>
-              <p>已認識 <span>{{ knownCount }}</span> / <span>{{ materialWords.length }}</span> 個</p>
-            </div>
-          </div>
-          <label class="word-search">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="m16 16 4 4" />
-            </svg>
-            <span class="sr-only">搜尋教材詞彙</span>
-            <input v-model="searchQuery" type="search" placeholder="搜尋單字" autocomplete="off">
-          </label>
-          <div class="bulk-actions" aria-label="批次設定教材詞彙">
-            <button class="text-button" type="button" @click="updateWords(materialWords, true)">全選</button>
-            <button class="text-button" type="button" @click="updateWords(materialWords, false)">全取消</button>
-          </div>
-          <div class="word-list">
-            <p v-if="visibleWords.length === 0" class="word-list__empty">找不到符合的單字</p>
-            <div v-for="word in displayedWords" v-else :key="word" class="word-item">
-              <label>
-                <input
-                  type="checkbox"
-                  :checked="knownWords.has(word)"
-                  :aria-label="`將 ${word} 標記為已認識`"
-                  @change="toggleWord(word)"
-                >
-              </label>
-              <button
-                class="word-item__lookup"
-                type="button"
-                lang="en"
-                @click="openVocabularyWord(word, ($event.currentTarget as HTMLElement).getBoundingClientRect())"
-              >
-                {{ word }}
-              </button>
-            </div>
-            <button
-              v-if="displayedWords.length < visibleWords.length"
-              class="text-button"
-              type="button"
-              @click="visibleWordLimit += INITIAL_VISIBLE_WORD_LIMIT"
-            >
-              顯示更多（尚有 {{ visibleWords.length - displayedWords.length }} 個）
-            </button>
-          </div>
-        </aside>
       </div>
 
       <WordCard

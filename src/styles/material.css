@@ -213,8 +213,7 @@
 @media (prefers-reduced-motion: reduce) {
   .dialog,
   .dialog::backdrop,
-  .prompt-tab,
-  .material-view-switcher__button {
+  .prompt-tab {
     animation-duration: 0.01ms;
     transition-duration: 0.01ms;
   }
@@ -222,73 +221,6 @@
     animation: none;
   }
 }
-.vocabulary-panel { position: relative; }
-.word-search {
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  gap: 9px;
-  margin: 16px 0 12px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: white;
-}
-.word-search:focus-within { border-color: #b9c3d5; box-shadow: 0 0 0 3px rgb(39 52 78 / 8%); }
-.word-search svg {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  fill: none;
-  stroke: var(--muted);
-  stroke-linecap: round;
-  stroke-width: 1.8;
-}
-.word-search input {
-  width: 100%;
-  min-width: 0;
-  padding: 9px 0;
-  border: 0;
-  outline: 0;
-  color: var(--ink);
-  background: transparent;
-}
-.word-list {
-  display: grid;
-  grid-auto-rows: 48px;
-  align-content: start;
-  gap: 8px;
-  max-height: 620px;
-  padding-right: 4px;
-  overflow-y: auto;
-}
-.word-item {
-  display: flex;
-  height: 48px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.word-item label { display: flex; align-items: center; cursor: pointer; }
-.word-item:has(input:checked) { border-color: #edc9bc; background: var(--accent-soft); }
-.word-item input { width: 18px; height: 18px; accent-color: var(--accent); }
-.word-item__lookup {
-  flex: 1;
-  padding: 2px 4px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--ink);
-  background: transparent;
-  font: inherit;
-  font-weight: 750;
-  text-align: left;
-  cursor: pointer;
-}
-.word-item__lookup:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-.word-item__lookup:focus-visible { outline: 2px solid rgb(216 107 72 / 28%); outline-offset: 2px; }
-.word-list__empty { margin: 24px 0; color: var(--muted); font-size: .86rem; text-align: center; }
 .word-card {
   position: fixed;
   z-index: 10;
@@ -474,14 +406,12 @@
     margin-bottom: 14px;
     overflow: visible;
   }
-  .material-page .detail-layout > .panel[hidden] { display: none; }
   .material-page .reading-panel .reading-content {
     min-height: 0;
     padding-right: 0;
     overflow: visible;
     scrollbar-gutter: auto;
   }
-  .material-page .vocabulary-panel { position: relative; top: auto; }
 }
 
 @media (max-width: 720px) {
@@ -507,19 +437,6 @@
     display: block;
     padding: 0;
   }
-  .material-view-switcher {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
-    margin: 0 10px 12px;
-    padding: 4px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: #ebe9e2;
-  }
-  .material-view-switcher__button {
-    border-radius: 10px;
-  }
   .reading-position-return.is-floating { left: 40px; }
   .detail-layout > .panel {
     position: relative;
@@ -532,20 +449,11 @@
     overflow: visible;
     contain: none;
   }
-  .detail-layout > .panel[hidden] { display: none; }
   .reading-panel .reading-content {
     min-height: 0;
     padding-right: 0;
     overflow: visible;
     scrollbar-gutter: auto;
   }
-  .vocabulary-panel { position: relative; top: auto; }
   .material-page .page-shell { padding-bottom: 10px; }
-}
-
-.material-page .vocabulary-panel .word-list {
-  max-height: none;
-  padding-right: 0;
-  overflow: visible;
-  scrollbar-gutter: auto;
 }

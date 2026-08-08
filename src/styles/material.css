@@ -363,7 +363,7 @@
   z-index: 10;
   visibility: hidden;
   display: flex;
-  width: min(380px, calc(100vw - 24px));
+  width: min(304px, calc(100vw - 24px));
   max-height: min(560px, calc(100vh - 24px));
   max-height: min(560px, calc(100dvh - 24px));
   padding: 16px;

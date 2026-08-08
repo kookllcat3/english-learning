@@ -16,15 +16,43 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
   await createMaterial(
     page,
     materialTitle,
-    "A bear runs.\n中文翻譯。\n\nThe fox sleeps.\n另一段翻譯。",
+    "A bear runs.\n中文翻譯。\n補充翻譯。\n\nThe fox sleeps.\n另一段翻譯。\n\nNo translation here.",
   );
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
   const paragraphs = page.locator("[data-reading-paragraph]");
-  await expect(paragraphs).toHaveCount(2);
+  await expect(paragraphs).toHaveCount(3);
   await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "複製整段英文" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "複製整段英文" })).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "隱藏這段中文翻譯" })).toHaveCount(2);
+
+  const firstToolbar = paragraphs.nth(0).getByRole("group", { name: "段落閱讀工具" });
+  await expect(firstToolbar).toHaveCount(1);
+  expect(await paragraphs.nth(0).evaluate((paragraph) =>
+    paragraph.firstElementChild?.classList.contains("paragraph-toolbar"))).toBe(true);
+  expect(await firstToolbar.getByRole("button").evaluateAll((buttons) =>
+    buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
+    "標記目前閱讀段落",
+    "隱藏這段中文翻譯",
+    "複製整段英文",
+  ]);
+  expect(await paragraphs.nth(2).getByRole("group", { name: "段落閱讀工具" })
+    .getByRole("button").evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
+    "標記目前閱讀段落",
+    "複製整段英文",
+  ]);
+
+  const firstTranslationToggle = firstToolbar.getByRole("button").nth(1);
+  const firstTranslations = paragraphs.nth(0).locator(".reading-line-wrap.is-translation .reading-line");
+  await expect(firstTranslations).toHaveCount(2);
+  await firstTranslationToggle.click();
+  await expect(firstTranslationToggle).toHaveAccessibleName("顯示這段中文翻譯");
+  await expect(firstTranslationToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(firstTranslations).toHaveClass([/translation-mask/, /translation-mask/]);
+  await firstTranslationToggle.click();
+  await expect(firstTranslations).toHaveClass(["reading-line", "reading-line"]);
 
   const firstCopyButton = paragraphs.nth(0).getByRole("button", { name: "複製整段英文" });
   await firstCopyButton.focus();
@@ -227,19 +255,14 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(page.locator('[data-word="birds"]')).toHaveCount(1);
   await expect(page.locator('[data-word="en"]')).toHaveCount(0);
   await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
-  const translationControls = page.getByRole("group", { name: "中文解釋控制" });
-  await expect(translationControls).toHaveClass(/reading-paragraph-controls/);
-  await expect(translationControls.getByRole("button")).toHaveCount(2);
-  await expect(translationControls.getByRole("button").first()).toHaveClass(/reading-paragraph-control/);
-  await expect(translationControls.getByRole("button").last()).toHaveClass(/reading-paragraph-control/);
-  await page.getByRole("button", { name: /編輯這段中文解釋/ }).click();
-  const translationEditor = page.getByRole("textbox", { name: /編輯這段中文解釋/ });
-  await translationEditor.fill("birds 是鳥類，這是修正後的解釋。");
-  await translationEditor.press("Control+Enter");
-  await expect(page.locator(".reading-line-wrap.is-translation")).toContainText(
-    "birds 是鳥類，這是修正後的解釋。",
-  );
+  const paragraphToolbar = readingGroup.getByRole("group", { name: "段落閱讀工具" });
+  await expect(paragraphToolbar).toHaveClass(/paragraph-toolbar/);
+  await expect(paragraphToolbar.getByRole("button")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /編輯這段中文解釋/ })).toHaveCount(0);
+  await paragraphToolbar.getByRole("button", { name: "隱藏這段中文翻譯" }).click();
+  await expect(page.locator(".reading-line-wrap.is-translation .reading-line"))
+    .toHaveClass(/translation-mask/);
   await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
 
   const migrated = await page.evaluate(async (materialId) => {

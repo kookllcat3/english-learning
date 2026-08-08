@@ -12,7 +12,6 @@ import {
   getMaterial,
   getVocabularyProgress,
   setWordsKnown,
-  updateMaterialTranslation,
 } from "../core/learning/learning-repository.js";
 import {
   getFamiliarityColor,
@@ -189,19 +188,6 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   handleWordCardPointerDown(event);
 }
 
-async function updateTranslation(lineKey: string, text: string): Promise<void> {
-  actionError.value = "";
-  try {
-    await updateMaterialTranslation(materialId(), lineKey, text);
-    material.value = await getMaterial(materialId());
-    notifyLearningDataChanged("materials");
-  } catch (error) {
-    const message = getErrorMessage(error, "無法更新中文解釋。");
-    actionError.value = message;
-    throw new Error(message);
-  }
-}
-
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
   wordCard.value?.close();
@@ -343,7 +329,6 @@ onBeforeUnmount(() => {
             :blocks="material.contentBlocks"
             :current-paragraph-key="currentParagraphKey"
             :familiarity-levels="familiarityLevels"
-            :update-translation="updateTranslation"
             :vocabulary-progress="vocabularyProgress"
             @mouseup="handleWordSelection"
             @dblclick="nextTick(handleWordSelection)"

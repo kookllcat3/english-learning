@@ -16,6 +16,7 @@ import {
   type FamiliarityLevel,
 } from "../familiarity.js";
 import MaterialImage from "./MaterialImage.vue";
+import ParagraphToolbar from "./ParagraphToolbar.vue";
 
 interface TextSegment {
   delay?: number;
@@ -31,8 +32,8 @@ interface WordPresentation {
 interface RenderedTextBlock {
   key: string;
   paragraphs: Array<{
+    hasTranslation: boolean;
     key: string;
-    lastOriginalLineKey?: string;
     lines: Array<{
       isSource: boolean;
       isTranslation: boolean;
@@ -57,7 +58,6 @@ const props = defineProps<{
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
   familiarityLevels: FamiliarityLevel[];
-  updateTranslation: (lineKey: string, text: string) => Promise<void>;
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
@@ -68,11 +68,7 @@ const emit = defineEmits<{
   toggleReadingParagraph: [paragraphKey: string];
 }>();
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
-const hiddenTranslationLines = ref(new Set<string>());
-const editingTranslationLineKey = ref<string | null>(null);
-const translationDraft = ref("");
-const translationSaveError = ref("");
-const translationSaving = ref(false);
+const hiddenTranslationParagraphs = ref(new Set<string>());
 const copyFeedback = ref<{ key: string; status: "error" | "success" } | null>(null);
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -134,9 +130,8 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
       key: section.key,
       type: "text",
       paragraphs: [{
+        hasTranslation: section.lines.some((line) => line.role === "translation"),
         key: section.key,
-        lastOriginalLineKey: [...section.lines].reverse()
-          .find((line) => line.role === "source")?.key,
         lines: section.lines.map((line) => ({
           isSource: line.role === "source",
           isTranslation: line.role === "translation",
@@ -186,70 +181,15 @@ function hasFamiliarity(segment: TextSegment): boolean {
   return (presentationFor(segment)?.level.level ?? 0) > 0;
 }
 
-function isTranslationHidden(lineKey: string): boolean {
-  return hiddenTranslationLines.value.has(lineKey);
+function isTranslationHidden(paragraphKey: string): boolean {
+  return hiddenTranslationParagraphs.value.has(paragraphKey);
 }
 
-function toggleTranslation(lineKey: string, event: MouseEvent): void {
-  const nextHiddenLines = new Set(hiddenTranslationLines.value);
-  if (nextHiddenLines.has(lineKey)) nextHiddenLines.delete(lineKey);
-  else nextHiddenLines.add(lineKey);
-  hiddenTranslationLines.value = nextHiddenLines;
-  if (event.detail > 0 && event.currentTarget instanceof HTMLElement) {
-    event.currentTarget.blur();
-  }
-}
-
-function toggleTranslationOnTouch(lineKey: string, event: PointerEvent): void {
-  if (event.pointerType !== "touch") return;
-  touchStart = null;
-  toggleTranslation(lineKey, event);
-}
-
-function toggleTranslationOnClick(lineKey: string, event: MouseEvent): void {
-  if ((event as PointerEvent).pointerType === "touch") return;
-  toggleTranslation(lineKey, event);
-}
-
-function startTranslationEdit(lineKey: string, text: string): void {
-  editingTranslationLineKey.value = lineKey;
-  translationDraft.value = text;
-  translationSaveError.value = "";
-}
-
-function cancelTranslationEdit(): void {
-  if (translationSaving.value) return;
-  editingTranslationLineKey.value = null;
-  translationSaveError.value = "";
-}
-
-async function saveTranslationEdit(lineKey: string): Promise<void> {
-  if (translationSaving.value) return;
-  const nextText = translationDraft.value.trim();
-  if (!nextText) {
-    translationSaveError.value = "中文解釋不能留空。";
-    return;
-  }
-  translationSaving.value = true;
-  translationSaveError.value = "";
-  try {
-    await props.updateTranslation(lineKey, nextText);
-    editingTranslationLineKey.value = null;
-  } catch (error) {
-    translationSaveError.value = error instanceof Error ? error.message : "中文解釋儲存失敗。";
-  } finally {
-    translationSaving.value = false;
-  }
-}
-
-function handleTranslationEditorKeydown(event: KeyboardEvent, lineKey: string): void {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    cancelTranslationEdit();
-  } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-    event.preventDefault();
-    void saveTranslationEdit(lineKey);
-  }
+function toggleTranslation(paragraphKey: string): void {
+  const nextHiddenParagraphs = new Set(hiddenTranslationParagraphs.value);
+  if (nextHiddenParagraphs.has(paragraphKey)) nextHiddenParagraphs.delete(paragraphKey);
+  else nextHiddenParagraphs.add(paragraphKey);
+  hiddenTranslationParagraphs.value = nextHiddenParagraphs;
 }
 
 function wordElement(target: EventTarget | null): HTMLElement | null {
@@ -351,12 +291,23 @@ function handleWordKeydown(event: KeyboardEvent): void {
   >
     <template v-for="block in renderedBlocks" :key="block.key">
       <template v-if="block.type === 'text'">
-        <p
+        <div
           v-for="paragraph in block.paragraphs"
           :key="paragraph.key"
+          class="reading-paragraph"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
+          <ParagraphToolbar
+            v-if="paragraph.words.length > 0"
+            :copy-status="copyFeedback?.key === paragraph.key ? copyFeedback.status : null"
+            :has-translation="paragraph.hasTranslation"
+            :is-current-reading-position="currentParagraphKey === paragraph.key"
+            :is-translation-hidden="isTranslationHidden(paragraph.key)"
+            @copy="copyParagraph(paragraph.key, paragraph.sourceText)"
+            @toggle-reading-position="emit('toggleReadingParagraph', paragraph.key)"
+            @toggle-translation="toggleTranslation(paragraph.key)"
+          />
           <template v-for="line in paragraph.lines" :key="line.key">
             <span
               class="reading-line-wrap"
@@ -368,9 +319,10 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :data-source-line-key="line.isSource ? line.key : undefined"
             >
             <span
-              v-if="editingTranslationLineKey !== line.key"
               class="reading-line"
-              :class="{ 'translation-mask': line.isTranslation && isTranslationHidden(line.key) }"
+              :class="{
+                'translation-mask': line.isTranslation && isTranslationHidden(paragraph.key),
+              }"
             >
             <template
               v-for="(segment, segmentIndex) in line.segments"
@@ -400,130 +352,9 @@ function handleWordKeydown(event: KeyboardEvent): void {
             >{{ segment.label }}</span>
             </template>
             </span>
-            <span
-              v-else
-              class="translation-editor"
-              @pointerdown.stop
-            >
-              <textarea
-                v-model="translationDraft"
-                rows="2"
-                :aria-label="`編輯這段中文解釋：${line.segments.map((segment) => segment.label).join('')}`"
-                :disabled="translationSaving"
-                @keydown="handleTranslationEditorKeydown($event, line.key)"
-              />
-              <span class="translation-editor__actions">
-                <button
-                  type="button"
-                  :disabled="translationSaving"
-                  @click.stop="saveTranslationEdit(line.key)"
-                >儲存</button>
-                <button
-                  type="button"
-                  :disabled="translationSaving"
-                  @click.stop="cancelTranslationEdit"
-                >取消</button>
-              </span>
-              <span v-if="translationSaveError" class="translation-editor__error" role="alert">
-                {{ translationSaveError }}
-              </span>
-            </span>
-            <span
-              v-if="line.key === paragraph.lastOriginalLineKey && paragraph.words.length > 0"
-              class="reading-paragraph-controls"
-              role="group"
-              aria-label="段落閱讀操作"
-            >
-              <button
-                class="reading-paragraph-control"
-                :class="{
-                  'is-copy-error': copyFeedback?.key === paragraph.key && copyFeedback.status === 'error',
-                  'is-copy-success': copyFeedback?.key === paragraph.key && copyFeedback.status === 'success',
-                }"
-                type="button"
-                :aria-label="copyFeedback?.key === paragraph.key && copyFeedback.status === 'success'
-                  ? '已複製整段英文'
-                  : '複製整段英文'"
-                :title="copyFeedback?.key === paragraph.key && copyFeedback.status === 'success'
-                  ? '已複製整段英文'
-                  : '複製整段英文'"
-                @pointerdown.stop
-                @click.stop="copyParagraph(paragraph.key, paragraph.sourceText)"
-              >
-                <svg
-                  v-if="copyFeedback?.key === paragraph.key && copyFeedback.status === 'success'"
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="m5 12 4 4L19 6" />
-                </svg>
-                <svg v-else aria-hidden="true" viewBox="0 0 24 24">
-                  <rect x="8" y="8" width="11" height="11" rx="2" />
-                  <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-                </svg>
-              </button>
-              <button
-                class="reading-paragraph-control"
-                :class="{ 'is-active': currentParagraphKey === paragraph.key }"
-                type="button"
-                aria-label="標記目前閱讀段落"
-                title="標記目前閱讀段落"
-                :aria-pressed="currentParagraphKey === paragraph.key"
-                @pointerdown.stop
-                @click.stop="emit('toggleReadingParagraph', paragraph.key)"
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M6 4h12v16l-6-4-6 4V4Z" />
-                </svg>
-              </button>
-            </span>
-            <span
-              v-if="line.key === paragraph.lastOriginalLineKey && copyFeedback?.key === paragraph.key"
-              class="reading-copy-feedback"
-              :class="{ 'is-error': copyFeedback.status === 'error' }"
-              :role="copyFeedback.status === 'error' ? 'alert' : 'status'"
-            >{{ copyFeedback.status === "success" ? "已複製" : "複製失敗" }}</span>
-            <span
-              v-if="line.isTranslation && editingTranslationLineKey !== line.key"
-              class="reading-paragraph-controls translation-control-anchor"
-              role="group"
-              aria-label="中文解釋控制"
-            >
-              <button
-                class="reading-paragraph-control translation-edit-toggle"
-                type="button"
-                :aria-label="`編輯這段中文解釋：${line.segments.map((segment) => segment.label).join('')}`"
-                title="編輯這段中文解釋"
-                @pointerdown.stop
-                @click.stop="startTranslationEdit(line.key, line.segments.map((segment) => segment.label).join(''))"
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="m4 16-.8 4.8L8 20l4.8-.8L20 4.8a2.8 2.8 0 0 0-4-4L4 16Z" />
-                  <path d="m14 6 4 4" />
-                </svg>
-              </button>
-              <button
-                class="reading-paragraph-control translation-visibility-toggle"
-                type="button"
-                :aria-label="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
-                :aria-pressed="isTranslationHidden(line.key)"
-                :title="isTranslationHidden(line.key) ? '顯示這段中文解釋' : '隱藏這段中文解釋'"
-                @pointerdown.stop="toggleTranslationOnTouch(line.key, $event)"
-                @click.stop="toggleTranslationOnClick(line.key, $event)"
-              >
-                <svg v-if="isTranslationHidden(line.key)" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M3 3 21 21" />
-                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A11.8 11.8 0 0 1 12 5c5 0 8.5 3.5 10 7a14 14 0 0 1-3.1 4.8M6.2 6.2A13.8 13.8 0 0 0 2 12c1.5 3.5 5 7 10 7a11.8 11.8 0 0 0 2.1-.2" />
-                </svg>
-                <svg v-else aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M2 12c1.5-3.5 5-7 10-7s8.5 3.5 10 7c-1.5 3.5-5 7-10 7S3.5 15.5 2 12Z" />
-                  <circle cx="12" cy="12" r="2.5" />
-                </svg>
-              </button>
-            </span>
             </span>
           </template>
-        </p>
+        </div>
       </template>
       <MaterialImage v-else :block="block.block" />
     </template>

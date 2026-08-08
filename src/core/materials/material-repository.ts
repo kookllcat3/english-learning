@@ -2,18 +2,15 @@ import {
   STORES,
   deleteMaterialBundle,
   readAll,
-  readAllByIndex,
   readMany,
   readOne,
   writeLearningProgress,
-  writeMaterialContent,
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
-import { isContextualOccurrenceValid } from "../learning/contextual-word-note.js";
 import { materialWithLearningProgress } from "../learning/learning-records.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
-import { classifyReadingContent, sourceWordsForBlocks } from "../learning/reading-content.js";
+import { sourceWordsForBlocks } from "../learning/reading-content.js";
 import {
   currentVocabularyRecord,
   ensureMaterialKnowledge,
@@ -25,7 +22,6 @@ import { normalizeWord } from "../text/text.js";
 import type {
   BackupMaterial,
   CreateMaterialInput,
-  ContentBlock,
   MaterialAssetRecord,
   MaterialRecord,
   StoredMaterialAssetRecord,
@@ -111,62 +107,6 @@ export async function updateMaterial(
     updatedAt: new Date().toISOString(),
   };
   return writeOne(STORES.materials, updated);
-}
-
-export async function updateMaterialTranslation(
-  id: string,
-  lineKey: string,
-  text: string,
-): Promise<void> {
-  await ensureMaterialKnowledge();
-  const [material, storedContent] = await Promise.all([
-    readOne(STORES.materials, id),
-    readOne(STORES.materialContents, id),
-  ]);
-  if (!material || !storedContent) throw new Error("找不到指定的教材。");
-
-  const nextText = text.replace(/\r\n?/g, " ").replace(/\n+/g, " ").trim();
-  if (!nextText) throw new Error("中文解釋不能留空。");
-  const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
-  const line = classifyReadingContent(contentBlocks)
-    .flatMap((section) => section.type === "text" ? section.lines : [])
-    .find((candidate) => candidate.key === lineKey);
-  if (!line || line.role !== "translation") throw new Error("找不到指定的中文解釋。");
-
-  const keyParts = lineKey.split("-").map(Number);
-  if (keyParts.length !== 4 || keyParts.some((part) => !Number.isInteger(part) || part < 0)) {
-    throw new Error("中文解釋識別碼無效。");
-  }
-  const [blockOrder, blockIndex, paragraphIndex, lineIndex] = keyParts;
-  const sortedBlocks = [...contentBlocks].sort((first, second) => first.order - second.order);
-  const targetBlock = sortedBlocks[blockIndex];
-  if (!targetBlock || targetBlock.type !== "text" || targetBlock.order !== blockOrder) {
-    throw new Error("找不到指定的中文解釋。");
-  }
-  const paragraphs = targetBlock.text.split(/\n{2,}/);
-  const paragraph = paragraphs[paragraphIndex];
-  const lines = paragraph?.split("\n");
-  if (!lines || lineIndex >= lines.length) throw new Error("找不到指定的中文解釋。");
-  lines[lineIndex] = nextText;
-  paragraphs[paragraphIndex] = lines.join("\n");
-  targetBlock.text = paragraphs.join("\n\n");
-
-  const content = contentBlocks
-    .filter((block): block is Extract<ContentBlock, { type: "text" }> => block.type === "text")
-    .map((block) => block.text)
-    .join("\n\n");
-  validateMaterialContent(content);
-  const contextualNotes = await readAllByIndex(STORES.contextualWordNotes, "materialId", id);
-  const retainedContextualNoteIds = new Set(
-    contextualNotes
-      .filter((note) => isContextualOccurrenceValid(note, contentBlocks))
-      .map((note) => note.id),
-  );
-  await writeMaterialContent(
-    { ...material, updatedAt: new Date().toISOString() },
-    { materialId: id, content, contentBlocks },
-    retainedContextualNoteIds,
-  );
 }
 
 export async function setMaterialReadingParagraph(

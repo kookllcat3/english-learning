@@ -6,7 +6,10 @@ const VIEWPORT_MARGIN = 12;
 const MAX_CARD_HEIGHT = 560;
 const MINIMUM_VIEWPORT_HEIGHT = 210;
 
-export function useWordCardPosition(card: Ref<HTMLElement | null>): {
+export function useWordCardPosition(
+  card: Ref<HTMLElement | null>,
+  hoverBridge: Ref<HTMLElement | null>,
+): {
   clearAnchor: () => void;
   positionAt: (rect: DOMRect) => void;
 } {
@@ -43,6 +46,20 @@ export function useWordCardPosition(card: Ref<HTMLElement | null>): {
     element.style.top = `${position.top}px`;
   }
 
+  function positionHoverBridge(targetRect: DOMRect): void {
+    const cardElement = card.value;
+    const bridgeElement = hoverBridge.value;
+    if (!cardElement || !bridgeElement) return;
+    const cardRect = cardElement.getBoundingClientRect();
+    const cardIsBelowTarget = cardRect.top >= targetRect.bottom;
+    const bridgeTop = cardIsBelowTarget ? targetRect.bottom : cardRect.bottom;
+    const bridgeBottom = cardIsBelowTarget ? cardRect.top : targetRect.top;
+    bridgeElement.style.left = `${cardRect.left}px`;
+    bridgeElement.style.top = `${bridgeTop}px`;
+    bridgeElement.style.width = `${cardRect.width}px`;
+    bridgeElement.style.height = `${Math.max(0, bridgeBottom - bridgeTop)}px`;
+  }
+
   function observeCardSize(): void {
     if (resizeObserver || !card.value) return;
     resizeObserver = new ResizeObserver(() => {
@@ -74,10 +91,12 @@ export function useWordCardPosition(card: Ref<HTMLElement | null>): {
     });
     const left = rect.left + (rect.width - cardRect.width) / 2;
     setPosition(left, top);
+    positionHoverBridge(rect);
   }
 
   function clearAnchor(): void {
     anchorRect = null;
+    hoverBridge.value?.style.removeProperty("height");
   }
 
   onBeforeUnmount(() => {

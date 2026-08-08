@@ -57,6 +57,32 @@ test("positions a restored note card before its note has loaded", async ({ page 
   await expect(editor).toContainText("A long restored note");
 });
 
+test("keeps the word card open while crossing its hover gap", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const word = page.locator('[data-word="bear"]').first();
+  const card = page.locator(".word-card");
+  const hoverBridge = page.locator(".word-card-hover-bridge");
+  await word.hover();
+  await expect(card).toBeVisible();
+
+  const bridgeBounds = await hoverBridge.boundingBox();
+  if (!bridgeBounds) throw new Error("word card hover bridge not found");
+  expect(bridgeBounds.height).toBe(10);
+  await page.mouse.move(
+    bridgeBounds.x + (bridgeBounds.width / 2),
+    bridgeBounds.y + (bridgeBounds.height / 2),
+  );
+  await page.waitForTimeout(180);
+  await expect(card).toBeVisible();
+
+  await page.getByRole("button", { name: "播放單字發音" }).hover();
+  await expect(card).toBeVisible();
+  await page.getByRole("heading", { name: materialTitle, level: 1 }).hover();
+  await expect(card).toBeHidden();
+});
+
 test("persists a word note without showing formatting controls", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();

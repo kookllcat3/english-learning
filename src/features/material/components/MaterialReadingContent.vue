@@ -217,7 +217,7 @@ function handlePointerOut(event: PointerEvent): void {
   const element = wordElement(event.target);
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
-  if (nextElement?.closest(".word-card, .reading-word")) return;
+  if (nextElement?.closest(".word-card, .word-card-hover-bridge, .reading-word")) return;
   emit("deactivate");
 }
 

@@ -376,6 +376,19 @@
   box-shadow: 0 18px 52px rgb(23 32 51 / 24%);
 }
 .word-card.is-position-ready { visibility: visible; }
+.word-card-hover-bridge {
+  position: fixed;
+  z-index: 10;
+  visibility: hidden;
+  width: 0;
+  height: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.word-card-hover-bridge.is-position-ready {
+  visibility: visible;
+  pointer-events: auto;
+}
 .word-card-backdrop {
   position: fixed;
   z-index: 9;
@@ -385,6 +398,7 @@
   pointer-events: none;
 }
 @media (hover: none), (pointer: coarse) {
+  .word-card-hover-bridge.is-position-ready { pointer-events: none; }
   .word-card-backdrop { display: block; }
 }
 .word-card__heading {

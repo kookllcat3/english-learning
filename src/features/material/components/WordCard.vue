@@ -18,6 +18,7 @@ const emit = defineEmits<{
 }>();
 
 const card = ref<HTMLElement | null>(null);
+const hoverBridge = ref<HTMLElement | null>(null);
 const editor = ref<HTMLDivElement | null>(null);
 const selectedWord = ref("");
 const markdown = ref("");
@@ -39,7 +40,7 @@ const PAGE_SCROLL_LOCK_MEDIA_QUERY = "(hover: none), (pointer: coarse)";
 const {
   clearAnchor,
   positionAt,
-} = useWordCardPosition(card);
+} = useWordCardPosition(card, hoverBridge);
 
 function cancelScheduledSave(): void {
   window.clearTimeout(saveTimer);
@@ -328,6 +329,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-show="visible" class="word-card-backdrop" aria-hidden="true" />
+  <div
+    v-show="visible"
+    ref="hoverBridge"
+    class="word-card-hover-bridge"
+    :class="{ 'is-position-ready': positionReady }"
+    aria-hidden="true"
+    @pointerenter="keepCardOpen"
+    @pointerleave="closeCardWhenIdle"
+  />
   <aside
     v-show="visible"
     ref="card"

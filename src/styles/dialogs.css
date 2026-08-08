@@ -195,16 +195,6 @@
   .copy-status { min-height: 18px; margin-top: 3px; font-size: .78rem; }
 }
 
-.material-heading { margin-bottom: 28px; }
-.material-heading h1 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.detail-layout { display: block; }
-.panel { padding: 24px; }
-.panel__heading { margin-bottom: 18px; }
-.panel__heading p { margin-bottom: 0; color: var(--muted); }
 .text-button {
   min-height: 38px;
   padding: 7px 10px;

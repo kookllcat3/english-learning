@@ -6,7 +6,7 @@ import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
 interface ReadingPositionOptions {
   actionError: Ref<string>;
   materialId: () => string;
-  readingPanel: Ref<HTMLElement | null>;
+  readingContainer: Ref<HTMLElement | null>;
   returnActionAnchor: Ref<HTMLElement | null>;
 }
 
@@ -67,13 +67,13 @@ export function useReadingPosition(options: ReadingPositionOptions) {
     await waitForStableLayout();
     if (currentParagraphKey.value !== paragraphKey) return;
 
-    let paragraph = findReadingParagraph(options.readingPanel.value, paragraphKey);
+    let paragraph = findReadingParagraph(options.readingContainer.value, paragraphKey);
     if (!paragraph) return;
     paragraph.scrollIntoView({ behavior: "auto", block: "center" });
     await waitForStableLayout();
     if (currentParagraphKey.value !== paragraphKey) return;
 
-    paragraph = findReadingParagraph(options.readingPanel.value, paragraphKey);
+    paragraph = findReadingParagraph(options.readingContainer.value, paragraphKey);
     if (!paragraph) return;
     paragraph.scrollIntoView({ behavior: "auto", block: "center" });
     paragraph.querySelector<HTMLElement>('[aria-label="標記目前閱讀段落"]')

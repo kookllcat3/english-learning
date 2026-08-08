@@ -341,7 +341,7 @@ test("offers a return action whenever a reading position is marked", async ({ pa
   await expect(lastParagraph.locator(".reading-line-wrap.is-translation"))
     .not.toHaveClass(/is-reading-position/);
   await expect(returnAction).toBeVisible();
-  expect(await returnAction.evaluate((button) => Boolean(button.closest(".panel__heading")))).toBe(true);
+  expect(await returnAction.evaluate((button) => Boolean(button.closest(".material-heading")))).toBe(true);
   await expect(returnAction).toHaveClass(/is-floating/);
   await expect(returnAction).toHaveCSS("position", "fixed");
   await expect(page.locator(".material-view-switcher")).toHaveCount(0);

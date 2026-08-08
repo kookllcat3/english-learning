@@ -31,7 +31,7 @@ const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
-const readingPanel = ref<HTMLElement | null>(null);
+const readingContainer = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
 
@@ -48,7 +48,7 @@ const {
 } = useReadingPosition({
   actionError,
   materialId,
-  readingPanel,
+  readingContainer,
   returnActionAnchor: readingPositionReturnAnchor,
 });
 
@@ -167,42 +167,37 @@ onBeforeUnmount(() => {
         <p class="eyebrow">Reading material</p>
         <h1 id="material-title" :title="material.title">{{ material.title }}</h1>
         <p v-if="material.description" class="lead">{{ material.description }}</p>
+        <div ref="readingPositionReturnAnchor" class="material-heading__actions">
+          <button
+            v-if="showReadingPositionReturn"
+            class="reading-position-return"
+            :class="{ 'is-floating': readingPositionReturnFloating }"
+            type="button"
+            @click="returnToReadingPosition"
+          >
+            回到閱讀位置
+          </button>
+        </div>
       </section>
 
       <p v-if="actionError" class="form-message is-error" role="alert">{{ actionError }}</p>
 
-      <div class="detail-layout">
-        <article ref="readingPanel" class="panel reading-panel">
-          <div class="panel__heading">
-            <div ref="readingPositionReturnAnchor" class="reading-panel__title-row">
-              <h2>教材內容</h2>
-              <button
-                v-if="showReadingPositionReturn"
-                class="reading-position-return"
-                :class="{ 'is-floating': readingPositionReturnFloating }"
-                type="button"
-                @click="returnToReadingPosition"
-              >
-                回到閱讀位置
-              </button>
-            </div>
-          </div>
-          <MaterialReadingContent
-            :active-word="activeWord"
-            :blocks="material.contentBlocks"
-            :current-paragraph-key="currentParagraphKey"
-            :familiarity-levels="familiarityLevels"
-            :vocabulary-progress="vocabularyProgress"
-            @mouseup="handleWordSelection"
-            @dblclick="nextTick(handleWordSelection)"
-            @keyup="handleWordSelection"
-            @lookup="openWordCard"
-            @activate="openWordCard"
-            @deactivate="scheduleWordCardClose"
-            @toggle-reading-paragraph="toggleReadingParagraph"
-          />
-        </article>
-      </div>
+      <article ref="readingContainer" class="reading-section">
+        <MaterialReadingContent
+          :active-word="activeWord"
+          :blocks="material.contentBlocks"
+          :current-paragraph-key="currentParagraphKey"
+          :familiarity-levels="familiarityLevels"
+          :vocabulary-progress="vocabularyProgress"
+          @mouseup="handleWordSelection"
+          @dblclick="nextTick(handleWordSelection)"
+          @keyup="handleWordSelection"
+          @lookup="openWordCard"
+          @activate="openWordCard"
+          @deactivate="scheduleWordCardClose"
+          @toggle-reading-paragraph="toggleReadingParagraph"
+        />
+      </article>
 
       <WordCard
         ref="wordCard"

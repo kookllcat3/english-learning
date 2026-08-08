@@ -62,7 +62,7 @@ h2 { margin-bottom: 8px; font-size: 1.4rem; line-height: 1.3; }
 .header-icon-button:active { transform: translateY(0); }
 .header-icon-button:focus-visible { outline: 3px solid rgb(255 203 183 / 45%); outline-offset: 3px; }
 .page-shell { width: min(100% - 48px, 1080px); margin-inline: auto; padding-block: 36px 32px; }
-.section-heading, .dialog__heading, .dialog__actions, .panel__heading {
+.section-heading, .dialog__heading, .dialog__actions {
   display: flex; align-items: center; justify-content: space-between; gap: 24px;
 }
 .lead, .muted { color: var(--muted); }

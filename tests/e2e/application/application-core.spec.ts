@@ -17,6 +17,13 @@ test("uses one Vue app and keeps reading as the only material view", async ({ pa
   await expect(page.locator(".material-view-switcher")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "教材詞彙" })).toHaveCount(0);
   await expect(page.locator(".vocabulary-panel")).toHaveCount(0);
+  await expect(page.locator(".reading-section")).toBeVisible();
+  await expect(page.locator(".reading-section.panel")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "教材內容" })).toHaveCount(0);
+  const materialTitleHeading = page.locator("#material-title");
+  await expect(materialTitleHeading).toHaveAttribute("title", materialTitle);
+  await expect(materialTitleHeading).toHaveCSS("white-space", "nowrap");
+  await expect(materialTitleHeading).toHaveCSS("text-overflow", "ellipsis");
 
   await seedKnownWordsForCurrentMaterial(page, ["bear"]);
   await page.reload();

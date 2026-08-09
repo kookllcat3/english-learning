@@ -23,8 +23,8 @@ function activateAnnotationTool(): void {
 </script>
 
 <template>
-  <div class="paragraph-toolbar" role="group" aria-label="段落閱讀工具" @pointerdown.stop>
-    <span class="paragraph-toolbar__actions">
+  <div class="paragraph-toolbar" role="group" aria-label="段落閱讀工具">
+    <span class="paragraph-toolbar__actions" @pointerdown.stop>
       <button
         class="paragraph-toolbar__button"
         :class="{

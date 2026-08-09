@@ -97,6 +97,21 @@ test("limits tools to one paragraph, supports keyboard, and restores word cards 
   await firstEntry.click();
   await expect(firstEntry).toHaveAttribute("aria-pressed", "true");
 
+  const toolbar = paragraphs.nth(0).locator(".paragraph-toolbar");
+  const toolbarBox = await toolbar.boundingBox();
+  if (!toolbarBox) throw new Error("找不到第一段落工具列的位置");
+  await toolbar.click({
+    position: { x: toolbarBox.width - 2, y: toolbarBox.height / 2 },
+  });
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "false");
+
+  await firstEntry.click();
+  await page.locator(".material-heading").click({ position: { x: 2, y: 2 } });
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "false");
+
+  await firstEntry.click();
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "true");
+
   const firstParagraphBox = await paragraphs.nth(0).boundingBox();
   if (!firstParagraphBox) throw new Error("找不到第一段落的位置");
   await paragraphs.nth(0).click({

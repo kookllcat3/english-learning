@@ -45,6 +45,20 @@ test("adds and removes a highlight without opening the word card on touch", asyn
   const entry = paragraph.getByRole("button", { name: "開啟螢光筆工具" });
   await entry.tap();
   await expect(paragraph.getByRole("group", { name: "選擇標記工具" })).toHaveCount(0);
+
+  const toolbar = paragraph.locator(".paragraph-toolbar");
+  const toolbarBox = await toolbar.boundingBox();
+  if (!toolbarBox) throw new Error("找不到段落工具列的位置");
+  await toolbar.tap({
+    position: { x: toolbarBox.width - 2, y: toolbarBox.height / 2 },
+  });
+  await expect(entry).toHaveAttribute("aria-pressed", "false");
+
+  await entry.tap();
+  await page.locator(".material-heading").tap({ position: { x: 2, y: 2 } });
+  await expect(entry).toHaveAttribute("aria-pressed", "false");
+
+  await entry.tap();
   const word = paragraph.locator('[data-word="original"]');
   await word.tap();
   await expect(word).toHaveClass(/is-highlighted/);

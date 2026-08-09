@@ -177,6 +177,12 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
   handleWordCardPointerDown(event);
+  const word = target.closest<HTMLElement>(".reading-word");
+  const isActiveAnnotationWord = Boolean(
+    annotationMode.value
+    && word?.dataset.paragraphKey === annotationParagraphKey.value,
+  );
+  if (annotationMode.value && !isActiveAnnotationWord) exitAnnotationMode();
 }
 
 function unknownWords(words: string[]): string[] {

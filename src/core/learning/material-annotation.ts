@@ -7,6 +7,7 @@ import type {
   MaterialHighlightColor,
 } from "../models/models.js";
 import { isContextualOccurrenceValid } from "./contextual-word-note.js";
+import { mergeNewerRecords } from "./learning-records.js";
 import { readingWordOccurrencesForBlocks } from "./reading-content.js";
 
 export const DEFAULT_HIGHLIGHT_COLOR: MaterialHighlightColor = "yellow";
@@ -85,6 +86,24 @@ export function materialAnnotationsForReplacement(
       });
     return retained;
   }, []);
+}
+
+export function mergeImportedMaterialAnnotations(
+  current: MaterialAnnotationRecord[],
+  incoming: MaterialAnnotationRecord[],
+  materialsWithAuthoritativeHighlights: ReadonlySet<string>,
+): MaterialAnnotationRecord[] {
+  const legacyAnnotations = mergeNewerRecords(
+    current.filter((annotation) => annotation.kind === "legacy-contextual-word-note"),
+    incoming.filter((annotation) => annotation.kind === "legacy-contextual-word-note"),
+    "id",
+  );
+  const retainedHighlights = current.filter((annotation) => (
+    annotation.kind === "highlight"
+      && !materialsWithAuthoritativeHighlights.has(annotation.materialId)
+  ));
+  const importedHighlights = incoming.filter((annotation) => annotation.kind === "highlight");
+  return [...legacyAnnotations, ...retainedHighlights, ...importedHighlights];
 }
 
 export function createMaterialHighlightAnnotation({

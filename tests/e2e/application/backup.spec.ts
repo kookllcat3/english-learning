@@ -24,7 +24,6 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
   const firstParagraph = page.locator("[data-reading-paragraph]").first();
   await firstParagraph.getByRole("button", { name: "開啟螢光筆工具" }).click();
-  await firstParagraph.getByRole("button", { name: "淡黃色螢光筆" }).click();
   await firstParagraph.locator('[data-word="bear"]').first().click();
   await expect.poll(() => storedHighlights(page)).toHaveLength(1);
   await page.keyboard.press("Escape");
@@ -224,6 +223,121 @@ test("rejects invalid version 6 highlight records before writing", async ({ page
   await expect(dataDialog.getByRole("alert")).toContainText("螢光標記");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: "不應匯入的教材" })).toHaveCount(0);
+});
+
+test("replaces local highlights with the imported set for an included material", async ({ page }) => {
+  const localHighlightId = "5f459dcf-f9ad-47b4-82e7-49bd7e6815bb";
+  const importedHighlightId = "629ac0af-51ef-4f67-9895-35a477bd8b58";
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const firstParagraph = page.locator("[data-reading-paragraph]").first();
+  const localWord = firstParagraph.locator('[data-word="bear"]').first();
+  const importedWord = firstParagraph.locator('[data-word="runs"]').first();
+  const paragraphKey = await localWord.getAttribute("data-paragraph-key");
+  const localOccurrenceKey = await localWord.getAttribute("data-word-key");
+  const importedOccurrenceKey = await importedWord.getAttribute("data-word-key");
+  expect(paragraphKey).not.toBeNull();
+  expect(localOccurrenceKey).not.toBeNull();
+  expect(importedOccurrenceKey).not.toBeNull();
+
+  const backup = await page.evaluate(async ({
+    importedHighlightId,
+    importedOccurrenceKey,
+    localHighlightId,
+    localOccurrenceKey,
+    paragraphKey,
+  }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const readAll = <T>(storeName: string) => new Promise<T[]>((resolve, reject) => {
+      const request = database.transaction(storeName, "readonly").objectStore(storeName).getAll();
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const [materials, contents] = await Promise.all([
+      readAll<Record<string, unknown>>("materials"),
+      readAll<Record<string, unknown>>("materialContents"),
+    ]);
+    const material = materials[0];
+    const content = contents[0];
+    if (!material || !content) throw new Error("test material was not stored");
+    const materialId = String(material.id);
+    const timestamp = "2026-08-09T08:00:00.000Z";
+    const transaction = database.transaction("materialAnnotations", "readwrite");
+    transaction.objectStore("materialAnnotations").put({
+      id: localHighlightId,
+      materialId,
+      kind: "highlight",
+      target: {
+        type: "reading-word-occurrences",
+        paragraphKey,
+        occurrenceKeys: [localOccurrenceKey],
+      },
+      style: { color: "yellow" },
+      createdAt: "2026-08-09T10:00:00.000Z",
+      updatedAt: "2026-08-09T10:00:00.000Z",
+    });
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error), { once: true });
+    });
+    database.close();
+    return {
+      schemaVersion: 6,
+      exportedAt: timestamp,
+      materials: [{
+        ...material,
+        content: content.content,
+        contentBlocks: content.contentBlocks,
+      }],
+      materialAssets: [],
+      vocabulary: [],
+      materialAnnotations: [{
+        id: importedHighlightId,
+        materialId,
+        kind: "highlight",
+        target: {
+          type: "reading-word-occurrences",
+          paragraphKey,
+          occurrenceKeys: [importedOccurrenceKey],
+        },
+        style: { color: "yellow" },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      wordNotes: [],
+      settings: [],
+    };
+  }, {
+    importedHighlightId,
+    importedOccurrenceKey: importedOccurrenceKey!,
+    localHighlightId,
+    localOccurrenceKey: localOccurrenceKey!,
+    paragraphKey: paragraphKey!,
+  });
+  await expect.poll(() => storedHighlights(page)).toEqual([{
+    id: localHighlightId,
+    occurrenceKeys: [localOccurrenceKey],
+    paragraphKey,
+  }]);
+
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "authoritative-highlights-v6.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backup), "utf8"),
+  });
+
+  await expect.poll(() => storedHighlights(page)).toEqual([{
+    id: importedHighlightId,
+    occurrenceKeys: [importedOccurrenceKey],
+    paragraphKey,
+  }]);
 });
 
 test("removes orphaned legacy contextual annotations while merging a backup", async ({ page }) => {

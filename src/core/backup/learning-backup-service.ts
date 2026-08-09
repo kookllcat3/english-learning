@@ -7,6 +7,7 @@ import {
 } from "../learning/contextual-word-note.js";
 import {
   contextualWordNoteToMaterialAnnotation,
+  mergeImportedMaterialAnnotations,
   materialAnnotationsForReplacement,
 } from "../learning/material-annotation.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
@@ -721,10 +722,13 @@ export async function importBackup(
   const learnedWords = new Set(bundles.flatMap((bundle) => bundle.metadata.knownWords));
   const timestamp = new Date().toISOString();
   vocabulary = synchronizeVocabularyRecords(vocabulary, learnedWords, timestamp);
-  const mergedAnnotations = mergeNewerRecords(
+  const materialsWithAuthoritativeHighlights = backup.schemaVersion === BACKUP_SCHEMA_VERSION
+    ? new Set(backup.materials.map((material) => material.id))
+    : new Set<string>();
+  const mergedAnnotations = mergeImportedMaterialAnnotations(
     currentAnnotations,
     backup.materialAnnotations ?? [],
-    "id",
+    materialsWithAuthoritativeHighlights,
   );
   const materialAnnotations = bundles.flatMap((bundle) => materialAnnotationsForReplacement(
     mergedAnnotations.filter((annotation) => annotation.materialId === bundle.metadata.id),

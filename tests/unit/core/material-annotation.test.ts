@@ -4,6 +4,7 @@ import {
   addHighlightOccurrence,
   contextualWordNoteToMaterialAnnotation,
   createMaterialHighlightAnnotation,
+  mergeImportedMaterialAnnotations,
   materialAnnotationToContextualWordNote,
   materialAnnotationsForReplacement,
   removeHighlightOccurrence,
@@ -12,6 +13,8 @@ import { readingWordOccurrencesForBlocks } from "../../../src/core/learning/read
 import type {
   ContentBlock,
   ContextualWordNoteRecord,
+  LegacyContextualWordNoteAnnotationRecord,
+  MaterialAnnotationRecord,
   MaterialHighlightAnnotationRecord,
 } from "../../../src/core/models/models.js";
 
@@ -26,6 +29,26 @@ const firstParagraphOccurrences = occurrences
   .filter((occurrence) => occurrence.paragraphKey === firstParagraph)
   .map((occurrence) => occurrence.wordKey);
 const timestamp = "2026-08-09T08:00:00.000Z";
+
+function highlight(
+  id: string,
+  materialId: string,
+  occurrenceKey: string,
+): MaterialHighlightAnnotationRecord {
+  return {
+    id,
+    materialId,
+    kind: "highlight",
+    target: {
+      type: "reading-word-occurrences",
+      paragraphKey: firstParagraph,
+      occurrenceKeys: [occurrenceKey],
+    },
+    style: { color: "yellow" },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
 
 describe("material annotations", () => {
   it("converts legacy contextual notes without losing data", () => {
@@ -109,5 +132,67 @@ describe("material annotations", () => {
       firstParagraphOccurrences[2],
       "2026-08-09T09:00:00.000Z",
     )).toBeNull();
+  });
+
+  it("uses imported highlights as the complete set for included materials", () => {
+    const localIncludedHighlight = highlight(
+      "local-included",
+      "included-material",
+      firstParagraphOccurrences[0],
+    );
+    const localUnrelatedHighlight = highlight(
+      "local-unrelated",
+      "unrelated-material",
+      firstParagraphOccurrences[0],
+    );
+    const importedHighlight = highlight(
+      "imported-included",
+      "included-material",
+      firstParagraphOccurrences[2],
+    );
+
+    expect(mergeImportedMaterialAnnotations(
+      [localIncludedHighlight, localUnrelatedHighlight],
+      [importedHighlight],
+      new Set(["included-material"]),
+    )).toEqual([localUnrelatedHighlight, importedHighlight]);
+    expect(mergeImportedMaterialAnnotations(
+      [localIncludedHighlight, localUnrelatedHighlight],
+      [],
+      new Set(["included-material"]),
+    )).toEqual([localUnrelatedHighlight]);
+  });
+
+  it("keeps legacy annotations on recency merge and old-schema highlights intact", () => {
+    const currentNote: LegacyContextualWordNoteAnnotationRecord = {
+      id: "shared-note",
+      materialId: "material",
+      kind: "legacy-contextual-word-note",
+      target: {
+        type: "contextual-word-occurrence",
+        occurrenceKey: firstParagraphOccurrences[0],
+        word: "driver",
+      },
+      body: { format: "markdown", value: "newer local note" },
+      createdAt: timestamp,
+      updatedAt: "2026-08-09T10:00:00.000Z",
+    };
+    const incomingNote: LegacyContextualWordNoteAnnotationRecord = {
+      ...currentNote,
+      body: { format: "markdown", value: "older imported note" },
+      updatedAt: "2026-08-09T09:00:00.000Z",
+    };
+    const localHighlight = highlight(
+      "local-highlight",
+      "material",
+      firstParagraphOccurrences[0],
+    );
+    const annotations: MaterialAnnotationRecord[] = [currentNote, localHighlight];
+
+    expect(mergeImportedMaterialAnnotations(
+      annotations,
+      [incomingNote],
+      new Set(),
+    )).toEqual([currentNote, localHighlight]);
   });
 });

@@ -34,8 +34,7 @@ const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
 const markingAllWords = ref(false);
-const completionMessage = ref("");
-const completionMessageIsError = ref(false);
+const completionError = ref("");
 const readingContainer = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
@@ -96,8 +95,7 @@ async function loadMaterialPage(): Promise<void> {
   errorMessage.value = "";
   actionError.value = "";
   markingAllWords.value = false;
-  completionMessage.value = "";
-  completionMessageIsError.value = false;
+  completionError.value = "";
   if (!id) {
     loading.value = false;
     errorMessage.value = "找不到這份教材";
@@ -139,8 +137,7 @@ async function markAllMaterialWordsKnown(): Promise<void> {
     || allMaterialWordsKnown.value
   ) return;
   markingAllWords.value = true;
-  completionMessage.value = "";
-  completionMessageIsError.value = false;
+  completionError.value = "";
   try {
     const id = material.value.id;
     await setWordsKnown(id, [...vocabularyProgress.value.keys()], true);
@@ -150,10 +147,8 @@ async function markAllMaterialWordsKnown(): Promise<void> {
     ]);
     material.value = updatedMaterial;
     vocabularyProgress.value = updatedProgress;
-    completionMessage.value = "已將本篇全部單字標記為認識。";
   } catch (error) {
-    completionMessageIsError.value = true;
-    completionMessage.value = getErrorMessage(error, "無法更新本篇單字，請稍後再試。");
+    completionError.value = getErrorMessage(error, "無法更新本篇單字，請稍後再試。");
   } finally {
     markingAllWords.value = false;
   }
@@ -261,13 +256,8 @@ onBeforeUnmount(() => {
           >
             {{ completionButtonLabel }}
           </button>
-          <p
-            v-if="completionMessage"
-            class="material-completion__status"
-            :class="{ 'is-error': completionMessageIsError }"
-            :role="completionMessageIsError ? 'alert' : 'status'"
-          >
-            {{ completionMessage }}
+          <p v-if="completionError" class="material-completion__status is-error" role="alert">
+            {{ completionError }}
           </p>
         </div>
       </footer>

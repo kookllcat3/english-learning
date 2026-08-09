@@ -7,7 +7,7 @@ export default defineConfig({
   testMatch: ["deployment.spec.ts", "performance.spec.ts"],
   fullyParallel: false,
   forbidOnly: true,
-  workers: 4,
+  workers: process.env.CI ? 1 : 4,
   outputDir: ".artifacts/playwright/test-results",
   reporter: [["list"], ["html", {
     open: "never",

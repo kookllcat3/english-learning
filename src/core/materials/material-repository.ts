@@ -2,13 +2,16 @@ import {
   STORES,
   deleteMaterialBundle,
   readAll,
+  readAllByIndex,
   readMany,
   readOne,
+  replaceMaterialBundle,
   writeLearningProgress,
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
 import { materialWithLearningProgress } from "../learning/learning-records.js";
+import { isContextualOccurrenceValid } from "../learning/contextual-word-note.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
 import { sourceWordsForBlocks } from "../learning/reading-content.js";
 import {
@@ -19,6 +22,7 @@ import {
   validateMaterialContent,
 } from "../learning/material-migrations.js";
 import { normalizeWord } from "../text/text.js";
+import { materialReplacementState } from "./material-replacement.js";
 import type {
   BackupMaterial,
   CreateMaterialInput,
@@ -27,6 +31,7 @@ import type {
   StoredMaterialAssetRecord,
   VocabularyRecord,
 } from "../models/models.js";
+import type { ImportedMaterialFile } from "./material-file-import.js";
 
 export async function getMaterial(id: string): Promise<BackupMaterial> {
   await ensureMaterialKnowledge();
@@ -47,6 +52,11 @@ export async function getMaterial(id: string): Promise<BackupMaterial> {
 export async function getMaterialAsset(assetId: string) {
   const asset = await readOne(STORES.materialAssets, assetId);
   return asset ? materialAssetFromStoredRecord(asset) : undefined;
+}
+
+export async function getMaterialAssets(materialId: string): Promise<MaterialAssetRecord[]> {
+  const assets = await readAllByIndex(STORES.materialAssets, "materialId", materialId);
+  return assets.map(materialAssetFromStoredRecord);
 }
 
 export function materialAssetFromStoredRecord(asset: StoredMaterialAssetRecord): MaterialAssetRecord {
@@ -107,6 +117,52 @@ export async function updateMaterial(
     updatedAt: new Date().toISOString(),
   };
   return writeOne(STORES.materials, updated);
+}
+
+export async function replaceMaterial(
+  id: string,
+  expectedUpdatedAt: string,
+  replacement: ImportedMaterialFile,
+): Promise<MaterialRecord> {
+  await ensureMaterialKnowledge();
+  validateMaterialContent(replacement.content);
+  const [currentMaterial, allMaterials, vocabulary, contextualNotes] = await Promise.all([
+    readOne(STORES.materials, id),
+    readAll(STORES.materials),
+    readAll(STORES.vocabulary),
+    readAllByIndex(STORES.contextualWordNotes, "materialId", id),
+  ]);
+  if (!currentMaterial) throw new Error("找不到這份教材。");
+  if (currentMaterial.updatedAt !== expectedUpdatedAt) {
+    throw new Error("這份教材已在其他分頁更新，請重新整理後再試。");
+  }
+
+  const contentBlocks = normalizedBlocks(replacement.content, replacement.contentBlocks);
+  const words = sourceWordsForBlocks(contentBlocks);
+  const updatedAt = new Date().toISOString();
+  const state = materialReplacementState(
+    currentMaterial,
+    words,
+    allMaterials.filter((material) => material.id !== id),
+    vocabulary,
+    updatedAt,
+  );
+  const retainedContextualNoteIds = new Set(contextualNotes
+    .filter((note) => isContextualOccurrenceValid(note, contentBlocks))
+    .map((note) => note.id));
+  await replaceMaterialBundle({
+    bundle: {
+      metadata: state.material,
+      content: replacement.content,
+      contentBlocks,
+      assets: replacement.assets.map((asset) => ({ ...asset, materialId: id })),
+      words,
+    },
+    expectedUpdatedAt,
+    retainedContextualNoteIds,
+    vocabulary: state.vocabulary,
+  });
+  return state.material;
 }
 
 export async function setMaterialReadingParagraph(

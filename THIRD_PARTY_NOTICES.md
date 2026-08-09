@@ -19,7 +19,7 @@ at `src/vendor/pdfjs/NOTICE.md`.
 
 ## JSZip
 
-- Purpose: read the ZIP container used by DOCX files in the user's browser
+- Purpose: read and write the ZIP container used by DOCX files in the user's browser
 - Project: https://stuk.github.io/jszip/
 - License: MIT
 - Included file: `src/vendor/jszip/jszip.min.js`

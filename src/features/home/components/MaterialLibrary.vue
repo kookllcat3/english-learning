@@ -9,9 +9,17 @@ import {
 import { RouterLink } from "vue-router";
 import {
   getDashboard,
+  getMaterial,
+  getMaterialAssets,
   removeMaterial,
+  replaceMaterial,
   type MaterialSort,
 } from "../../../core/learning/learning-repository.js";
+import { createMaterialExport } from "../../../core/materials/material-export.js";
+import {
+  MATERIAL_FILE_ACCEPT,
+  readMaterialFile,
+} from "../../../core/materials/material-file-import.js";
 import {
   clearSearchHistory,
   getSearchHistory,
@@ -36,6 +44,7 @@ const dashboardStore = useDashboardStore();
 const addDialog = ref<InstanceType<typeof AddMaterialDialog> | null>(null);
 const renameDialog = ref<InstanceType<typeof RenameMaterialDialog> | null>(null);
 const errorMessage = ref("");
+const exportingMaterialId = ref("");
 const history = ref<string[]>([]);
 const historyOpen = ref(false);
 const loading = ref(true);
@@ -53,6 +62,11 @@ const query = ref("");
 const removingMaterialId = ref("");
 const searchInput = ref<HTMLInputElement | null>(null);
 const sort = ref<MaterialSort>("newest");
+const updateFileInput = ref<HTMLInputElement | null>(null);
+const updatingMaterialId = ref("");
+const updateStatus = ref("");
+let pendingUpdateMaterial: DashboardMaterial | null = null;
+let updateTrigger: HTMLButtonElement | null = null;
 let searchTimer: number | undefined;
 let scrollPositionBeforeSorting: number | undefined;
 
@@ -69,8 +83,101 @@ function completionPercentage(material: DashboardMaterial): number {
   return Math.round(material.completion * 100);
 }
 
+function materialActionBusy(materialId: string): boolean {
+  return [exportingMaterialId.value, removingMaterialId.value, updatingMaterialId.value]
+    .includes(materialId);
+}
+
 function openEditDialog(material: DashboardMaterial): void {
   renameDialog.value?.open(material.id, material.title);
+}
+
+function downloadFile(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportMaterial(material: DashboardMaterial): Promise<void> {
+  if (materialActionBusy(material.id)) return;
+  exportingMaterialId.value = material.id;
+  try {
+    const [completeMaterial, assets] = await Promise.all([
+      getMaterial(material.id),
+      getMaterialAssets(material.id),
+    ]);
+    const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+    const exported = await createMaterialExport(
+      completeMaterial,
+      async (assetId) => assetsById.get(assetId),
+    );
+    downloadFile(exported.blob, exported.fileName);
+  } catch (error) {
+    window.alert(getErrorMessage(error, "無法匯出這份教材。"));
+  } finally {
+    exportingMaterialId.value = "";
+  }
+}
+
+function openUpdateFilePicker(material: DashboardMaterial, event: MouseEvent): void {
+  if (materialActionBusy(material.id)) return;
+  pendingUpdateMaterial = material;
+  updateTrigger = event.currentTarget instanceof HTMLButtonElement ? event.currentTarget : null;
+  if (updateFileInput.value) {
+    updateFileInput.value.value = "";
+    updateFileInput.value.click();
+  }
+}
+
+function finishFileSelection(): void {
+  pendingUpdateMaterial = null;
+  if (updateFileInput.value) updateFileInput.value.value = "";
+  updateTrigger?.focus();
+  updateTrigger = null;
+}
+
+function cancelMaterialUpdate(): void {
+  finishFileSelection();
+}
+
+async function updateMaterialFromFile(): Promise<void> {
+  const file = updateFileInput.value?.files?.[0];
+  const selectedMaterial = pendingUpdateMaterial;
+  if (!file || !selectedMaterial) {
+    finishFileSelection();
+    return;
+  }
+  const confirmed = window.confirm(
+    `要以「${file.name}」更新「${selectedMaterial.title}」嗎？\n\n目前教材的內容與圖片會被取代；仍存在於新正文的已認識單字及共用筆記會保留。`,
+  );
+  if (!confirmed) {
+    finishFileSelection();
+    return;
+  }
+
+  updatingMaterialId.value = selectedMaterial.id;
+  updateStatus.value = `正在更新「${selectedMaterial.title}」…`;
+  try {
+    const imported = await readMaterialFile(file, (status) => {
+      updateStatus.value = status;
+    });
+    await replaceMaterial(selectedMaterial.id, selectedMaterial.updatedAt, imported);
+    updateStatus.value = `「${selectedMaterial.title}」已更新。`;
+    notifyLearningDataChanged("materials");
+  } catch (error) {
+    updateStatus.value = "教材更新失敗。";
+    window.alert(getErrorMessage(error, "無法更新這份教材。"));
+  } finally {
+    updatingMaterialId.value = "";
+    finishFileSelection();
+  }
+}
+
+function preventBusyNavigation(event: MouseEvent, materialId: string): void {
+  if (materialActionBusy(materialId)) event.preventDefault();
 }
 
 async function loadDashboard(page = pagination.value.currentPage): Promise<void> {
@@ -310,6 +417,7 @@ onUnmounted(() => {
           type="button"
           :aria-label="`重新命名 ${material.title}`"
           :title="material.title"
+          :disabled="materialActionBusy(material.id)"
           @click="openEditDialog(material)"
         >
           <h2>{{ material.title }}</h2>
@@ -318,15 +426,44 @@ onUnmounted(() => {
           <RouterLink
             class="button button--primary"
             :to="{ name: 'material', params: { id: material.id } }"
+            :aria-disabled="materialActionBusy(material.id)"
+            :tabindex="materialActionBusy(material.id) ? -1 : undefined"
+            @click="preventBusyNavigation($event, material.id)"
           >
             開始閱讀
           </RouterLink>
           <button
+            class="button button--secondary"
+            :class="{ 'is-loading': exportingMaterialId === material.id }"
+            type="button"
+            :aria-label="`匯出目前教材 ${material.title}`"
+            :aria-busy="exportingMaterialId === material.id"
+            :title="`匯出目前教材 ${material.title}`"
+            :disabled="materialActionBusy(material.id)"
+            @click="exportMaterial(material)"
+          >
+            匯出
+          </button>
+          <button
+            class="button button--secondary"
+            :class="{ 'is-loading': updatingMaterialId === material.id }"
+            type="button"
+            :aria-label="`重新匯入並更新教材 ${material.title}`"
+            :aria-busy="updatingMaterialId === material.id"
+            :title="`重新匯入並更新教材 ${material.title}`"
+            :disabled="materialActionBusy(material.id)"
+            @click="openUpdateFilePicker(material, $event)"
+          >
+            更新
+          </button>
+          <button
             class="button button--danger"
             :class="{ 'is-loading': removingMaterialId === material.id }"
             type="button"
+            :aria-label="`移除教材 ${material.title}`"
             :aria-busy="removingMaterialId === material.id"
-            :disabled="removingMaterialId === material.id"
+            :title="`移除教材 ${material.title}`"
+            :disabled="materialActionBusy(material.id)"
             @click="removeSelectedMaterial(material)"
           >
             移除
@@ -360,6 +497,16 @@ onUnmounted(() => {
     </nav>
 
   </section>
+
+  <input
+    ref="updateFileInput"
+    type="file"
+    hidden
+    :accept="MATERIAL_FILE_ACCEPT"
+    @change="updateMaterialFromFile"
+    @cancel="cancelMaterialUpdate"
+  >
+  <p class="sr-only" aria-live="polite">{{ updateStatus }}</p>
 
   <AddMaterialDialog ref="addDialog" />
   <RenameMaterialDialog ref="renameDialog" />

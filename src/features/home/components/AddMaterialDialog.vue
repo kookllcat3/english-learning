@@ -3,16 +3,14 @@ import { ref } from "vue";
 
 import { createMaterial } from "../../../core/learning/learning-repository.js";
 import { notifyLearningDataChanged } from "../../../core/learning/learning-sync.js";
-import type { ContentBlock, MaterialAssetRecord } from "../../../core/models/models.js";
+import {
+  MATERIAL_FILE_ACCEPT,
+  readMaterialFile,
+  type ImportedMaterialFile,
+} from "../../../core/materials/material-file-import.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 import type { DialogController } from "../../../shared/components/base-dialog.js";
 import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
-
-interface ImportedMaterial {
-  assets: Array<Omit<MaterialAssetRecord, "materialId">>;
-  content: string;
-  contentBlocks?: ContentBlock[];
-}
 
 const dialog = ref<DialogController | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -41,27 +39,6 @@ function pastedMaterialFileName(): string {
   return `貼上教材-${timestamp}.txt`;
 }
 
-async function readMaterialFile(file: File): Promise<ImportedMaterial> {
-  const lowerCaseName = file.name.toLocaleLowerCase();
-  const isPdf = file.type === "application/pdf" || lowerCaseName.endsWith(".pdf");
-  const isText = file.type === "text/plain" || lowerCaseName.endsWith(".txt");
-  const isDocx = file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    || lowerCaseName.endsWith(".docx");
-
-  if (isText) return { content: await file.text(), contentBlocks: undefined, assets: [] };
-  if (isDocx) {
-    const { importDocx } = await import("../../../core/importers/docx-importer.js");
-    return importDocx(file, (status: string) => {
-      message.value = status;
-    });
-  }
-  if (!isPdf) throw new Error("只支援 UTF-8 TXT、文字型 PDF 或 DOCX。");
-
-  message.value = "正在從 PDF 擷取文字…";
-  const { extractPdfText } = await import("../../../core/importers/pdf-importer.js");
-  return { content: await extractPdfText(file), contentBlocks: undefined, assets: [] };
-}
-
 function handlePastedContent(): void {
   if (pastedContent.value.trim() && fileInput.value) fileInput.value.value = "";
 }
@@ -82,9 +59,11 @@ async function save(): Promise<void> {
       throw new Error("請選擇 TXT、PDF、DOCX，或直接貼上教材內容。");
     }
     message.value = "讀取教材…";
-    const imported = normalizedPastedContent
+    const imported: ImportedMaterialFile = normalizedPastedContent
       ? { content: normalizedPastedContent, contentBlocks: undefined, assets: [] }
-      : await readMaterialFile(file as File);
+      : await readMaterialFile(file as File, (status) => {
+        message.value = status;
+      });
     message.value = "儲存教材…";
     await createMaterial({
       title,
@@ -118,7 +97,7 @@ defineExpose({ open });
           name="file"
           type="file"
           :disabled="Boolean(pastedContent.trim())"
-          accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          :accept="MATERIAL_FILE_ACCEPT"
         >
         <small>DOCX 可包含文字與圖片，原檔上限 30 MB、最多 50 張圖片；圖片會在瀏覽器逐張轉成 WebP。限制圖片數量是為了避免轉檔時占用過多記憶體、瀏覽器儲存空間及備份容量。TXT 上限 2 MB；文字型 PDF 上限 20 MB。</small>
       </label>

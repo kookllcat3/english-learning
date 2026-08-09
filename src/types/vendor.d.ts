@@ -23,13 +23,13 @@ interface JsZipStreamHelper {
 interface JsZipArchive {
   files: Record<string, JsZipFile>;
   file(path: string): JsZipFile | null;
-  file(path: string, data: string | Uint8Array, options?: { binary: boolean }): void;
+  file(path: string, data: string | Uint8Array, options?: { binary?: boolean }): void;
   generateAsync(options: { type: "blob"; compression: "DEFLATE" }): Promise<Blob>;
 }
 
 interface JsZipConstructor {
   new (): JsZipArchive;
-  loadAsync(file: Blob): Promise<JsZipArchive>;
+  loadAsync(file: Blob | ArrayBuffer | Uint8Array): Promise<JsZipArchive>;
 }
 
 declare var JSZip: JsZipConstructor | undefined;

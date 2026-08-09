@@ -286,6 +286,82 @@ export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<v
   await transactionResult(transaction);
 }
 
+export interface MaterialReplacementWrite {
+  bundle: MaterialBundle;
+  expectedUpdatedAt: string;
+  retainedContextualNoteIds: ReadonlySet<string>;
+  vocabulary: VocabularyRecord[];
+}
+
+export async function replaceMaterialBundle({
+  bundle,
+  expectedUpdatedAt,
+  retainedContextualNoteIds,
+  vocabulary,
+}: MaterialReplacementWrite): Promise<void> {
+  const assetsToStore = await Promise.all((bundle.assets ?? []).map(storedAsset));
+  const database = await openDatabase();
+  const transaction = database.transaction(
+    [
+      STORES.materials,
+      STORES.materialAssets,
+      STORES.materialContents,
+      STORES.materialTerms,
+      STORES.vocabulary,
+      STORES.contextualWordNotes,
+    ],
+    "readwrite",
+  );
+  let conflictingUpdate = false;
+  const materialStore = transaction.objectStore(STORES.materials);
+  const materialRequest = materialStore.get(bundle.metadata.id);
+  materialRequest.addEventListener("success", () => {
+    const storedMaterial = materialRequest.result as MaterialRecord | undefined;
+    if (!storedMaterial || storedMaterial.updatedAt !== expectedUpdatedAt) {
+      conflictingUpdate = true;
+      transaction.abort();
+      return;
+    }
+
+    materialStore.put(bundle.metadata);
+    transaction.objectStore(STORES.materialContents).put({
+      materialId: bundle.metadata.id,
+      content: bundle.content,
+      contentBlocks: bundle.contentBlocks,
+    });
+    transaction.objectStore(STORES.materialTerms).put({
+      materialId: bundle.metadata.id,
+      words: bundle.words,
+    });
+    const vocabularyStore = transaction.objectStore(STORES.vocabulary);
+    vocabulary.forEach((record) => vocabularyStore.put(record));
+
+    const assetStore = transaction.objectStore(STORES.materialAssets);
+    const assetRequest = assetStore.index("materialId").getAllKeys(bundle.metadata.id);
+    assetRequest.addEventListener("success", () => {
+      assetRequest.result.forEach((key) => assetStore.delete(key));
+      assetsToStore.forEach((asset) => assetStore.put(asset));
+    }, { once: true });
+
+    const noteStore = transaction.objectStore(STORES.contextualWordNotes);
+    const noteRequest = noteStore.index("materialId").getAllKeys(bundle.metadata.id);
+    noteRequest.addEventListener("success", () => {
+      noteRequest.result
+        .filter((key) => !retainedContextualNoteIds.has(String(key)))
+        .forEach((key) => noteStore.delete(key));
+    }, { once: true });
+  }, { once: true });
+
+  try {
+    await transactionResult(transaction, 0, "教材更新失敗，原有資料未變更。");
+  } catch (error) {
+    if (conflictingUpdate) {
+      throw new Error("這份教材已在其他分頁更新，請重新整理後再試。");
+    }
+    throw error;
+  }
+}
+
 export async function deleteMaterialBundle(materialId: string): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(

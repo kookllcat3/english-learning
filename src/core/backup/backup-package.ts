@@ -13,6 +13,7 @@ const MATERIALS_FILE = "data/materials.json";
 const VOCABULARY_FILE = "data/vocabulary.json";
 const LEGACY_WORD_NOTES_FILE = "data/word-notes.json";
 const CONTEXTUAL_WORD_NOTES_FILE = "data/contextual-word-notes.json";
+const MATERIAL_ANNOTATIONS_FILE = "data/material-annotations.json";
 const SETTINGS_FILE = "data/settings.json";
 const MATERIAL_ASSETS_FILE = "data/material-assets.json";
 interface PackageManifest {
@@ -26,6 +27,7 @@ interface PackageManifest {
     materials: number;
     vocabulary: number;
     contextualWordNotes?: number;
+    materialAnnotations?: number;
     wordNotes?: number;
     assets: number;
   };
@@ -147,15 +149,22 @@ export async function createBackupPackage(backup: LearningBackup): Promise<Blob>
   const materials = new TextEncoder().encode(jsonText(backup.materials));
   const vocabulary = new TextEncoder().encode(jsonText(backup.vocabulary));
   const usesContextualWordNotes = backup.schemaVersion === 4;
-  const noteFile = usesContextualWordNotes ? CONTEXTUAL_WORD_NOTES_FILE : LEGACY_WORD_NOTES_FILE;
-  const notes = new TextEncoder().encode(jsonText(
-    usesContextualWordNotes ? backup.contextualWordNotes ?? [] : backup.wordNotes ?? [],
-  ));
   const settings = new TextEncoder().encode(jsonText(backup.settings ?? []));
   const assetMetadata = new TextEncoder().encode(jsonText((backup.materialAssets ?? []).map(({ data: _data, ...asset }) => asset)));
   files.set(MATERIALS_FILE, materials);
   files.set(VOCABULARY_FILE, vocabulary);
-  files.set(noteFile, notes);
+  files.set(
+    usesContextualWordNotes ? CONTEXTUAL_WORD_NOTES_FILE : LEGACY_WORD_NOTES_FILE,
+    new TextEncoder().encode(jsonText(
+      usesContextualWordNotes ? backup.contextualWordNotes ?? [] : backup.wordNotes ?? [],
+    )),
+  );
+  if (backup.schemaVersion === 6) {
+    files.set(
+      MATERIAL_ANNOTATIONS_FILE,
+      new TextEncoder().encode(jsonText(backup.materialAnnotations ?? [])),
+    );
+  }
   files.set(SETTINGS_FILE, settings);
   files.set(MATERIAL_ASSETS_FILE, assetMetadata);
 
@@ -178,6 +187,9 @@ export async function createBackupPackage(backup: LearningBackup): Promise<Blob>
       ...(usesContextualWordNotes
         ? { contextualWordNotes: backup.contextualWordNotes?.length ?? 0 }
         : { wordNotes: backup.wordNotes?.length ?? 0 }),
+      ...(backup.schemaVersion === 6
+        ? { materialAnnotations: backup.materialAnnotations?.length ?? 0 }
+        : {}),
       assets: backup.materialAssets?.length ?? 0,
     },
     compression: "DEFLATE",
@@ -258,6 +270,9 @@ export async function readBackupPackage(file: Blob): Promise<BackupPackagePrevie
     backup.contextualWordNotes = decodeJson(verifiedFile(CONTEXTUAL_WORD_NOTES_FILE)) as LearningBackup["contextualWordNotes"];
   } else {
     backup.wordNotes = decodeJson(verifiedFile(LEGACY_WORD_NOTES_FILE)) as LearningBackup["wordNotes"];
+  }
+  if (manifest.schemaVersion === 6) {
+    backup.materialAnnotations = decodeJson(verifiedFile(MATERIAL_ANNOTATIONS_FILE)) as LearningBackup["materialAnnotations"];
   }
   const assetMetadata = decodeJson(verifiedFile(MATERIAL_ASSETS_FILE)) as Array<Omit<NonNullable<LearningBackup["materialAssets"]>[number], "data">>;
   for (const asset of manifest.files.filter((entry) => entry.type === "asset")) {

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-defineProps<{
+import { ref } from "vue";
+
+const props = defineProps<{
+  annotationBusy: boolean;
+  annotationMode: "erase" | "highlight" | null;
   copyStatus: "error" | "success" | null;
   hasTranslation: boolean;
   isCurrentReadingPosition: boolean;
@@ -10,9 +14,26 @@ defineProps<{
 
 const emit = defineEmits<{
   copy: [];
+  selectAnnotationTool: [mode: "erase" | "highlight" | null];
   toggleReadingPosition: [];
   toggleTranslation: [];
 }>();
+
+const annotationMenuOpen = ref(false);
+
+function toggleAnnotationMenu(): void {
+  if (props.annotationMode !== null) {
+    annotationMenuOpen.value = false;
+    emit("selectAnnotationTool", null);
+    return;
+  }
+  annotationMenuOpen.value = !annotationMenuOpen.value;
+}
+
+function selectAnnotationTool(mode: "erase" | "highlight"): void {
+  annotationMenuOpen.value = false;
+  emit("selectAnnotationTool", props.annotationMode === mode ? null : mode);
+}
 </script>
 
 <template>
@@ -73,6 +94,46 @@ const emit = defineEmits<{
           <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
         </svg>
       </button>
+      <span class="paragraph-toolbar__annotation">
+        <button
+          class="paragraph-toolbar__button"
+          :class="{ 'is-active': annotationMode !== null }"
+          type="button"
+          aria-label="開啟螢光筆工具"
+          title="螢光筆工具"
+          :aria-expanded="annotationMenuOpen"
+          :aria-pressed="annotationMode !== null"
+          :disabled="annotationBusy"
+          @click.stop="toggleAnnotationMenu"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="m5 16 8-8 3 3-8 8H5v-3Z" />
+            <path d="m14 7 2-2 3 3-2 2M4 20h8" />
+          </svg>
+        </button>
+        <span
+          v-if="annotationMenuOpen"
+          class="paragraph-toolbar__annotation-menu"
+          role="group"
+          aria-label="選擇標記工具"
+          @keydown.esc.stop="annotationMenuOpen = false"
+        >
+          <button
+            class="paragraph-toolbar__tool"
+            :class="{ 'is-active': annotationMode === 'highlight' }"
+            type="button"
+            :aria-pressed="annotationMode === 'highlight'"
+            @click.stop="selectAnnotationTool('highlight')"
+          ><span class="paragraph-toolbar__swatch" aria-hidden="true"></span>淡黃色螢光筆</button>
+          <button
+            class="paragraph-toolbar__tool"
+            :class="{ 'is-active': annotationMode === 'erase' }"
+            type="button"
+            :aria-pressed="annotationMode === 'erase'"
+            @click.stop="selectAnnotationTool('erase')"
+          >橡皮擦</button>
+        </span>
+      </span>
     </span>
     <span
       v-if="copyStatus"

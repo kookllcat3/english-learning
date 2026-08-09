@@ -10,14 +10,27 @@ import {
 import { RouterLink, useRoute } from "vue-router";
 import {
   addKnownWordsAndUpdateReadingPosition,
+  deleteMaterialAnnotation,
   getMaterial,
   getVocabularyProgress,
+  listMaterialHighlights,
+  saveMaterialHighlight,
 } from "../core/learning/learning-repository.js";
 import {
+  readingWordOccurrencesForBlocks,
   readingProgressIndexForBlocks,
   wordsThroughReadingParagraph,
 } from "../core/learning/reading-content.js";
-import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
+import {
+  addHighlightOccurrence,
+  createMaterialHighlightAnnotation,
+  removeHighlightOccurrence,
+} from "../core/learning/material-annotation.js";
+import type {
+  BackupMaterial,
+  MaterialHighlightAnnotationRecord,
+  VocabularyRecord,
+} from "../core/models/models.js";
 import { errorMessage as getErrorMessage } from "../shared/errors.js";
 import { useLearningDataRefresh } from "../app/composables/use-learning-data-refresh.js";
 import { notifyLearningDataChanged } from "../core/learning/learning-sync.js";
@@ -38,15 +51,29 @@ const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
+const annotationBusy = ref(false);
+const annotationMode = ref<"erase" | "highlight" | null>(null);
+const annotationParagraphKey = ref<string | null>(null);
+const annotationStatus = ref("");
+const activeHighlightId = ref<string | null>(null);
+const highlights = ref<MaterialHighlightAnnotationRecord[]>([]);
 const activeProgressOperation = ref<"completion" | string | null>(null);
 const completionError = ref("");
 const readingContainer = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
 let progressSequence = 0;
+const pendingAnnotationActions: Array<{
+  mode: "erase" | "highlight";
+  occurrenceKey: string;
+  paragraphKey: string;
+}> = [];
 
 const hasMaterialWords = computed(() => vocabularyProgress.value.size > 0);
 const readingProgressIndex = computed(() => readingProgressIndexForBlocks(
+  material.value?.contentBlocks ?? [],
+));
+const readingOccurrences = computed(() => readingWordOccurrencesForBlocks(
   material.value?.contentBlocks ?? [],
 ));
 const readingProgressBusy = computed(() => activeProgressOperation.value !== null);
@@ -66,6 +93,14 @@ const completionButtonLabel = computed(() => {
 
 function materialId(): string {
   return String(route.params.id ?? "");
+}
+
+function exitAnnotationMode(): void {
+  annotationMode.value = null;
+  annotationParagraphKey.value = null;
+  activeHighlightId.value = null;
+  annotationStatus.value = "";
+  pendingAnnotationActions.splice(0);
 }
 
 const {
@@ -102,11 +137,14 @@ async function loadMaterialPage(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   actionError.value = "";
+  exitAnnotationMode();
+  annotationBusy.value = false;
   progressSequence += 1;
   activeProgressOperation.value = null;
   completionError.value = "";
   material.value = null;
   vocabularyProgress.value = new Map();
+  highlights.value = [];
   currentParagraphKey.value = null;
   if (!id) {
     loading.value = false;
@@ -115,15 +153,17 @@ async function loadMaterialPage(): Promise<void> {
   }
 
   try {
-    const [loadedMaterial, progress, levels] = await Promise.all([
+    const [loadedMaterial, progress, levels, loadedHighlights] = await Promise.all([
       getMaterial(id),
       getVocabularyProgress(id),
       loadFamiliarityLevels(),
+      listMaterialHighlights(id),
     ]);
     if (sequence !== loadSequence) return;
     material.value = loadedMaterial;
     vocabularyProgress.value = progress;
     familiarityLevels.value = levels;
+    highlights.value = loadedHighlights;
     currentParagraphKey.value = loadedMaterial.readingParagraphKey ?? null;
     document.title = `${loadedMaterial.title}｜英文學習庫`;
   } catch {
@@ -206,8 +246,117 @@ async function markAllMaterialWordsKnown(): Promise<void> {
   await saveProgress(readingProgressIndex.value.orderedUniqueWords, undefined, "completion");
 }
 
+function selectAnnotationTool(
+  paragraphKey: string,
+  mode: "erase" | "highlight" | null,
+): void {
+  wordCard.value?.close();
+  pendingAnnotationActions.splice(0);
+  annotationMode.value = mode;
+  annotationParagraphKey.value = mode ? paragraphKey : null;
+  activeHighlightId.value = null;
+  annotationStatus.value = mode === "highlight"
+    ? "螢光筆已開啟；點選單字可建立同一組標記，再次選擇工具或按 Esc 結束。"
+    : mode === "erase"
+      ? "橡皮擦已開啟；點選已標記的單字即可移除。"
+      : "";
+}
+
+function highlightContaining(occurrenceKey: string): MaterialHighlightAnnotationRecord | undefined {
+  return highlights.value.find((highlight) => highlight.target.occurrenceKeys.includes(occurrenceKey));
+}
+
+function replaceHighlight(updated: MaterialHighlightAnnotationRecord): void {
+  const exists = highlights.value.some((highlight) => highlight.id === updated.id);
+  highlights.value = exists
+    ? highlights.value.map((highlight) => highlight.id === updated.id ? updated : highlight)
+    : [...highlights.value, updated];
+}
+
+async function applyHighlight(paragraphKey: string, occurrenceKey: string): Promise<void> {
+  if (!material.value) return;
+  const existing = highlightContaining(occurrenceKey);
+  if (!activeHighlightId.value && existing) {
+    activeHighlightId.value = existing.id;
+    annotationStatus.value = "已接續這組螢光標記。";
+    return;
+  }
+  if (existing) {
+    annotationStatus.value = existing.id === activeHighlightId.value
+      ? "這個單字已在目前的螢光標記中。"
+      : "這個單字已有其他螢光標記，未重複加入。";
+    return;
+  }
+  const timestamp = new Date().toISOString();
+  const active = highlights.value.find((highlight) => highlight.id === activeHighlightId.value);
+  const orderedOccurrenceKeys = readingOccurrences.value
+    .filter((occurrence) => occurrence.paragraphKey === paragraphKey)
+    .map((occurrence) => occurrence.wordKey);
+  const updated = active
+    ? addHighlightOccurrence(active, occurrenceKey, orderedOccurrenceKeys, timestamp)
+    : createMaterialHighlightAnnotation({
+      materialId: material.value.id,
+      occurrenceKey,
+      paragraphKey,
+      timestamp,
+    });
+  const saved = await saveMaterialHighlight(updated);
+  replaceHighlight(saved);
+  activeHighlightId.value = saved.id;
+  annotationStatus.value = saved.target.occurrenceKeys.length === 1
+    ? "已開始一組螢光標記。"
+    : `目前這組已標記 ${saved.target.occurrenceKeys.length} 個單字。`;
+}
+
+async function eraseHighlight(occurrenceKey: string): Promise<void> {
+  const existing = highlightContaining(occurrenceKey);
+  if (!existing) {
+    annotationStatus.value = "這個單字沒有螢光標記。";
+    return;
+  }
+  const updated = removeHighlightOccurrence(existing, occurrenceKey, new Date().toISOString());
+  if (updated) {
+    replaceHighlight(await saveMaterialHighlight(updated));
+  } else {
+    await deleteMaterialAnnotation(existing.id);
+    highlights.value = highlights.value.filter((highlight) => highlight.id !== existing.id);
+    if (activeHighlightId.value === existing.id) activeHighlightId.value = null;
+  }
+  annotationStatus.value = "已移除這個單字的螢光標記。";
+}
+
+async function annotateWord(paragraphKey: string, occurrenceKey: string): Promise<void> {
+  const mode = annotationMode.value;
+  if (!mode || annotationParagraphKey.value !== paragraphKey) return;
+  if (annotationBusy.value) {
+    pendingAnnotationActions.push({ mode, occurrenceKey, paragraphKey });
+    return;
+  }
+  annotationBusy.value = true;
+  actionError.value = "";
+  try {
+    if (mode === "highlight") await applyHighlight(paragraphKey, occurrenceKey);
+    else await eraseHighlight(occurrenceKey);
+    notifyLearningDataChanged("annotations");
+  } catch (error) {
+    actionError.value = getErrorMessage(error, "無法儲存螢光標記，請稍後再試。");
+  } finally {
+    annotationBusy.value = false;
+    const pending = pendingAnnotationActions.shift();
+    if (
+      pending
+      && pending.mode === annotationMode.value
+      && pending.paragraphKey === annotationParagraphKey.value
+    ) void annotateWord(pending.paragraphKey, pending.occurrenceKey);
+  }
+}
+
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
+  if (annotationMode.value) {
+    exitAnnotationMode();
+    return;
+  }
   wordCard.value?.close();
 }
 
@@ -217,15 +366,17 @@ function closeTransientWordCard(): void {
 
 async function refreshLearningProgress(): Promise<void> {
   const id = materialId();
-  if (!id || loading.value) return;
+  if (!id || loading.value || annotationBusy.value) return;
   try {
-    const [updatedMaterial, updatedProgress] = await Promise.all([
+    const [updatedMaterial, updatedProgress, updatedHighlights] = await Promise.all([
       getMaterial(id),
       getVocabularyProgress(id),
+      listMaterialHighlights(id),
     ]);
     if (id !== materialId()) return;
     material.value = updatedMaterial;
     vocabularyProgress.value = updatedProgress;
+    highlights.value = updatedHighlights;
     currentParagraphKey.value = updatedMaterial.readingParagraphKey ?? null;
   } catch (error) {
     actionError.value = getErrorMessage(error, "無法重新載入單字進度。");
@@ -287,13 +438,18 @@ onBeforeUnmount(() => {
       </section>
 
       <p v-if="actionError" class="form-message is-error" role="alert">{{ actionError }}</p>
+      <p v-if="annotationStatus" class="annotation-status" role="status">{{ annotationStatus }}</p>
 
       <article ref="readingContainer" class="reading-section">
         <MaterialReadingContent
           :active-word="activeWord"
+          :annotation-busy="annotationBusy"
+          :annotation-mode="annotationMode"
+          :annotation-paragraph-key="annotationParagraphKey"
           :blocks="material.contentBlocks"
           :current-paragraph-key="currentParagraphKey"
           :familiarity-levels="familiarityLevels"
+          :highlights="highlights"
           :reading-progress-busy="readingProgressBusy"
           :saving-reading-paragraph-key="savingReadingParagraphKey"
           :vocabulary-progress="vocabularyProgress"
@@ -302,7 +458,9 @@ onBeforeUnmount(() => {
           @keyup="handleWordSelection"
           @lookup="openWordCard"
           @activate="openWordCard"
+          @annotate-word="annotateWord"
           @deactivate="scheduleWordCardClose"
+          @select-annotation-tool="selectAnnotationTool"
           @toggle-reading-paragraph="toggleReadingParagraph"
         />
       </article>

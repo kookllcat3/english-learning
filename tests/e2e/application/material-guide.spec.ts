@@ -5,7 +5,7 @@ test("persists separate editable text and illustrated material prompts", async (
   await page.getByRole("button", { name: "查看教材製作教學" }).click();
 
   const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
-  await expect(guideDialog.getByRole("status")).toHaveText("v1.8.1");
+  await expect(guideDialog.getByRole("status")).toHaveText("v2.0.0");
   const textPrompt = guideDialog.getByLabel("純文字教材生成提示詞");
   await expect(textPrompt).toHaveValue(/專業的英語教材編輯/);
   await textPrompt.fill("自訂純文字教材提示詞");

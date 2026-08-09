@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import type {
   ContentBlock,
+  MaterialHighlightAnnotationRecord,
   VocabularyRecord,
 } from "../../../core/models/models.js";
 import {
@@ -55,20 +56,41 @@ interface RenderedImageBlock {
 
 const props = defineProps<{
   activeWord: string;
+  annotationBusy: boolean;
+  annotationMode: "erase" | "highlight" | null;
+  annotationParagraphKey: string | null;
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
   familiarityLevels: FamiliarityLevel[];
   readingProgressBusy: boolean;
   savingReadingParagraphKey: string | null;
+  highlights: MaterialHighlightAnnotationRecord[];
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
 const emit = defineEmits<{
   activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
+  annotateWord: [paragraphKey: string, occurrenceKey: string];
   deactivate: [];
   lookup: [word: string, rect: DOMRect, key: string];
+  selectAnnotationTool: [paragraphKey: string, mode: "erase" | "highlight" | null];
   toggleReadingParagraph: [paragraphKey: string];
 }>();
+interface AnnotationPointerState {
+  lastOccurrenceKey: string;
+  lastX: number;
+  lastY: number;
+  pointerId: number;
+}
+
+interface AnnotationTarget {
+  occurrenceKey: string;
+  paragraphKey: string;
+}
+
+const ANNOTATION_STROKE_SAMPLE_INTERVAL_PX = 4;
+let annotationPointer: AnnotationPointerState | null = null;
+let ignoreNextAnnotationClick = false;
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const hiddenTranslationParagraphs = ref(new Set<string>());
 const copyFeedback = ref<{ key: string; status: "error" | "success" } | null>(null);
@@ -175,6 +197,29 @@ const wordPresentations = computed(() => {
   return presentations;
 });
 
+const highlightIdByOccurrence = computed(() => new Map(
+  props.highlights.flatMap((highlight) => highlight.target.occurrenceKeys.map((occurrenceKey) => (
+    [occurrenceKey, highlight.id] as const
+  ))),
+));
+
+function annotationModeFor(paragraphKey: string): "erase" | "highlight" | null {
+  return props.annotationParagraphKey === paragraphKey ? props.annotationMode : null;
+}
+
+function highlightIdFor(occurrenceKey: string): string | undefined {
+  return highlightIdByOccurrence.value.get(occurrenceKey);
+}
+
+function isHighlightedGap(segments: TextSegment[], segmentIndex: number, lineKey: string): boolean {
+  const previous = segments[segmentIndex - 1];
+  const next = segments[segmentIndex + 1];
+  if (!previous?.word || !next?.word) return false;
+  const previousHighlightId = highlightIdFor(`${lineKey}-${segmentIndex - 1}`);
+  return Boolean(previousHighlightId)
+    && previousHighlightId === highlightIdFor(`${lineKey}-${segmentIndex + 1}`);
+}
+
 function presentationFor(segment: TextSegment): WordPresentation | undefined {
   return segment.word ? wordPresentations.value.get(segment.word) : undefined;
 }
@@ -198,8 +243,41 @@ function wordElement(target: EventTarget | null): HTMLElement | null {
   return target instanceof Element ? target.closest<HTMLElement>(".reading-word") : null;
 }
 
+function isAnnotationActiveFor(element: HTMLElement | null): boolean {
+  return Boolean(
+    element
+    && props.annotationMode
+    && element.dataset.paragraphKey === props.annotationParagraphKey,
+  );
+}
+
+function annotationTarget(target: EventTarget | null): AnnotationTarget | null {
+  const element = wordElement(target);
+  const paragraphKey = element?.dataset.paragraphKey;
+  const occurrenceKey = element?.dataset.wordKey;
+  if (!element || !paragraphKey || !occurrenceKey || !isAnnotationActiveFor(element)) return null;
+  return { occurrenceKey, paragraphKey };
+}
+
+function annotateWordElement(target: EventTarget | null): boolean {
+  const annotation = annotationTarget(target);
+  if (!annotation) return false;
+  emit("annotateWord", annotation.paragraphKey, annotation.occurrenceKey);
+  return true;
+}
+
+function annotateStrokeTarget(target: EventTarget | null): boolean {
+  const annotation = annotationTarget(target);
+  if (!annotation) return false;
+  if (annotationPointer?.lastOccurrenceKey === annotation.occurrenceKey) return true;
+  if (annotationPointer) annotationPointer.lastOccurrenceKey = annotation.occurrenceKey;
+  emit("annotateWord", annotation.paragraphKey, annotation.occurrenceKey);
+  return true;
+}
+
 function activateWordElement(target: EventTarget | null): void {
   const element = wordElement(target);
+  if (isAnnotationActiveFor(element)) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "focus");
@@ -208,6 +286,7 @@ function activateWordElement(target: EventTarget | null): void {
 function handlePointerOver(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
+  if (isAnnotationActiveFor(element)) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const word = element.dataset.word;
   const key = element.dataset.wordKey;
@@ -217,18 +296,66 @@ function handlePointerOver(event: PointerEvent): void {
 function handlePointerOut(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
+  if (isAnnotationActiveFor(element)) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
   if (nextElement?.closest(".word-card, .word-card-hover-bridge, .reading-word")) return;
   emit("deactivate");
 }
 
-function beginTouch(event: PointerEvent): void {
+function beginPointerInteraction(event: PointerEvent): void {
+  const element = wordElement(event.target);
+  if (isAnnotationActiveFor(element) && event.pointerType !== "touch") {
+    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.preventDefault();
+    touchStart = null;
+    annotationPointer = {
+      lastOccurrenceKey: "",
+      lastX: event.clientX,
+      lastY: event.clientY,
+      pointerId: event.pointerId,
+    };
+    annotateStrokeTarget(element);
+    if (event.currentTarget instanceof HTMLElement) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    return;
+  }
   if (event.pointerType === "mouse") return;
   touchStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
 }
 
-function finishTouch(event: PointerEvent): void {
+function continuePointerInteraction(event: PointerEvent): void {
+  if (!annotationPointer || annotationPointer.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  const distance = Math.hypot(
+    event.clientX - annotationPointer.lastX,
+    event.clientY - annotationPointer.lastY,
+  );
+  const sampleCount = Math.max(1, Math.ceil(distance / ANNOTATION_STROKE_SAMPLE_INTERVAL_PX));
+  for (let sample = 1; sample <= sampleCount; sample += 1) {
+    const progress = sample / sampleCount;
+    const x = annotationPointer.lastX + ((event.clientX - annotationPointer.lastX) * progress);
+    const y = annotationPointer.lastY + ((event.clientY - annotationPointer.lastY) * progress);
+    annotateStrokeTarget(document.elementFromPoint(x, y));
+  }
+  annotationPointer.lastX = event.clientX;
+  annotationPointer.lastY = event.clientY;
+}
+
+function finishPointerInteraction(event: PointerEvent): void {
+  if (annotationPointer?.pointerId === event.pointerId) {
+    event.preventDefault();
+    annotationPointer = null;
+    ignoreNextAnnotationClick = true;
+    setTimeout(() => { ignoreNextAnnotationClick = false; }, 0);
+    if (
+      event.currentTarget instanceof HTMLElement
+      && event.currentTarget.hasPointerCapture(event.pointerId)
+    ) event.currentTarget.releasePointerCapture(event.pointerId);
+    return;
+  }
+  if (isAnnotationActiveFor(wordElement(event.target))) return;
   if (!touchStart || touchStart.pointerId !== event.pointerId) return;
   const moved = Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y);
   touchStart = null;
@@ -240,8 +367,14 @@ function finishTouch(event: PointerEvent): void {
   }
 }
 
+function cancelPointerInteraction(event: PointerEvent): void {
+  if (annotationPointer?.pointerId === event.pointerId) annotationPointer = null;
+  if (touchStart?.pointerId === event.pointerId) touchStart = null;
+}
+
 function handleDoubleClick(event: MouseEvent): void {
   const element = wordElement(event.target);
+  if (isAnnotationActiveFor(element)) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("lookup", word, element.getBoundingClientRect(), key);
@@ -256,9 +389,22 @@ function handleFocusOut(event: FocusEvent): void {
   if (!(next instanceof Element) || !next.closest(".reading-word")) emit("deactivate");
 }
 
+function handleClick(event: MouseEvent): void {
+  if (ignoreNextAnnotationClick) {
+    ignoreNextAnnotationClick = false;
+    event.preventDefault();
+    return;
+  }
+  if (annotateWordElement(event.target)) event.preventDefault();
+}
+
 function handleWordKeydown(event: KeyboardEvent): void {
   if (!["ArrowLeft", "ArrowRight", "Enter"].includes(event.key)) return;
   if (!wordElement(event.target)) return;
+  if (event.key === "Enter" && annotateWordElement(event.target)) {
+    event.preventDefault();
+    return;
+  }
   const container = event.currentTarget;
   if (!(container instanceof HTMLElement)) return;
   const words = [...container.querySelectorAll<HTMLElement>(".reading-word")];
@@ -283,9 +429,11 @@ function handleWordKeydown(event: KeyboardEvent): void {
     tabindex="0"
     @pointerover="handlePointerOver"
     @pointerout="handlePointerOut"
-    @pointerdown="beginTouch"
-    @pointerup="finishTouch"
-    @pointercancel="touchStart = null"
+    @pointerdown="beginPointerInteraction"
+    @pointermove="continuePointerInteraction"
+    @pointerup="finishPointerInteraction"
+    @pointercancel="cancelPointerInteraction"
+    @click="handleClick"
     @dblclick="handleDoubleClick"
     @focusin="handleFocusIn"
     @focusout="handleFocusOut"
@@ -302,6 +450,8 @@ function handleWordKeydown(event: KeyboardEvent): void {
         >
           <ParagraphToolbar
             v-if="paragraph.words.length > 0"
+            :annotation-busy="annotationBusy"
+            :annotation-mode="annotationModeFor(paragraph.key)"
             :copy-status="copyFeedback?.key === paragraph.key ? copyFeedback.status : null"
             :has-translation="paragraph.hasTranslation"
             :is-current-reading-position="currentParagraphKey === paragraph.key"
@@ -309,6 +459,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
             :reading-position-disabled="readingProgressBusy"
             :reading-position-loading="savingReadingParagraphKey === paragraph.key"
             @copy="copyParagraph(paragraph.key, paragraph.sourceText)"
+            @select-annotation-tool="emit('selectAnnotationTool', paragraph.key, $event)"
             @toggle-reading-position="emit('toggleReadingParagraph', paragraph.key)"
             @toggle-translation="toggleTranslation(paragraph.key)"
           />
@@ -338,10 +489,16 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :class="{
                 'is-active': activeWord === `${line.key}-${segmentIndex}`,
                 'known-word': hasFamiliarity(segment),
+                'is-highlighted': highlightIdFor(`${line.key}-${segmentIndex}`),
+                'is-annotation-target': annotationModeFor(paragraph.key) !== null,
+                'is-highlight-target': annotationModeFor(paragraph.key) === 'highlight',
+                'is-erase-target': annotationModeFor(paragraph.key) === 'erase',
               }"
               :data-known-word="segment.word"
               :data-word="segment.word"
               :data-word-key="`${line.key}-${segmentIndex}`"
+              :data-paragraph-key="paragraph.key"
+              :data-highlight-id="highlightIdFor(`${line.key}-${segmentIndex}`)"
               :data-known-label="segment.label"
               :style="presentationFor(segment)?.style"
               tabindex="-1"
@@ -353,6 +510,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
             >{{ character }}</span></template><template v-else>{{ segment.label }}</template></span>
             <span
               v-else
+              :class="{ 'reading-highlight-gap': isHighlightedGap(line.segments, segmentIndex, line.key) }"
             >{{ segment.label }}</span>
             </template>
             </span>

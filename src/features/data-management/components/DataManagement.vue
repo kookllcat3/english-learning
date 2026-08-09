@@ -90,6 +90,8 @@ async function importBackupFile(file: File): Promise<void> {
       `更新教材 ${preview.updatedMaterials} 份`,
       `新增詞彙 ${preview.newWords} 筆`,
       `更新詞彙 ${preview.updatedWords} 筆`,
+      `新增教材標記 ${preview.newAnnotations} 筆`,
+      `更新教材標記 ${preview.updatedAnnotations} 筆`,
       ...(preview.skippedMaterials.length > 0
         ? [`略過不支援教材 ${preview.skippedMaterials.length} 份`]
         : []),

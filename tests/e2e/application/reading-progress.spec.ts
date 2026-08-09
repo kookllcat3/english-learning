@@ -38,6 +38,7 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
   expect(await firstToolbar.getByRole("button").evaluateAll((buttons) =>
     buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
     "標記目前閱讀段落",
+    "開啟螢光筆工具",
     "隱藏這段中文翻譯",
     "複製整段英文",
   ]);
@@ -45,10 +46,11 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
     .getByRole("button").evaluateAll((buttons) =>
       buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
     "標記目前閱讀段落",
+    "開啟螢光筆工具",
     "複製整段英文",
   ]);
 
-  const firstTranslationToggle = firstToolbar.getByRole("button").nth(1);
+  const firstTranslationToggle = firstToolbar.locator('button[aria-label*="這段中文翻譯"]');
   const firstTranslations = paragraphs.nth(0).locator(".reading-line-wrap.is-translation .reading-line");
   await expect(firstTranslations).toHaveCount(2);
   await firstTranslationToggle.click();
@@ -285,7 +287,7 @@ test("classifies structured reading content and repairs polluted learning data",
       request.addEventListener("error", () => reject(request.error), { once: true });
     });
     const transaction = database.transaction(
-      ["materials", "materialContents", "materialTerms", "vocabulary", "contextualWordNotes", "settings"],
+      ["materials", "materialContents", "materialTerms", "vocabulary", "materialAnnotations", "settings"],
       "readwrite",
     );
     transaction.objectStore("materials").put({
@@ -315,12 +317,16 @@ test("classifies structured reading content and repairs polluted learning data",
       createdAt: storedTimestamp,
       updatedAt: storedTimestamp,
     }));
-    transaction.objectStore("contextualWordNotes").put({
+    transaction.objectStore("materialAnnotations").put({
       id: `${encodeURIComponent(materialId)}::${encodeURIComponent("vocabulary:birds")}`,
       materialId,
-      occurrenceKey: "vocabulary:birds",
-      word: "birds",
-      markdown: "keep this note",
+      kind: "legacy-contextual-word-note",
+      target: {
+        type: "contextual-word-occurrence",
+        occurrenceKey: "vocabulary:birds",
+        word: "birds",
+      },
+      body: { format: "markdown", value: "keep this note" },
       createdAt: storedTimestamp,
       updatedAt: storedTimestamp,
     });
@@ -404,7 +410,7 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
   const paragraphToolbar = readingGroup.getByRole("group", { name: "段落閱讀工具" });
   await expect(paragraphToolbar).toHaveClass(/paragraph-toolbar/);
-  await expect(paragraphToolbar.getByRole("button")).toHaveCount(3);
+  await expect(paragraphToolbar.getByRole("button")).toHaveCount(4);
   await expect(page.getByRole("button", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await paragraphToolbar.getByRole("button", { name: "隱藏這段中文翻譯" }).click();
@@ -419,7 +425,7 @@ test("classifies structured reading content and repairs polluted learning data",
       request.addEventListener("error", () => reject(request.error), { once: true });
     });
     const transaction = database.transaction(
-      ["materials", "materialTerms", "vocabulary", "contextualWordNotes", "settings"],
+      ["materials", "materialTerms", "vocabulary", "materialAnnotations", "settings"],
       "readonly",
     );
     const read = <T>(store: string, key: IDBValidKey) => new Promise<T>((resolve, reject) => {
@@ -432,8 +438,8 @@ test("classifies structured reading content and repairs polluted learning data",
       read<{ words: string[] }>("materialTerms", materialId),
       read<{ learned: boolean }>("vocabulary", "avian"),
       read<{ learned: boolean }>("vocabulary", "en"),
-      read<{ markdown: string }>(
-        "contextualWordNotes",
+      read<{ body: { value: string } }>(
+        "materialAnnotations",
         `${encodeURIComponent(materialId)}::${encodeURIComponent("vocabulary:birds")}`,
       ),
       read<{ value: number }>("settings", "readingContentClassificationVersion"),
@@ -448,7 +454,7 @@ test("classifies structured reading content and repairs polluted learning data",
       terms: { words: terms.words },
       avian: { learned: avian.learned },
       en: { learned: en.learned },
-      note: { markdown: note.markdown },
+      note: { markdown: note.body.value },
       setting: { value: setting.value },
     };
   }, id);

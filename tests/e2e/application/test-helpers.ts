@@ -14,6 +14,36 @@ export interface StoredWordNote {
   word: string;
 }
 
+export interface StoredHighlight {
+  id: string;
+  occurrenceKeys: string[];
+  paragraphKey: string;
+}
+
+export async function storedHighlights(page: Page): Promise<StoredHighlight[]> {
+  return page.evaluate(async () => new Promise<StoredHighlight[]>((resolve, reject) => {
+    const request = indexedDB.open("english-learning");
+    request.addEventListener("success", () => {
+      const database = request.result;
+      const records = database.transaction("materialAnnotations", "readonly")
+        .objectStore("materialAnnotations")
+        .getAll();
+      records.addEventListener("success", () => {
+        resolve(records.result
+          .filter((record) => record.kind === "highlight")
+          .map((record) => ({
+            id: record.id,
+            occurrenceKeys: record.target.occurrenceKeys,
+            paragraphKey: record.target.paragraphKey,
+          })));
+        database.close();
+      }, { once: true });
+      records.addEventListener("error", () => reject(records.error), { once: true });
+    }, { once: true });
+    request.addEventListener("error", () => reject(request.error), { once: true });
+  }));
+}
+
 export async function storedCurrentMaterialKnownWords(
   page: Page,
 ): Promise<string[]> {
@@ -71,14 +101,16 @@ export async function storedContextualNotes(page: Page): Promise<StoredContextua
     const request = indexedDB.open("english-learning");
     request.addEventListener("success", () => {
       const database = request.result;
-      const records = database.transaction("contextualWordNotes", "readonly")
-        .objectStore("contextualWordNotes")
+      const records = database.transaction("materialAnnotations", "readonly")
+        .objectStore("materialAnnotations")
         .getAll();
       records.addEventListener("success", () => {
-        resolve(records.result.map((record) => ({
-          markdown: record.markdown,
-          occurrenceKey: record.occurrenceKey,
-        })));
+        resolve(records.result
+          .filter((record) => record.kind === "legacy-contextual-word-note")
+          .map((record) => ({
+            markdown: record.body.value,
+            occurrenceKey: record.target.occurrenceKey,
+          })));
         database.close();
       }, { once: true });
       records.addEventListener("error", () => reject(records.error), { once: true });

@@ -78,9 +78,10 @@
   white-space: normal;
 }
 .paragraph-toolbar__actions {
+  position: relative;
   display: inline-flex;
   flex: none;
-  overflow: clip;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--card);
@@ -103,6 +104,59 @@
 }
 .paragraph-toolbar__button + .paragraph-toolbar__button {
   border-left: 1px solid var(--line);
+}
+.paragraph-toolbar__annotation {
+  position: relative;
+  display: inline-flex;
+  border-left: 1px solid var(--line);
+}
+.paragraph-toolbar__annotation > .paragraph-toolbar__button {
+  border-radius: 0 8px 8px 0;
+}
+.paragraph-toolbar__annotation + .paragraph-toolbar__button {
+  border-left: 1px solid var(--line);
+}
+.paragraph-toolbar__annotation-menu {
+  position: absolute;
+  z-index: 9;
+  top: calc(100% + 7px);
+  left: 0;
+  display: grid;
+  width: max-content;
+  min-width: 156px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 10px 28px rgb(32 45 70 / 18%);
+}
+.paragraph-toolbar__tool {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--ink);
+  background: transparent;
+  font: 700 .78rem/1.3 Inter, system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.paragraph-toolbar__tool:hover,
+.paragraph-toolbar__tool:focus-visible,
+.paragraph-toolbar__tool.is-active {
+  background: rgb(83 58 130 / 10%);
+  outline: none;
+}
+.paragraph-toolbar__tool:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.paragraph-toolbar__swatch {
+  width: 16px;
+  height: 10px;
+  border-radius: 3px;
+  background: #ffe58f;
+  box-shadow: inset 0 0 0 1px rgb(112 83 0 / 12%);
 }
 .paragraph-toolbar__button svg {
   width: 14px;
@@ -190,6 +244,12 @@
   }
 }
 .reading-content ::selection { color: #17233a; background: #ffe19e; }
+.annotation-status {
+  margin: -12px 0 18px;
+  color: var(--muted);
+  font-size: .86rem;
+  line-height: 1.4;
+}
 .reading-figure { margin: 24px auto; text-align: center; }
 .reading-figure img {
   display: block;
@@ -210,6 +270,24 @@
   border-radius: 3px;
   outline: none;
   cursor: pointer;
+}
+.reading-word.is-highlighted,
+.reading-highlight-gap {
+  background: #ffe58f;
+}
+.reading-word.is-highlighted {
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.reading-word.is-annotation-target { user-select: none; }
+.reading-word.is-highlight-target { cursor: crosshair; }
+.reading-word.is-erase-target {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' stroke='%2317233a' stroke-width='1.5' stroke-linejoin='round' d='m5 15 8-8 6 6-8 8H7l-2-2v-4Z'/%3E%3Cpath fill='%23f2a7aa' d='m5 15 6 6H7l-2-2v-4Z'/%3E%3C/svg%3E") 5 20, cell;
+}
+.reading-content > .reading-paragraph:has(.paragraph-toolbar__annotation-menu) {
+  contain: none;
+  content-visibility: visible;
 }
 .reading-word:focus-visible { box-shadow: 0 0 0 2px rgb(63 75 120 / 35%); }
 .known-word {
@@ -483,6 +561,7 @@
   .material-heading { margin-bottom: 26px; padding-bottom: 20px; }
   .reading-position-return.is-floating { left: 16px; }
   .reading-content { line-height: 1.85; }
+  .annotation-status { min-height: 2.8em; }
   .reading-content .reading-paragraph { margin-bottom: 1.4em; }
   .material-completion {
     margin-top: 48px;

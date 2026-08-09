@@ -94,6 +94,44 @@ export interface ContextualWordNoteRecord extends WordNoteContext {
   updatedAt: string;
 }
 
+interface MaterialAnnotationBase {
+  id: string;
+  materialId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MaterialHighlightColor = "yellow";
+
+export interface MaterialHighlightAnnotationRecord extends MaterialAnnotationBase {
+  kind: "highlight";
+  target: {
+    type: "reading-word-occurrences";
+    paragraphKey: string;
+    occurrenceKeys: string[];
+  };
+  style: {
+    color: MaterialHighlightColor;
+  };
+}
+
+export interface LegacyContextualWordNoteAnnotationRecord extends MaterialAnnotationBase {
+  kind: "legacy-contextual-word-note";
+  target: {
+    type: "contextual-word-occurrence";
+    occurrenceKey: string;
+    word: string;
+  };
+  body: {
+    format: "markdown";
+    value: string;
+  };
+}
+
+export type MaterialAnnotationRecord =
+  | MaterialHighlightAnnotationRecord
+  | LegacyContextualWordNoteAnnotationRecord;
+
 export interface SettingRecord {
   key: string;
   value: unknown;
@@ -114,7 +152,7 @@ export interface BackupStoreRecords {
   materialContents: MaterialContentRecord[];
   materialTerms: MaterialTermsRecord[];
   vocabulary: VocabularyRecord[];
-  contextualWordNotes: ContextualWordNoteRecord[];
+  materialAnnotations: MaterialAnnotationRecord[];
   wordNotes?: WordNoteRecord[];
   settings: SettingRecord[];
 }
@@ -135,6 +173,7 @@ export interface LearningBackup {
   materialAssets?: BackupMaterialAsset[];
   vocabulary: VocabularyRecord[];
   contextualWordNotes?: ContextualWordNoteRecord[];
+  materialAnnotations?: MaterialAnnotationRecord[];
   wordNotes?: WordNoteRecord[];
   settings?: SettingRecord[];
 }

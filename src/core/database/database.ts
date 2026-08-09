@@ -1,9 +1,10 @@
 import type {
   BackupStoreRecords,
-  ContextualWordNoteRecord,
   MaterialAssetRecord,
+  MaterialAnnotationRecord,
   MaterialBundle,
   MaterialContentRecord,
+  MaterialHighlightAnnotationRecord,
   MaterialRecord,
   MaterialTermsRecord,
   SettingRecord,
@@ -11,14 +12,19 @@ import type {
   VocabularyRecord,
   WordNoteRecord,
 } from "../models/models.js";
+import {
+  contextualWordNoteToMaterialAnnotation,
+  isContextualWordNoteRecord,
+} from "../learning/material-annotation.js";
 
 const DATABASE_NAME = "english-learning";
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 9;
 const BACKUP_TRANSACTION_TIMEOUT_MS = 60_000;
+const LEGACY_CONTEXTUAL_WORD_NOTES_STORE = "contextualWordNotes";
 
 export const STORES = Object.freeze({
-  contextualWordNotes: "contextualWordNotes",
   materialAssets: "materialAssets",
+  materialAnnotations: "materialAnnotations",
   materialContents: "materialContents",
   materialTerms: "materialTerms",
   materials: "materials",
@@ -30,8 +36,8 @@ export const STORES = Object.freeze({
 type StoreName = typeof STORES[keyof typeof STORES];
 
 interface StoreRecordMap {
-  contextualWordNotes: ContextualWordNoteRecord;
   materialAssets: StoredMaterialAssetRecord;
+  materialAnnotations: MaterialAnnotationRecord;
   materialContents: MaterialContentRecord;
   materialTerms: MaterialTermsRecord;
   materials: MaterialRecord;
@@ -121,7 +127,49 @@ function transactionResult(
   });
 }
 
-function createSchema(database: IDBDatabase): void {
+function createMaterialAnnotationStore(database: IDBDatabase): IDBObjectStore {
+  const annotations = database.createObjectStore(STORES.materialAnnotations, { keyPath: "id" });
+  annotations.createIndex("materialId", "materialId");
+  annotations.createIndex("kind", "kind");
+  annotations.createIndex("materialIdKind", ["materialId", "kind"]);
+  return annotations;
+}
+
+function migrateContextualWordNotes(
+  database: IDBDatabase,
+  transaction: IDBTransaction,
+  annotations: IDBObjectStore,
+  reportError: (error: Error) => void,
+): void {
+  if (!database.objectStoreNames.contains(LEGACY_CONTEXTUAL_WORD_NOTES_STORE)) return;
+  const request = transaction.objectStore(LEGACY_CONTEXTUAL_WORD_NOTES_STORE).getAll();
+  request.addEventListener("success", () => {
+    try {
+      request.result.forEach((record: unknown) => {
+        if (!isContextualWordNoteRecord(record)) {
+          throw new Error("資料庫升級失敗：舊版情境單字筆記格式不正確。");
+        }
+        const writeRequest = annotations.put(contextualWordNoteToMaterialAnnotation(record));
+        writeRequest.addEventListener("error", () => {
+          reportError(new Error("資料庫升級失敗：舊版情境單字筆記無法寫入。"));
+        }, { once: true });
+      });
+      database.deleteObjectStore(LEGACY_CONTEXTUAL_WORD_NOTES_STORE);
+    } catch (error) {
+      reportError(error instanceof Error ? error : new Error("資料庫升級失敗。"));
+      transaction.abort();
+    }
+  }, { once: true });
+  request.addEventListener("error", () => {
+    reportError(new Error("資料庫升級失敗：無法讀取舊版情境單字筆記。"));
+  }, { once: true });
+}
+
+function createSchema(
+  database: IDBDatabase,
+  transaction: IDBTransaction,
+  reportError: (error: Error) => void,
+): void {
   if (!database.objectStoreNames.contains(STORES.materials)) {
     const materials = database.createObjectStore(STORES.materials, { keyPath: "id" });
     materials.createIndex("updatedAt", "updatedAt");
@@ -148,18 +196,28 @@ function createSchema(database: IDBDatabase): void {
   if (!database.objectStoreNames.contains(STORES.wordNotes)) {
     database.createObjectStore(STORES.wordNotes, { keyPath: "word" });
   }
-  if (!database.objectStoreNames.contains(STORES.contextualWordNotes)) {
-    const notes = database.createObjectStore(STORES.contextualWordNotes, { keyPath: "id" });
-    notes.createIndex("materialId", "materialId");
-  }
+  const annotations = database.objectStoreNames.contains(STORES.materialAnnotations)
+    ? transaction.objectStore(STORES.materialAnnotations)
+    : createMaterialAnnotationStore(database);
+  migrateContextualWordNotes(database, transaction, annotations, reportError);
 }
 
 function openDatabase(): Promise<IDBDatabase> {
   if (!databasePromise) {
     databasePromise = new Promise<IDBDatabase>((resolve, reject) => {
       let blocked = false;
+      let upgradeError: Error | undefined;
       const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-      request.addEventListener("upgradeneeded", () => createSchema(request.result), { once: true });
+      request.addEventListener("upgradeneeded", () => {
+        const transaction = request.transaction;
+        if (!transaction) {
+          upgradeError = new Error("資料庫升級失敗：缺少升級交易。");
+          return;
+        }
+        createSchema(request.result, transaction, (error) => {
+          upgradeError = error;
+        });
+      }, { once: true });
       request.addEventListener("success", () => {
         const database = request.result;
         if (blocked) {
@@ -171,7 +229,7 @@ function openDatabase(): Promise<IDBDatabase> {
       }, { once: true });
       request.addEventListener("error", () => {
         databasePromise = undefined;
-        reject(request.error);
+        reject(upgradeError ?? request.error);
       }, { once: true });
       request.addEventListener("blocked", () => {
         blocked = true;
@@ -237,27 +295,45 @@ export async function writeOne<K extends StoreName>(
   return value;
 }
 
-export async function writeMaterialContent(
-  material: MaterialRecord,
-  content: MaterialContentRecord,
-  retainedContextualNoteIds?: ReadonlySet<string>,
+export async function deleteOne<K extends StoreName>(
+  storeName: K,
+  key: IDBValidKey,
 ): Promise<void> {
   const database = await openDatabase();
-  const storeNames: StoreName[] = [STORES.materials, STORES.materialContents];
-  if (retainedContextualNoteIds) storeNames.push(STORES.contextualWordNotes);
-  const transaction = database.transaction(storeNames, "readwrite");
-  transaction.objectStore(STORES.materials).put(material);
-  transaction.objectStore(STORES.materialContents).put(content);
-  if (retainedContextualNoteIds) {
-    const noteStore = transaction.objectStore(STORES.contextualWordNotes);
-    const request = noteStore.index("materialId").getAllKeys(material.id);
-    request.addEventListener("success", () => {
-      request.result
-        .filter((key) => !retainedContextualNoteIds.has(String(key)))
-        .forEach((key) => noteStore.delete(key));
-    }, { once: true });
-  }
+  const transaction = database.transaction(storeName, "readwrite");
+  transaction.objectStore(storeName).delete(key);
   await transactionResult(transaction);
+}
+
+export async function writeMaterialHighlight(
+  annotation: MaterialHighlightAnnotationRecord,
+): Promise<MaterialHighlightAnnotationRecord> {
+  const database = await openDatabase();
+  const transaction = database.transaction(STORES.materialAnnotations, "readwrite");
+  let conflictingOccurrence = false;
+  const store = transaction.objectStore(STORES.materialAnnotations);
+  const request = store.index("materialIdKind").getAll([annotation.materialId, "highlight"]);
+  request.addEventListener("success", () => {
+    const selectedOccurrences = new Set(annotation.target.occurrenceKeys);
+    const hasConflict = (request.result as MaterialAnnotationRecord[]).some((candidate) => (
+      candidate.kind === "highlight"
+      && candidate.id !== annotation.id
+      && candidate.target.occurrenceKeys.some((key) => selectedOccurrences.has(key))
+    ));
+    if (hasConflict) {
+      conflictingOccurrence = true;
+      transaction.abort();
+      return;
+    }
+    store.put(annotation);
+  }, { once: true });
+  try {
+    await transactionResult(transaction, 0, "螢光標記儲存失敗，原有標記未變更。");
+  } catch (error) {
+    if (conflictingOccurrence) throw new Error("選取的單字已屬於另一組螢光標記。");
+    throw error;
+  }
+  return annotation;
 }
 
 export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<void> {
@@ -287,16 +363,16 @@ export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<v
 }
 
 export interface MaterialReplacementWrite {
+  annotations: MaterialAnnotationRecord[];
   bundle: MaterialBundle;
   expectedUpdatedAt: string;
-  retainedContextualNoteIds: ReadonlySet<string>;
   vocabulary: VocabularyRecord[];
 }
 
 export async function replaceMaterialBundle({
+  annotations,
   bundle,
   expectedUpdatedAt,
-  retainedContextualNoteIds,
   vocabulary,
 }: MaterialReplacementWrite): Promise<void> {
   const assetsToStore = await Promise.all((bundle.assets ?? []).map(storedAsset));
@@ -308,7 +384,7 @@ export async function replaceMaterialBundle({
       STORES.materialContents,
       STORES.materialTerms,
       STORES.vocabulary,
-      STORES.contextualWordNotes,
+      STORES.materialAnnotations,
     ],
     "readwrite",
   );
@@ -343,12 +419,11 @@ export async function replaceMaterialBundle({
       assetsToStore.forEach((asset) => assetStore.put(asset));
     }, { once: true });
 
-    const noteStore = transaction.objectStore(STORES.contextualWordNotes);
-    const noteRequest = noteStore.index("materialId").getAllKeys(bundle.metadata.id);
-    noteRequest.addEventListener("success", () => {
-      noteRequest.result
-        .filter((key) => !retainedContextualNoteIds.has(String(key)))
-        .forEach((key) => noteStore.delete(key));
+    const annotationStore = transaction.objectStore(STORES.materialAnnotations);
+    const annotationRequest = annotationStore.index("materialId").getAllKeys(bundle.metadata.id);
+    annotationRequest.addEventListener("success", () => {
+      annotationRequest.result.forEach((key) => annotationStore.delete(key));
+      annotations.forEach((annotation) => annotationStore.put(annotation));
     }, { once: true });
   }, { once: true });
 
@@ -370,7 +445,7 @@ export async function deleteMaterialBundle(materialId: string): Promise<void> {
       STORES.materialAssets,
       STORES.materialContents,
       STORES.materialTerms,
-      STORES.contextualWordNotes,
+      STORES.materialAnnotations,
     ],
     "readwrite",
   );
@@ -382,10 +457,10 @@ export async function deleteMaterialBundle(materialId: string): Promise<void> {
   assetRequest.addEventListener("success", () => {
     assetRequest.result.forEach((key) => assetStore.delete(key));
   }, { once: true });
-  const noteStore = transaction.objectStore(STORES.contextualWordNotes);
-  const noteRequest = noteStore.index("materialId").getAllKeys(materialId);
-  noteRequest.addEventListener("success", () => {
-    noteRequest.result.forEach((key) => noteStore.delete(key));
+  const annotationStore = transaction.objectStore(STORES.materialAnnotations);
+  const annotationRequest = annotationStore.index("materialId").getAllKeys(materialId);
+  annotationRequest.addEventListener("success", () => {
+    annotationRequest.result.forEach((key) => annotationStore.delete(key));
   }, { once: true });
   await transactionResult(transaction);
 }
@@ -480,7 +555,7 @@ export async function writeBackupStores({
   materialContents,
   materialTerms,
   vocabulary,
-  contextualWordNotes,
+  materialAnnotations,
   wordNotes = [],
   settings,
 }: BackupStoreRecords): Promise<void> {
@@ -497,7 +572,7 @@ export async function writeBackupStores({
   const assetStore = transaction.objectStore(STORES.materialAssets);
   const vocabularyStore = transaction.objectStore(STORES.vocabulary);
   const settingsStore = transaction.objectStore(STORES.settings);
-  const contextualWordNoteStore = transaction.objectStore(STORES.contextualWordNotes);
+  const materialAnnotationStore = transaction.objectStore(STORES.materialAnnotations);
   const wordNoteStore = transaction.objectStore(STORES.wordNotes);
   const contentStore = transaction.objectStore(STORES.materialContents);
   const termStore = transaction.objectStore(STORES.materialTerms);
@@ -508,8 +583,8 @@ export async function writeBackupStores({
   materialContents.forEach((content) => trackRequest(contentStore.put(content)));
   materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
   vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
-  trackRequest(contextualWordNoteStore.clear());
-  contextualWordNotes.forEach((record) => trackRequest(contextualWordNoteStore.put(record)));
+  trackRequest(materialAnnotationStore.clear());
+  materialAnnotations.forEach((record) => trackRequest(materialAnnotationStore.put(record)));
   trackRequest(wordNoteStore.clear());
   wordNotes.forEach((record) => trackRequest(wordNoteStore.put(record)));
   settings.forEach((setting) => trackRequest(settingsStore.put(setting)));

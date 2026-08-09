@@ -89,7 +89,7 @@ test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
   await expect(page.getByText("Animal", { exact: true })).toBeVisible();
 });
 
-test("preserves the legacy word note store during the version 8 upgrade", async ({ page }) => {
+test("migrates version 8 contextual notes while preserving global word notes", async ({ page }) => {
   await page.goto("/tests/e2e/fixtures/same-origin.html");
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
@@ -98,7 +98,7 @@ test("preserves the legacy word note store during the version 8 upgrade", async 
       deletion.onerror = () => reject(deletion.error);
     });
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open("english-learning", 6);
+      const request = indexedDB.open("english-learning", 8);
       request.onupgradeneeded = () => {
         const database = request.result;
         database.createObjectStore("materials", { keyPath: "id" });
@@ -111,6 +111,17 @@ test("preserves the legacy word note store during the version 8 upgrade", async 
         database.createObjectStore("wordNotes", { keyPath: "word" }).put({
           word: "driver",
           markdown: "legacy global note",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        });
+        const contextualNotes = database.createObjectStore("contextualWordNotes", { keyPath: "id" });
+        contextualNotes.createIndex("materialId", "materialId");
+        contextualNotes.put({
+          id: "material::vocabulary%3Adriver",
+          materialId: "material",
+          occurrenceKey: "vocabulary:driver",
+          word: "driver",
+          markdown: "legacy contextual note",
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         });
@@ -129,19 +140,23 @@ test("preserves the legacy word note store during the version 8 upgrade", async 
     stores: string[];
     version: number;
     preservedNote: unknown;
+    migratedContextualNote: unknown;
     preservedSetting: unknown;
   }>((resolve, reject) => {
     const request = indexedDB.open("english-learning");
     request.onsuccess = () => {
       const database = request.result;
-      const transaction = database.transaction(["settings", "wordNotes"], "readonly");
+      const transaction = database.transaction(["settings", "wordNotes", "materialAnnotations"], "readonly");
       const settingRequest = transaction.objectStore("settings").get("searchHistory");
       const noteRequest = transaction.objectStore("wordNotes").get("driver");
+      const contextualNoteRequest = transaction.objectStore("materialAnnotations")
+        .get("material::vocabulary%3Adriver");
       transaction.oncomplete = () => {
         resolve({
           stores: [...database.objectStoreNames],
           version: database.version,
           preservedNote: noteRequest.result,
+          migratedContextualNote: contextualNoteRequest.result,
           preservedSetting: settingRequest.result,
         });
         database.close();
@@ -151,11 +166,74 @@ test("preserves the legacy word note store during the version 8 upgrade", async 
     request.onerror = () => reject(request.error);
   }));
 
-  expect(state.version).toBe(8);
-  expect(state.stores).toContain("contextualWordNotes");
+  expect(state.version).toBe(9);
+  expect(state.stores).not.toContain("contextualWordNotes");
+  expect(state.stores).toContain("materialAnnotations");
   expect(state.stores).toContain("wordNotes");
   expect(state.preservedNote).toMatchObject({ markdown: "legacy global note", word: "driver" });
+  expect(state.migratedContextualNote).toMatchObject({
+    body: { format: "markdown", value: "legacy contextual note" },
+    kind: "legacy-contextual-word-note",
+    materialId: "material",
+    target: {
+      occurrenceKey: "vocabulary:driver",
+      type: "contextual-word-occurrence",
+      word: "driver",
+    },
+  });
   expect(state.preservedSetting).toMatchObject({ value: ["preserved"] });
+});
+
+test("rolls back the version 8 upgrade when a contextual note is malformed", async ({ page }) => {
+  await page.goto("/tests/e2e/fixtures/same-origin.html");
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase("english-learning");
+      deletion.onsuccess = () => resolve();
+      deletion.onerror = () => reject(deletion.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("english-learning", 8);
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        database.createObjectStore("materials", { keyPath: "id" });
+        database.createObjectStore("vocabulary", { keyPath: "word" });
+        database.createObjectStore("settings", { keyPath: "key" });
+        database.createObjectStore("wordNotes", { keyPath: "word" });
+        database.createObjectStore("materialContents", { keyPath: "materialId" });
+        database.createObjectStore("materialTerms", { keyPath: "materialId" });
+        database.createObjectStore("materialAssets", { keyPath: "id" });
+        database.createObjectStore("contextualWordNotes", { keyPath: "id" }).put({
+          id: "malformed-note",
+          materialId: "material",
+        });
+      };
+      request.onsuccess = () => {
+        request.result.close();
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByText(/舊版情境單字筆記格式不正確/)).toBeVisible();
+  const state = await page.evaluate(async () => new Promise<{ stores: string[]; version: number }>(
+    (resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.onsuccess = () => {
+        resolve({
+          stores: [...request.result.objectStoreNames],
+          version: request.result.version,
+        });
+        request.result.close();
+      };
+      request.onerror = () => reject(request.error);
+    },
+  ));
+  expect(state.version).toBe(8);
+  expect(state.stores).toContain("contextualWordNotes");
+  expect(state.stores).not.toContain("materialAnnotations");
 });
 
 test("reports a blocked database upgrade and succeeds after the old connection closes", async ({ page }) => {
@@ -208,6 +286,6 @@ test("reports a blocked database upgrade and succeeds after the old connection c
       request.onerror = () => reject(request.error);
     });
   });
-  expect(stores).toContain("contextualWordNotes");
+  expect(stores).toContain("materialAnnotations");
   expect(stores).toContain("wordNotes");
 });

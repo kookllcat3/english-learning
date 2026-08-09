@@ -11,7 +11,7 @@ import {
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
-import { isContextualOccurrenceValid } from "../learning/contextual-word-note.js";
+import { materialAnnotationsForReplacement } from "../learning/material-annotation.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
 import { sourceWordsForBlocks } from "../learning/reading-content.js";
 import {
@@ -130,11 +130,11 @@ export async function replaceMaterial(
 ): Promise<MaterialRecord> {
   await ensureMaterialKnowledge();
   validateMaterialContent(replacement.content);
-  const [currentMaterial, allMaterials, vocabulary, contextualNotes] = await Promise.all([
+  const [currentMaterial, allMaterials, vocabulary, annotations] = await Promise.all([
     readOne(STORES.materials, id),
     readAll(STORES.materials),
     readAll(STORES.vocabulary),
-    readAllByIndex(STORES.contextualWordNotes, "materialId", id),
+    readAllByIndex(STORES.materialAnnotations, "materialId", id),
   ]);
   if (!currentMaterial) throw new Error("找不到這份教材。");
   if (currentMaterial.updatedAt !== expectedUpdatedAt) {
@@ -151,10 +151,8 @@ export async function replaceMaterial(
     vocabulary,
     updatedAt,
   );
-  const retainedContextualNoteIds = new Set(contextualNotes
-    .filter((note) => isContextualOccurrenceValid(note, contentBlocks))
-    .map((note) => note.id));
   await replaceMaterialBundle({
+    annotations: materialAnnotationsForReplacement(annotations, contentBlocks, updatedAt),
     bundle: {
       metadata: state.material,
       content: replacement.content,
@@ -163,7 +161,6 @@ export async function replaceMaterial(
       words,
     },
     expectedUpdatedAt,
-    retainedContextualNoteIds,
     vocabulary: state.vocabulary,
   });
   return state.material;

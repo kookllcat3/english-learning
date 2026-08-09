@@ -4,6 +4,7 @@ import {
   createMaterial,
   materialTitle,
   storedContextualNotes,
+  storedHighlights,
   storedWordNotes,
   validWebpBase64,
 } from "./test-helpers";
@@ -21,6 +22,12 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
+  const firstParagraph = page.locator("[data-reading-paragraph]").first();
+  await firstParagraph.getByRole("button", { name: "開啟螢光筆工具" }).click();
+  await firstParagraph.getByRole("button", { name: "淡黃色螢光筆" }).click();
+  await firstParagraph.locator('[data-word="bear"]').first().click();
+  await expect.poll(() => storedHighlights(page)).toHaveLength(1);
+  await page.keyboard.press("Escape");
   await page.locator('[data-word="bear"]').first().focus();
   await page.getByLabel("單字 Markdown 筆記").fill("備份中的共用單字筆記");
   await expect(page.getByRole("status")).toHaveText("已儲存");
@@ -105,6 +112,7 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
     request.onerror = () => reject(request.error);
   }));
   expect(remainingNotes).toBe(1);
+  await expect.poll(() => storedHighlights(page)).toEqual([]);
 
   await page.getByRole("button", { name: "開啟資料管理" }).click();
   page.once("dialog", (dialog) => dialog.accept());
@@ -121,6 +129,8 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeVisible();
   await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
     .toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/is-highlighted/);
+  await expect.poll(() => storedHighlights(page)).toHaveLength(1);
   const restoredNotes = await storedWordNotes(page);
   expect(restoredNotes).toContainEqual(savedNote);
   await page.locator(`[data-word="${savedNote?.word}"]`).first().focus();
@@ -169,7 +179,54 @@ test("reports an invalid backup without changing the library", async ({ page }) 
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
 });
 
-test("removes orphaned contextual notes while merging a backup", async ({ page }) => {
+test("rejects invalid version 6 highlight records before writing", async ({ page }) => {
+  const timestamp = "2026-08-09T08:00:00.000Z";
+  const materialId = "37f59d40-4f5f-4fc2-ac4d-515719319ba2";
+  await page.goto("/");
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "invalid-highlight-v6.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 6,
+      exportedAt: timestamp,
+      materials: [{
+        id: materialId,
+        title: "不應匯入的教材",
+        description: "",
+        content: "A bear runs.",
+        contentBlocks: [{ type: "text", text: "A bear runs.", order: 0 }],
+        knownWords: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      materialAssets: [],
+      vocabulary: [],
+      materialAnnotations: [{
+        id: "df52b38d-02eb-4e99-a13e-320742f73803",
+        materialId,
+        kind: "highlight",
+        target: {
+          type: "reading-word-occurrences",
+          paragraphKey: "0-0-0",
+          occurrenceKeys: ["0-0-0-0-0"],
+        },
+        style: { color: "orange" },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      wordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("alert")).toContainText("螢光標記");
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "不應匯入的教材" })).toHaveCount(0);
+});
+
+test("removes orphaned legacy contextual annotations while merging a backup", async ({ page }) => {
   const timestamp = "2026-08-05T08:00:00.000Z";
   await createMaterial(page);
   await page.evaluate(async ({ timestamp }) => {
@@ -187,13 +244,17 @@ test("removes orphaned contextual notes while merging a backup", async ({ page }
     });
     const materialId = materials[0]?.id;
     if (!materialId) throw new Error("test material not found");
-    const transaction = database.transaction("contextualWordNotes", "readwrite");
-    transaction.objectStore("contextualWordNotes").put({
+    const transaction = database.transaction("materialAnnotations", "readwrite");
+    transaction.objectStore("materialAnnotations").put({
       id: `${materialId}::reading%3Amissing-position`,
       materialId,
-      occurrenceKey: "reading:missing-position",
-      word: "orphan",
-      markdown: "orphan note",
+      kind: "legacy-contextual-word-note",
+      target: {
+        type: "contextual-word-occurrence",
+        occurrenceKey: "reading:missing-position",
+        word: "orphan",
+      },
+      body: { format: "markdown", value: "orphan note" },
       createdAt: timestamp,
       updatedAt: timestamp,
     });

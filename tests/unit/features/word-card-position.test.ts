@@ -6,6 +6,7 @@ const viewport = {
   gap: 10,
   margin: 12,
   minimumTop: 100,
+  placementHeight: 380,
   viewportHeight: 900,
 };
 
@@ -20,5 +21,15 @@ describe("word card positioning", () => {
 
   it("keeps the target line clear when neither side fully fits", () => {
     expect(calculateWordCardTop({ ...viewport, targetTop: 480, targetBottom: 505 })).toBe(515);
+  });
+
+  it("reserves the eventual card height so an expanding card does not switch sides", () => {
+    expect(calculateWordCardTop({
+      ...viewport,
+      cardHeight: 180,
+      placementHeight: 560,
+      targetTop: 500,
+      targetBottom: 525,
+    })).toBe(310);
   });
 });

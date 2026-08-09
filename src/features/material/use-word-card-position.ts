@@ -78,13 +78,15 @@ export function useWordCardPosition(
       MINIMUM_VIEWPORT_HEIGHT,
       window.innerHeight - topBoundary - VIEWPORT_MARGIN,
     );
-    element.style.maxHeight = `${Math.min(MAX_CARD_HEIGHT, viewportHeight)}px`;
+    const maximumCardHeight = Math.min(MAX_CARD_HEIGHT, viewportHeight);
+    element.style.maxHeight = `${maximumCardHeight}px`;
     const cardRect = element.getBoundingClientRect();
     const top = calculateWordCardTop({
       cardHeight: cardRect.height,
       gap: CARD_GAP,
       margin: VIEWPORT_MARGIN,
       minimumTop: topBoundary,
+      placementHeight: maximumCardHeight,
       targetBottom: rect.bottom,
       targetTop: rect.top,
       viewportHeight: window.innerHeight,

@@ -14,7 +14,7 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
     "zeta eta",
     "theta iota kappa",
   ];
-  const knownWords = [[], ["delta"], ["zeta", "eta"], ["theta", "iota"]];
+  const knownWords = [[], ["delta"], ["zeta"], ["theta", "iota"]];
   const materials = titles.map((title, index) => ({
     id: `7e4fafc8-9533-4a3e-bfb6-69fe4cc88a${String(index).padStart(2, "0")}`,
     title,
@@ -22,7 +22,7 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
     content: contents[index],
     knownWords: knownWords[index],
     createdAt: new Date(Date.parse(timestamp) + index * 1_000).toISOString(),
-    updatedAt: new Date(Date.parse(timestamp) + index * 1_000).toISOString(),
+    updatedAt: new Date(Date.parse(timestamp) + (titles.length - index) * 1_000).toISOString(),
   }));
 
   await page.goto("/");
@@ -65,9 +65,9 @@ test("keeps the viewport stable while sorting materials", async ({ page }) => {
   await expect(page.locator(".material-grid")).toHaveAttribute("aria-busy", "false");
   await expect(page.locator(".material-card h2")).toHaveText([
     "30隻動物",
+    "blink-182 - ONE MORE TIME",
     "Childish Gambino - This Is America",
     "blink-182 - I Miss You",
-    "blink-182 - ONE MORE TIME",
   ]);
   const cardHeightAfterProgressSort = await shortTitleCard.evaluate(
     (element) => element.getBoundingClientRect().height,

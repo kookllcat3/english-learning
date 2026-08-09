@@ -20,7 +20,7 @@ function compareMaterials(
   }
   if (sort === "progress") {
     return (first, second) => materialCompletion(first) - materialCompletion(second)
-      || second.updatedAt.localeCompare(first.updatedAt);
+      || second.createdAt.localeCompare(first.createdAt);
   }
   return (first, second) => second.createdAt.localeCompare(first.createdAt);
 }

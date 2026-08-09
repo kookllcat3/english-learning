@@ -9,13 +9,18 @@ import {
 } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
+  addKnownWordsAndUpdateReadingPosition,
   getMaterial,
   getVocabularyProgress,
-  setWordsKnown,
 } from "../core/learning/learning-repository.js";
+import {
+  readingProgressIndexForBlocks,
+  wordsThroughReadingParagraph,
+} from "../core/learning/reading-content.js";
 import type { BackupMaterial, VocabularyRecord } from "../core/models/models.js";
 import { errorMessage as getErrorMessage } from "../shared/errors.js";
 import { useLearningDataRefresh } from "../app/composables/use-learning-data-refresh.js";
+import { notifyLearningDataChanged } from "../core/learning/learning-sync.js";
 import AiAssistantDialog from "../features/material/components/AiAssistantDialog.vue";
 import {
   loadFamiliarityLevels,
@@ -33,13 +38,22 @@ const familiarityLevels = ref<FamiliarityLevel[]>([]);
 const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
-const markingAllWords = ref(false);
+const activeProgressOperation = ref<"completion" | string | null>(null);
 const completionError = ref("");
 const readingContainer = ref<HTMLElement | null>(null);
 const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
+let progressSequence = 0;
 
 const hasMaterialWords = computed(() => vocabularyProgress.value.size > 0);
+const readingProgressIndex = computed(() => readingProgressIndexForBlocks(
+  material.value?.contentBlocks ?? [],
+));
+const readingProgressBusy = computed(() => activeProgressOperation.value !== null);
+const markingAllWords = computed(() => activeProgressOperation.value === "completion");
+const savingReadingParagraphKey = computed(() => (
+  activeProgressOperation.value === "completion" ? null : activeProgressOperation.value
+));
 const allMaterialWordsKnown = computed(() => (
   hasMaterialWords.value
   && [...vocabularyProgress.value.values()].every((record) => record.learned)
@@ -61,10 +75,9 @@ const {
   showReturnAction: showReadingPositionReturn,
   toggle: toggleReadingParagraph,
 } = useReadingPosition({
-  actionError,
-  materialId,
   readingContainer,
   returnActionAnchor: readingPositionReturnAnchor,
+  save: saveReadingPosition,
 });
 
 const {
@@ -82,11 +95,6 @@ const {
   wordCard,
 } = useWordCardInteractions();
 
-async function refreshKnownWords(): Promise<void> {
-  if (!materialId()) return;
-  vocabularyProgress.value = await getVocabularyProgress(materialId());
-}
-
 async function loadMaterialPage(): Promise<void> {
   const id = materialId();
   const sequence = ++loadSequence;
@@ -94,8 +102,12 @@ async function loadMaterialPage(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   actionError.value = "";
-  markingAllWords.value = false;
+  progressSequence += 1;
+  activeProgressOperation.value = null;
   completionError.value = "";
+  material.value = null;
+  vocabularyProgress.value = new Map();
+  currentParagraphKey.value = null;
   if (!id) {
     loading.value = false;
     errorMessage.value = "找不到這份教材";
@@ -129,29 +141,69 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   handleWordCardPointerDown(event);
 }
 
-async function markAllMaterialWordsKnown(): Promise<void> {
-  if (
-    !material.value
-    || markingAllWords.value
-    || !hasMaterialWords.value
-    || allMaterialWordsKnown.value
-  ) return;
-  markingAllWords.value = true;
+function unknownWords(words: string[]): string[] {
+  return words.filter((word) => !vocabularyProgress.value.get(word)?.learned);
+}
+
+async function saveProgress(
+  words: string[],
+  paragraphKey: string | null | undefined,
+  operation: "completion" | string,
+): Promise<boolean> {
+  if (!material.value || readingProgressBusy.value) return false;
+  const id = material.value.id;
+  const loadAtStart = loadSequence;
+  const sequence = ++progressSequence;
+  activeProgressOperation.value = operation;
+  actionError.value = "";
   completionError.value = "";
   try {
-    const id = material.value.id;
-    await setWordsKnown(id, [...vocabularyProgress.value.keys()], true);
+    await addKnownWordsAndUpdateReadingPosition(
+      id,
+      unknownWords(words),
+      paragraphKey === undefined
+        ? { mode: "preserve" }
+        : paragraphKey === null
+          ? { mode: "clear" }
+          : { mode: "set", paragraphKey },
+    );
     const [updatedMaterial, updatedProgress] = await Promise.all([
       getMaterial(id),
       getVocabularyProgress(id),
     ]);
+    if (sequence !== progressSequence || loadAtStart !== loadSequence || id !== materialId()) {
+      return false;
+    }
     material.value = updatedMaterial;
     vocabularyProgress.value = updatedProgress;
+    currentParagraphKey.value = updatedMaterial.readingParagraphKey ?? null;
+    notifyLearningDataChanged("progress");
+    return true;
   } catch (error) {
-    completionError.value = getErrorMessage(error, "無法更新本篇單字，請稍後再試。");
+    const message = getErrorMessage(error, "無法更新學習進度，請稍後再試。");
+    if (operation === "completion") completionError.value = message;
+    else actionError.value = message;
+    return false;
   } finally {
-    markingAllWords.value = false;
+    if (sequence === progressSequence) activeProgressOperation.value = null;
   }
+}
+
+function saveReadingPosition(paragraphKey: string | null): Promise<boolean> {
+  const words = paragraphKey === null
+    ? []
+    : wordsThroughReadingParagraph(readingProgressIndex.value, paragraphKey);
+  return saveProgress(words, paragraphKey, paragraphKey ?? currentParagraphKey.value ?? "reading-position");
+}
+
+async function markAllMaterialWordsKnown(): Promise<void> {
+  if (
+    !material.value
+    || readingProgressBusy.value
+    || !hasMaterialWords.value
+    || allMaterialWordsKnown.value
+  ) return;
+  await saveProgress(readingProgressIndex.value.orderedUniqueWords, undefined, "completion");
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -163,15 +215,26 @@ function closeTransientWordCard(): void {
   closeWordCard();
 }
 
-function refreshLearningProgress(): void {
-  void refreshKnownWords().catch((error: unknown) => {
+async function refreshLearningProgress(): Promise<void> {
+  const id = materialId();
+  if (!id || loading.value) return;
+  try {
+    const [updatedMaterial, updatedProgress] = await Promise.all([
+      getMaterial(id),
+      getVocabularyProgress(id),
+    ]);
+    if (id !== materialId()) return;
+    material.value = updatedMaterial;
+    vocabularyProgress.value = updatedProgress;
+    currentParagraphKey.value = updatedMaterial.readingParagraphKey ?? null;
+  } catch (error) {
     actionError.value = getErrorMessage(error, "無法重新載入單字進度。");
-  });
+  }
 }
 
 useLearningDataRefresh({
   onHidden: closeTransientWordCard,
-  refresh: refreshLearningProgress,
+  refresh: () => void refreshLearningProgress(),
 });
 watch(() => route.params.id, () => void loadMaterialPage());
 onMounted(() => {
@@ -184,6 +247,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   loadSequence += 1;
+  progressSequence += 1;
   disposeWordCard();
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   document.removeEventListener("selectionchange", scheduleSelectionLookup);
@@ -230,6 +294,8 @@ onBeforeUnmount(() => {
           :blocks="material.contentBlocks"
           :current-paragraph-key="currentParagraphKey"
           :familiarity-levels="familiarityLevels"
+          :reading-progress-busy="readingProgressBusy"
+          :saving-reading-paragraph-key="savingReadingParagraphKey"
           :vocabulary-progress="vocabularyProgress"
           @mouseup="handleWordSelection"
           @dblclick="nextTick(handleWordSelection)"
@@ -251,7 +317,7 @@ onBeforeUnmount(() => {
             }"
             type="button"
             :aria-busy="markingAllWords"
-            :disabled="markingAllWords || allMaterialWordsKnown || !hasMaterialWords"
+            :disabled="readingProgressBusy || allMaterialWordsKnown || !hasMaterialWords"
             @click="markAllMaterialWordsKnown"
           >
             {{ completionButtonLabel }}

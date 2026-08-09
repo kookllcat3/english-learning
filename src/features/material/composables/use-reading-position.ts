@@ -1,13 +1,9 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
 
-import { setMaterialReadingParagraph } from "../../../core/learning/learning-repository.js";
-import { errorMessage as getErrorMessage } from "../../../shared/errors.js";
-
 interface ReadingPositionOptions {
-  actionError: Ref<string>;
-  materialId: () => string;
   readingContainer: Ref<HTMLElement | null>;
   returnActionAnchor: Ref<HTMLElement | null>;
+  save: (paragraphKey: string | null) => Promise<boolean>;
 }
 
 function findReadingParagraph(panel: HTMLElement | null, paragraphKey: string): HTMLElement | null {
@@ -49,16 +45,8 @@ export function useReadingPosition(options: ReadingPositionOptions) {
   onBeforeUnmount(() => returnActionObserver?.disconnect());
 
   async function toggle(paragraphKey: string): Promise<void> {
-    const previousParagraphKey = currentParagraphKey.value;
-    const nextParagraphKey = previousParagraphKey === paragraphKey ? null : paragraphKey;
-    currentParagraphKey.value = nextParagraphKey;
-    options.actionError.value = "";
-    try {
-      await setMaterialReadingParagraph(options.materialId(), nextParagraphKey);
-    } catch (error) {
-      currentParagraphKey.value = previousParagraphKey;
-      options.actionError.value = getErrorMessage(error, "無法儲存目前閱讀段落。");
-    }
+    const nextParagraphKey = currentParagraphKey.value === paragraphKey ? null : paragraphKey;
+    if (await options.save(nextParagraphKey)) currentParagraphKey.value = nextParagraphKey;
   }
 
   async function returnToPosition(): Promise<void> {

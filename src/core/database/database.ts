@@ -406,6 +406,46 @@ export async function writeLearningProgress(
   await transactionResult(transaction);
 }
 
+export async function writeMaterialLearningProgress(
+  material: MaterialRecord,
+  vocabulary: VocabularyRecord[],
+  expectedUpdatedAt: string,
+): Promise<void> {
+  const database = await openDatabase();
+  const transaction = database.transaction(
+    [STORES.materials, STORES.vocabulary],
+    "readwrite",
+  );
+  let conflictingUpdate = false;
+  const materialStore = transaction.objectStore(STORES.materials);
+  const currentMaterialRequest = materialStore.get(material.id);
+  currentMaterialRequest.addEventListener("success", () => {
+    const currentMaterial = currentMaterialRequest.result as MaterialRecord | undefined;
+    if (!currentMaterial || currentMaterial.updatedAt !== expectedUpdatedAt) {
+      conflictingUpdate = true;
+      transaction.abort();
+      return;
+    }
+
+    try {
+      materialStore.put(material);
+      const vocabularyStore = transaction.objectStore(STORES.vocabulary);
+      vocabulary.forEach((record) => vocabularyStore.put(record));
+    } catch {
+      transaction.abort();
+    }
+  }, { once: true });
+
+  try {
+    await transactionResult(transaction, 0, "學習進度更新失敗，原有資料未變更。");
+  } catch (error) {
+    if (conflictingUpdate) {
+      throw new Error("這份教材已在其他分頁更新，請重新整理後再試。");
+    }
+    throw error;
+  }
+}
+
 export async function writeMaterialKnowledgeMigration(
   materials: MaterialRecord[],
   materialTerms: MaterialTermsRecord[],

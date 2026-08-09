@@ -3,6 +3,8 @@ defineProps<{
   copyStatus: "error" | "success" | null;
   hasTranslation: boolean;
   isCurrentReadingPosition: boolean;
+  readingPositionDisabled: boolean;
+  readingPositionLoading: boolean;
   isTranslationHidden: boolean;
 }>();
 
@@ -18,11 +20,16 @@ const emit = defineEmits<{
     <span class="paragraph-toolbar__actions">
       <button
         class="paragraph-toolbar__button"
-        :class="{ 'is-active': isCurrentReadingPosition }"
+        :class="{
+          'is-active': isCurrentReadingPosition,
+          'is-loading': readingPositionLoading,
+        }"
         type="button"
         aria-label="標記目前閱讀段落"
         title="標記目前閱讀段落"
+        :aria-busy="readingPositionLoading"
         :aria-pressed="isCurrentReadingPosition"
+        :disabled="readingPositionDisabled"
         @click.stop="emit('toggleReadingPosition')"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">

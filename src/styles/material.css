@@ -124,6 +124,12 @@
   background: #533a82;
   outline: none;
 }
+.paragraph-toolbar__button.is-loading:disabled { cursor: wait; }
+.paragraph-toolbar__button.is-loading svg { animation: paragraph-toolbar-loading 0.8s linear infinite; }
+
+@keyframes paragraph-toolbar-loading {
+  to { transform: rotate(360deg); }
+}
 .paragraph-toolbar__button.is-copy-success {
   color: #087a4b;
   background: rgb(8 122 75 / 10%);
@@ -271,6 +277,10 @@
   }
   .known-word.is-active .known-word__glyph {
     animation: none;
+  }
+  .paragraph-toolbar__button.is-loading svg {
+    animation: none;
+    opacity: .55;
   }
 }
 .word-card {

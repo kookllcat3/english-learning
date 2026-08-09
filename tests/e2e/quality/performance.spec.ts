@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const MAX_FIRST_CONTENTFUL_PAINT_MS = 2_000;
 const MAX_LARGE_MATERIAL_OPEN_MS = 2_000;
+const MAX_LAST_PARAGRAPH_PROGRESS_MS = 500;
 const MAX_DIALOG_OPEN_MS = 120;
 const MAX_PROMPT_TAB_SWITCH_MS = 150;
 
@@ -113,4 +114,42 @@ test("keeps dialogs and prompt tabs responsive", async ({ page }, testInfo) => {
     { type: "prompt-tab-switch", description: `${promptSwitchDuration} ms` },
     { type: "data-dialog", description: `${dataDialogDuration} ms` },
   );
+});
+
+test("marks a long material through its last paragraph within the progress baseline", async ({
+  page,
+}, testInfo) => {
+  const words = Array.from({ length: 350 }, (_, index) => `term${String.fromCharCode(
+    97 + Math.floor(index / 26),
+    97 + (index % 26),
+  )}`);
+  const content = Array.from({ length: 70 }, (_, paragraphIndex) => {
+    const paragraphWords = words.slice(paragraphIndex * 5, paragraphIndex * 5 + 5);
+    return `${paragraphWords.join(" ")}.\n這是第 ${paragraphIndex + 1} 段翻譯。`;
+  }).join("\n\n");
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.getByLabel("教材名稱（選填）").fill("閱讀進度效能教材");
+  await page.getByLabel("直接貼上文字").fill(content);
+  await page.getByRole("button", { name: "儲存教材" }).click();
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await expect(page.locator(".reading-word")).toHaveCount(350);
+
+  const lastMarker = page.getByRole("button", { name: "標記目前閱讀段落" }).last();
+  await lastMarker.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    (window as unknown as { progressStartedAt: number }).progressStartedAt = performance.now();
+  });
+  await lastMarker.click();
+  await expect(lastMarker).toHaveAttribute("aria-pressed", "true");
+  const progressDuration = await page.evaluate(() => (
+    performance.now() - (window as unknown as { progressStartedAt: number }).progressStartedAt
+  ));
+
+  expect(progressDuration).toBeLessThan(MAX_LAST_PARAGRAPH_PROGRESS_MS);
+  testInfo.annotations.push({
+    type: "last-paragraph-progress",
+    description: `${Math.round(progressDuration)} ms for 350 unique words`,
+  });
 });

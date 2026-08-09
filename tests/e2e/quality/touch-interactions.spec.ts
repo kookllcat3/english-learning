@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { storedCurrentMaterialKnownWords } from "../application/test-helpers";
 
 async function createTouchMaterial(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
@@ -21,6 +22,18 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
   await expect(toggle).toHaveCSS("pointer-events", "auto");
   await toggle.tap();
   await expect(translationText).toHaveClass(/translation-mask/);
+});
+
+test("marks paragraph words through the reading position control with touch", async ({ page }) => {
+  await createTouchMaterial(page);
+
+  const marker = page.getByRole("button", { name: "標記目前閱讀段落" });
+  await marker.tap();
+
+  await expect(marker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["an", "original", "sentence"]);
+  await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
 });
 
 test("prevents background touch scrolling while the word card is open", async ({ page }) => {

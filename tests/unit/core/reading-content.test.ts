@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyReadingContent,
+  readingProgressIndexForBlocks,
   sourceWordsForBlocks,
+  wordsThroughReadingParagraph,
 } from "../../../src/core/learning/reading-content.js";
 import type { ContentBlock } from "../../../src/core/models/models.js";
 
@@ -135,5 +137,36 @@ describe("reading content classification", () => {
 
     expect(sections[0]).toMatchObject({ role: "source", words: ["birds", "can", "fly"] });
     expect(sections[1]).toMatchObject({ role: "heading", words: [] });
+  });
+
+  it("indexes unique source words by first occurrence and paragraph boundary", () => {
+    const blocks: ContentBlock[] = [
+      { type: "text", order: 0, text: "Course Overview" },
+      { type: "text", order: 1, text: "EN The bear runs.\n熊跑了。" },
+      { type: "text", order: 2, text: "The bear sleeps.\n熊睡著了。" },
+      { type: "text", order: 3, text: "Bear runs.\n熊跑了。" },
+      { type: "text", order: 4, text: "WORD POWER: forest 森林" },
+    ];
+
+    const index = readingProgressIndexForBlocks(blocks);
+
+    expect(index.orderedUniqueWords).toEqual(["the", "bear", "runs", "sleeps"]);
+    expect([...index.paragraphEndWordIndex.entries()]).toEqual([
+      ["1-1-0", 3],
+      ["2-2-0", 4],
+      ["3-3-0", 4],
+    ]);
+    expect(wordsThroughReadingParagraph(index, "1-1-0")).toEqual(["the", "bear", "runs"]);
+    expect(wordsThroughReadingParagraph(index, "3-3-0"))
+      .toEqual(["the", "bear", "runs", "sleeps"]);
+  });
+
+  it("rejects a paragraph key outside the source progress index", () => {
+    const index = readingProgressIndexForBlocks([
+      { type: "text", order: 0, text: "Birds can fly." },
+    ]);
+
+    expect(() => wordsThroughReadingParagraph(index, "missing"))
+      .toThrow("指定的閱讀段落不存在。");
   });
 });

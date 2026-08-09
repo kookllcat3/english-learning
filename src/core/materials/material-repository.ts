@@ -7,10 +7,10 @@ import {
   readOne,
   replaceMaterialBundle,
   writeLearningProgress,
+  writeMaterialLearningProgress,
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
-import { materialWithLearningProgress } from "../learning/learning-records.js";
 import { isContextualOccurrenceValid } from "../learning/contextual-word-note.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
 import { sourceWordsForBlocks } from "../learning/reading-content.js";
@@ -23,6 +23,10 @@ import {
 } from "../learning/material-migrations.js";
 import { normalizeWord } from "../text/text.js";
 import { materialReplacementState } from "./material-replacement.js";
+import {
+  materialLearningProgressState,
+  type ReadingParagraphUpdate,
+} from "./material-learning-progress.js";
 import type {
   BackupMaterial,
   CreateMaterialInput,
@@ -165,28 +169,40 @@ export async function replaceMaterial(
   return state.material;
 }
 
-export async function setMaterialReadingParagraph(
+export async function addKnownWordsAndUpdateReadingPosition(
   id: string,
-  readingParagraphKey: string | null,
+  words: string[],
+  readingParagraphUpdate: ReadingParagraphUpdate,
 ): Promise<MaterialRecord> {
   await ensureMaterialKnowledge();
-  const [material, storedContent] = await Promise.all([
+  const [material, terms, storedContent] = await Promise.all([
     readOne(STORES.materials, id),
+    readOne(STORES.materialTerms, id),
     readOne(STORES.materialContents, id),
   ]);
-  if (!material || !storedContent) throw new Error("找不到指定的教材。");
-  const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
-  if (
-    readingParagraphKey !== null
-    && normalizedReadingParagraphKey(readingParagraphKey, contentBlocks) !== readingParagraphKey
-  ) {
-    throw new Error("指定的閱讀段落不存在。");
+  if (!material || !terms || !storedContent) throw new Error("找不到指定的教材。");
+  if (readingParagraphUpdate.mode === "set") {
+    const contentBlocks = normalizedBlocks(storedContent.content, storedContent.contentBlocks);
+    if (
+      normalizedReadingParagraphKey(readingParagraphUpdate.paragraphKey, contentBlocks)
+      !== readingParagraphUpdate.paragraphKey
+    ) {
+      throw new Error("指定的閱讀段落不存在。");
+    }
   }
-  return writeOne(STORES.materials, {
-    ...material,
-    readingParagraphKey,
-    updatedAt: new Date().toISOString(),
-  });
+
+  const normalizedWords = [...new Set(words.map(normalizeWord).filter(Boolean))];
+  const currentVocabulary = await readMany(STORES.vocabulary, normalizedWords);
+  const state = materialLearningProgressState(
+    material,
+    terms.words,
+    normalizedWords,
+    currentVocabulary,
+    readingParagraphUpdate,
+    new Date().toISOString(),
+  );
+  await writeMaterialLearningProgress(state.material, state.vocabulary, material.updatedAt);
+  return state.material;
 }
 
 export async function removeMaterial(id: string): Promise<void> {
@@ -240,44 +256,4 @@ export async function getVocabularyProgress(
       materialCount: materialCountByWord.get(word) ?? 0,
     },
   ]));
-}
-
-export async function setWordsKnown(
-  materialId: string,
-  words: string[],
-  learned: boolean,
-): Promise<void> {
-  await ensureMaterialKnowledge();
-  const [material, terms, allMaterials] = await Promise.all([
-    readOne(STORES.materials, materialId),
-    readOne(STORES.materialTerms, materialId),
-    readAll(STORES.materials),
-  ]);
-  if (!material || !terms) throw new Error("找不到這份教材。");
-  const materialWordSet = new Set(terms.words);
-  const normalizedWords = [...new Set(words.map(normalizeWord).filter((word) =>
-    word && materialWordSet.has(word)))];
-  const currentRecords = await readMany(STORES.vocabulary, normalizedWords);
-  const knownWords = new Set(material.knownWords);
-  normalizedWords.forEach((word) => {
-    if (learned) knownWords.add(word);
-    else knownWords.delete(word);
-  });
-  const orderedKnownWords = terms.words.filter((word) => knownWords.has(word));
-  const otherMaterials = allMaterials.filter((item) => item.id !== materialId);
-  const timestamp = new Date().toISOString();
-  const updatedMaterial = materialWithLearningProgress(material, orderedKnownWords, timestamp);
-  const vocabulary = normalizedWords.map((word, index) => {
-    const record = currentRecords[index] ?? { word, learned: false };
-    const learnedAnywhere = knownWords.has(word)
-      || otherMaterials.some((item) => item.knownWords.includes(word));
-    return {
-      ...currentVocabularyRecord(record),
-      word,
-      learned: learnedAnywhere,
-      learnedAt: learnedAnywhere ? record.learnedAt ?? timestamp : null,
-      updatedAt: timestamp,
-    };
-  });
-  await writeLearningProgress([updatedMaterial], vocabulary);
 }

@@ -79,11 +79,17 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
   const secondMarker = paragraphs.nth(1).getByRole("button", { name: "標記目前閱讀段落" });
   await firstMarker.click();
   await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["a", "bear", "runs"]);
   await secondMarker.click();
   await expect(firstMarker).toHaveAttribute("aria-pressed", "false");
   await expect(secondMarker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
   await secondMarker.click();
   await expect(secondMarker).toHaveAttribute("aria-pressed", "false");
+  await expect(storedCurrentMaterialKnownWords(page))
+    .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
 
   await firstMarker.click();
   await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
@@ -121,8 +127,18 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
 });
 
 test("marks every word in the material as known from the footer action", async ({ page }) => {
-  await createMaterial(page);
+  await createMaterial(
+    page,
+    materialTitle,
+    "A bear runs.\n熊跑了。\n\nThe fox sleeps.\n狐狸睡著了。",
+  );
   await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const firstMarker = page.getByRole("button", { name: "標記目前閱讀段落" }).first();
+  await firstMarker.click();
+  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["a", "bear", "runs"]);
 
   await expect(page.getByText("完成這篇教材", { exact: true })).toHaveCount(0);
   await expect(page.getByText("將這篇教材的全部英文單字標記為認識，並更新學習進度。", { exact: true })).toHaveCount(0);
@@ -135,12 +151,116 @@ test("marks every word in the material as known from the footer action", async (
   await expect(completedButton).toHaveCSS("cursor", "not-allowed");
   await expect(page.getByText("已將本篇全部單字標記為認識。", { exact: true })).toHaveCount(0);
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
-    .toEqual(["a", "bear", "runs", "sleeps", "the"]);
+    .toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
+  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
 
   await page.reload();
   await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
+    .toHaveAttribute("aria-pressed", "true");
   await expect(storedCurrentMaterialKnownWords(page))
-    .resolves.toEqual(["a", "bear", "runs", "sleeps", "the"]);
+    .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
+});
+
+test("rolls back reading position and words when the progress transaction fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function put(value, key) {
+      if (
+        sessionStorage.getItem("simulateProgressFailure") === "true"
+        && this.name === "vocabulary"
+      ) {
+        throw new DOMException("Simulated progress failure", "QuotaExceededError");
+      }
+      return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+    };
+  });
+  await createMaterial(page, materialTitle, "A bear runs.\n熊跑了。\n\nThe fox sleeps.\n狐狸睡著了。");
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.waitForURL(/#\/materials\/[^/]+$/);
+  await page.evaluate(() => sessionStorage.setItem("simulateProgressFailure", "true"));
+
+  const marker = page.getByRole("button", { name: "標記目前閱讀段落" }).first();
+  await marker.click();
+
+  await expect(page.getByRole("alert")).toContainText("學習進度更新失敗");
+  await expect(marker).toHaveAttribute("aria-pressed", "false");
+  await expect(storedCurrentMaterialKnownWords(page)).resolves.toEqual([]);
+  const storedReadingParagraphKey = await page.evaluate(async () => {
+    const materialId = location.hash.match(/^#\/materials\/([^/?]+)/)?.[1];
+    if (!materialId) throw new Error("Material route was not active.");
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const request = database.transaction("materials", "readonly")
+      .objectStore("materials").get(materialId);
+    const record = await new Promise<{ readingParagraphKey?: string | null }>((resolve, reject) => {
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    database.close();
+    return record.readingParagraphKey ?? null;
+  });
+  expect(storedReadingParagraphKey).toBeNull();
+});
+
+test("keeps paragraph and footer progress actions mutually exclusive", async ({ page }) => {
+  await createMaterial(page, materialTitle, "A bear runs.\n熊跑了。\n\nThe fox sleeps.\n狐狸睡著了。");
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.waitForURL(/#\/materials\/[^/]+$/);
+  await page.evaluate(async () => {
+    const materialId = location.hash.match(/^#\/materials\/([^/?]+)/)?.[1];
+    if (!materialId) throw new Error("Material route was not active.");
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("english-learning");
+      request.addEventListener("success", () => resolve(request.result), { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+    const transaction = database.transaction(["materials", "vocabulary"], "readwrite");
+    const store = transaction.objectStore("materials");
+    const releaseAt = performance.now() + 250;
+    const keepAlive = (): void => {
+      const request = store.get(materialId);
+      request.addEventListener("success", () => {
+        if (performance.now() < releaseAt) keepAlive();
+      }, { once: true });
+    };
+    keepAlive();
+    transaction.addEventListener("complete", () => database.close(), { once: true });
+  });
+
+  const markers = page.getByRole("button", { name: "標記目前閱讀段落" });
+  const firstMarker = markers.first();
+  const completionButton = page.getByRole("button", { name: "完成本次學習" });
+  await firstMarker.click();
+
+  await expect(firstMarker).toHaveAttribute("aria-busy", "true");
+  await expect(markers.nth(1)).toBeDisabled();
+  await expect(completionButton).toBeDisabled();
+  await completionButton.click({ force: true });
+  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["a", "bear", "runs"]);
+});
+
+test("synchronizes reading position and known words across tabs", async ({ context, page }) => {
+  await createMaterial(page, materialTitle, "A bear runs.\n熊跑了。\n\nThe fox sleeps.\n狐狸睡著了。");
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.waitForURL(/#\/materials\/[^/]+$/);
+  const secondPage = await context.newPage();
+  await secondPage.goto(page.url());
+  const firstPageMarker = page.getByRole("button", { name: "標記目前閱讀段落" }).first();
+  const secondPageMarker = secondPage.getByRole("button", { name: "標記目前閱讀段落" }).first();
+  await expect(secondPageMarker).toHaveAttribute("aria-pressed", "false");
+
+  await firstPageMarker.click();
+
+  await expect(firstPageMarker).toHaveAttribute("aria-pressed", "true");
+  await expect(secondPageMarker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(secondPage))
+    .toEqual(["a", "bear", "runs"]);
 });
 
 test("classifies structured reading content and repairs polluted learning data", async ({ page }) => {

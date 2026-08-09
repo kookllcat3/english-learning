@@ -33,6 +33,11 @@ export interface ReadingWordOccurrence {
   wordKey: string;
 }
 
+export interface ReadingProgressIndex {
+  orderedUniqueWords: string[];
+  paragraphEndWordIndex: ReadonlyMap<string, number>;
+}
+
 interface ParagraphCandidate {
   key: string;
   lines: Array<{ key: string; text: string }>;
@@ -261,4 +266,33 @@ export function readingWordOccurrencesForBlocks(blocks: ContentBlock[]): Reading
       ? section.lines.flatMap((line) => lineWordOccurrences(section.key, line))
       : []
   ));
+}
+
+export function readingProgressIndexForBlocks(blocks: ContentBlock[]): ReadingProgressIndex {
+  const orderedUniqueWords: string[] = [];
+  const paragraphEndWordIndex = new Map<string, number>();
+  const indexedWords = new Set<string>();
+
+  classifyReadingContent(blocks).forEach((section) => {
+    if (section.type !== "text" || section.role !== "source") return;
+    section.lines.forEach((line) => {
+      lineWordOccurrences(section.key, line).forEach(({ word }) => {
+        if (indexedWords.has(word)) return;
+        indexedWords.add(word);
+        orderedUniqueWords.push(word);
+      });
+    });
+    paragraphEndWordIndex.set(section.key, orderedUniqueWords.length);
+  });
+
+  return { orderedUniqueWords, paragraphEndWordIndex };
+}
+
+export function wordsThroughReadingParagraph(
+  index: ReadingProgressIndex,
+  paragraphKey: string,
+): string[] {
+  const endWordIndex = index.paragraphEndWordIndex.get(paragraphKey);
+  if (endWordIndex === undefined) throw new Error("指定的閱讀段落不存在。");
+  return index.orderedUniqueWords.slice(0, endWordIndex);
 }

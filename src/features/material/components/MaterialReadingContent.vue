@@ -58,6 +58,8 @@ const props = defineProps<{
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
   familiarityLevels: FamiliarityLevel[];
+  readingProgressBusy: boolean;
+  savingReadingParagraphKey: string | null;
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
@@ -304,6 +306,8 @@ function handleWordKeydown(event: KeyboardEvent): void {
             :has-translation="paragraph.hasTranslation"
             :is-current-reading-position="currentParagraphKey === paragraph.key"
             :is-translation-hidden="isTranslationHidden(paragraph.key)"
+            :reading-position-disabled="readingProgressBusy"
+            :reading-position-loading="savingReadingParagraphKey === paragraph.key"
             @copy="copyParagraph(paragraph.key, paragraph.sourceText)"
             @toggle-reading-position="emit('toggleReadingParagraph', paragraph.key)"
             @toggle-translation="toggleTranslation(paragraph.key)"

@@ -229,7 +229,7 @@ Playwright 會以桌面 Chromium、390 px 窄螢幕與觸控裝置執行核心�
 離線資料寫入、舊版資料庫升級、螢光標記、備份往返、axe WCAG 2.0/2.1 A 與 AA
 自動檢查基線，以及舊網址轉址。自動檢查不能取代完整的人工無障礙測試。
 application E2E 依核心流程、單字卡、彈窗、閱讀進度、AI 助手、備份、教材庫與
-韌性測試拆檔；runner 最多使用 4 個 workers，避免多個瀏覽器互搶本機資源。
+韌性測試拆檔；本機 runner 最多使用 4 個 workers，CI 固定使用單一 worker，避免效能門檻受到共享 runner 的平行負載干擾。
 一般與 production E2E runner 會直接管理各自的 Vite server，並在測試結束時關閉，
 避免 Windows 留下未結束的 npm 子程序。
 本機 Playwright 報告與測試結果統一寫入被 Git 忽略的 `.artifacts/playwright/`。

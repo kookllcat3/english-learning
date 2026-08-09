@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const props = defineProps<{
   annotationBusy: boolean;
-  annotationMode: "erase" | "highlight" | null;
+  annotationMode: "highlight" | null;
   copyStatus: "error" | "success" | null;
   hasTranslation: boolean;
   isCurrentReadingPosition: boolean;
@@ -12,7 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   copy: [];
-  selectAnnotationTool: [mode: "erase" | "highlight" | null];
+  selectAnnotationTool: [mode: "highlight" | null];
   toggleReadingPosition: [];
   toggleTranslation: [];
 }>();

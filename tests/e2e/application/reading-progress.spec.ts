@@ -4,6 +4,7 @@ import {
   createMaterial,
   materialTitle,
   storedCurrentMaterialKnownWords,
+  storedCurrentMaterialReadingParagraphKey,
 } from "./test-helpers";
 
 test("copies paragraphs and keeps one reading position", async ({ page }) => {
@@ -38,16 +39,16 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
   expect(await firstToolbar.getByRole("button").evaluateAll((buttons) =>
     buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
     "標記目前閱讀段落",
-    "開啟螢光筆工具",
     "隱藏這段中文翻譯",
     "複製整段英文",
+    "開啟螢光筆工具",
   ]);
   expect(await paragraphs.nth(2).getByRole("group", { name: "段落閱讀工具" })
     .getByRole("button").evaluateAll((buttons) =>
       buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
     "標記目前閱讀段落",
-    "開啟螢光筆工具",
     "複製整段英文",
+    "開啟螢光筆工具",
   ]);
 
   const firstTranslationToggle = firstToolbar.locator('button[aria-label*="這段中文翻譯"]');
@@ -95,26 +96,9 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
 
   await firstMarker.click();
   await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
-  await page.waitForTimeout(100);
   const firstParagraphKey = await paragraphs.nth(0).getAttribute("data-paragraph-key");
-  const storedParagraphKey = await page.evaluate(async () => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("english-learning");
-      request.addEventListener("success", () => resolve(request.result), { once: true });
-      request.addEventListener("error", () => reject(request.error), { once: true });
-    });
-    const records = await new Promise<Array<{ readingParagraphKey?: string | null }>>(
-      (resolve, reject) => {
-        const request = database.transaction("materials", "readonly")
-          .objectStore("materials").getAll();
-        request.addEventListener("success", () => resolve(request.result), { once: true });
-        request.addEventListener("error", () => reject(request.error), { once: true });
-      },
-    );
-    database.close();
-    return records[0]?.readingParagraphKey ?? null;
-  });
-  expect(storedParagraphKey).toBe(firstParagraphKey);
+  await expect.poll(() => storedCurrentMaterialReadingParagraphKey(page))
+    .toBe(firstParagraphKey);
   await page.reload();
   await expect(
     page.locator("[data-reading-paragraph]").nth(0)

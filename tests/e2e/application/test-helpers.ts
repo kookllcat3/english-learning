@@ -20,34 +20,39 @@ export interface StoredHighlight {
   paragraphKey: string;
 }
 
-export async function storedHighlights(page: Page): Promise<StoredHighlight[]> {
-  return page.evaluate(async () => new Promise<StoredHighlight[]>((resolve, reject) => {
+interface StoredAnnotationHighlight {
+  id: string;
+  kind: string;
+  target: { occurrenceKeys: string[]; paragraphKey: string };
+}
+
+interface StoredLegacyContextualNote {
+  body: { value: string };
+  kind: string;
+  target: { occurrenceKey: string };
+}
+
+async function storedRecords<T>(page: Page, storeName: string): Promise<T[]> {
+  return page.evaluate(async (name) => new Promise<T[]>((resolve, reject) => {
     const request = indexedDB.open("english-learning");
     request.addEventListener("success", () => {
       const database = request.result;
-      const records = database.transaction("materialAnnotations", "readonly")
-        .objectStore("materialAnnotations")
-        .getAll();
+      const records = database.transaction(name, "readonly").objectStore(name).getAll();
       records.addEventListener("success", () => {
-        resolve(records.result
-          .filter((record) => record.kind === "highlight")
-          .map((record) => ({
-            id: record.id,
-            occurrenceKeys: record.target.occurrenceKeys,
-            paragraphKey: record.target.paragraphKey,
-          })));
+        resolve(records.result);
         database.close();
       }, { once: true });
-      records.addEventListener("error", () => reject(records.error), { once: true });
+      records.addEventListener("error", () => {
+        database.close();
+        reject(records.error);
+      }, { once: true });
     }, { once: true });
     request.addEventListener("error", () => reject(request.error), { once: true });
-  }));
+  }), storeName);
 }
 
-export async function storedCurrentMaterialKnownWords(
-  page: Page,
-): Promise<string[]> {
-  return page.evaluate(async () => new Promise<string[]>((resolve, reject) => {
+async function storedCurrentMaterial<T>(page: Page): Promise<T> {
+  return page.evaluate(async () => new Promise<T>((resolve, reject) => {
     const materialId = location.hash.match(/^#\/materials\/([^/?]+)/)?.[1];
     if (!materialId) {
       reject(new Error("Material route was not active."));
@@ -60,63 +65,84 @@ export async function storedCurrentMaterialKnownWords(
         .objectStore("materials")
         .get(materialId);
       materialRequest.addEventListener("success", () => {
-        const material = materialRequest.result;
-        if (!material) {
-          database.close();
+        database.close();
+        if (materialRequest.result === undefined) {
           reject(new Error("Stored material was not found."));
           return;
         }
-        resolve(material.knownWords ?? []);
-        database.close();
+        resolve(materialRequest.result);
       }, { once: true });
-      materialRequest.addEventListener("error", () => reject(materialRequest.error), { once: true });
+      materialRequest.addEventListener("error", () => {
+        database.close();
+        reject(materialRequest.error);
+      }, { once: true });
     }, { once: true });
     request.addEventListener("error", () => reject(request.error), { once: true });
   }));
+}
+
+export async function storedSettingValue(
+  page: Page,
+  key: string,
+): Promise<unknown> {
+  return page.evaluate(async (settingKey) => new Promise<unknown>((resolve, reject) => {
+    const request = indexedDB.open("english-learning");
+    request.addEventListener("success", () => {
+      const database = request.result;
+      const settingRequest = database.transaction("settings", "readonly")
+        .objectStore("settings")
+        .get(settingKey);
+      settingRequest.addEventListener("success", () => {
+        resolve(settingRequest.result?.value);
+        database.close();
+      }, { once: true });
+      settingRequest.addEventListener("error", () => {
+        database.close();
+        reject(settingRequest.error);
+      }, { once: true });
+    }, { once: true });
+    request.addEventListener("error", () => reject(request.error), { once: true });
+  }), key);
+}
+
+export async function storedHighlights(page: Page): Promise<StoredHighlight[]> {
+  const records = await storedRecords<StoredAnnotationHighlight>(page, "materialAnnotations");
+  return records
+    .filter((record) => record.kind === "highlight")
+    .map((record) => ({
+      id: record.id,
+      occurrenceKeys: record.target.occurrenceKeys,
+      paragraphKey: record.target.paragraphKey,
+    }));
+}
+
+export async function storedCurrentMaterialKnownWords(
+  page: Page,
+): Promise<string[]> {
+  const material = await storedCurrentMaterial<{ knownWords?: string[] }>(page);
+  return material.knownWords ?? [];
+}
+
+export async function storedCurrentMaterialReadingParagraphKey(
+  page: Page,
+): Promise<string | null> {
+  const material = await storedCurrentMaterial<{ readingParagraphKey?: string | null }>(page);
+  return material.readingParagraphKey ?? null;
 }
 
 export async function storedWordNotes(page: Page): Promise<StoredWordNote[]> {
-  return page.evaluate(async () => new Promise<StoredWordNote[]>((resolve, reject) => {
-    const request = indexedDB.open("english-learning");
-    request.addEventListener("success", () => {
-      const database = request.result;
-      const records = database.transaction("wordNotes", "readonly")
-        .objectStore("wordNotes")
-        .getAll();
-      records.addEventListener("success", () => {
-        resolve(records.result.map((record) => ({
-          markdown: record.markdown,
-          word: record.word,
-        })));
-        database.close();
-      }, { once: true });
-      records.addEventListener("error", () => reject(records.error), { once: true });
-    }, { once: true });
-    request.addEventListener("error", () => reject(request.error), { once: true });
-  }));
+  const records = await storedRecords<StoredWordNote>(page, "wordNotes");
+  return records.map(({ markdown, word }) => ({ markdown, word }));
 }
 
 export async function storedContextualNotes(page: Page): Promise<StoredContextualNote[]> {
-  return page.evaluate(async () => new Promise<StoredContextualNote[]>((resolve, reject) => {
-    const request = indexedDB.open("english-learning");
-    request.addEventListener("success", () => {
-      const database = request.result;
-      const records = database.transaction("materialAnnotations", "readonly")
-        .objectStore("materialAnnotations")
-        .getAll();
-      records.addEventListener("success", () => {
-        resolve(records.result
-          .filter((record) => record.kind === "legacy-contextual-word-note")
-          .map((record) => ({
-            markdown: record.body.value,
-            occurrenceKey: record.target.occurrenceKey,
-          })));
-        database.close();
-      }, { once: true });
-      records.addEventListener("error", () => reject(records.error), { once: true });
-    }, { once: true });
-    request.addEventListener("error", () => reject(request.error), { once: true });
-  }));
+  const records = await storedRecords<StoredLegacyContextualNote>(page, "materialAnnotations");
+  return records
+    .filter((record) => record.kind === "legacy-contextual-word-note")
+    .map((record) => ({
+      markdown: record.body.value,
+      occurrenceKey: record.target.occurrenceKey,
+    }));
 }
 
 export async function seedKnownWordsForCurrentMaterial(

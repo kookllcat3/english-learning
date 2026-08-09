@@ -69,6 +69,7 @@ let pendingUpdateMaterial: DashboardMaterial | null = null;
 let updateTrigger: HTMLButtonElement | null = null;
 let searchTimer: number | undefined;
 let scrollPositionBeforeSorting: number | undefined;
+let dashboardLoadSequence = 0;
 
 const hasActiveFilter = computed(() => Boolean(pagination.value.query));
 
@@ -180,20 +181,26 @@ function preventBusyNavigation(event: MouseEvent, materialId: string): void {
   if (materialActionBusy(materialId)) event.preventDefault();
 }
 
-async function loadDashboard(page = pagination.value.currentPage): Promise<void> {
+async function loadDashboard(page = pagination.value.currentPage): Promise<boolean> {
+  const sequence = ++dashboardLoadSequence;
+  const requestedQuery = query.value;
+  const requestedSort = sort.value;
   loading.value = true;
   errorMessage.value = "";
   try {
-    const dashboard = await getDashboard(page, query.value, sort.value);
+    const dashboard = await getDashboard(page, requestedQuery, requestedSort);
+    if (sequence !== dashboardLoadSequence) return false;
     materials.value = dashboard.materials;
     pagination.value = dashboard.pagination;
     dashboardStore.update({
       statistics: dashboard.statistics,
     });
+    return true;
   } catch (error) {
-    errorMessage.value = getErrorMessage(error);
+    if (sequence === dashboardLoadSequence) errorMessage.value = getErrorMessage(error);
+    return false;
   } finally {
-    loading.value = false;
+    if (sequence === dashboardLoadSequence) loading.value = false;
   }
 }
 
@@ -204,7 +211,8 @@ function rememberScrollPositionBeforeSorting(): void {
 async function sortMaterials(): Promise<void> {
   const scrollPosition = scrollPositionBeforeSorting ?? window.scrollY;
   scrollPositionBeforeSorting = undefined;
-  await loadDashboard(1);
+  const dashboardUpdated = await loadDashboard(1);
+  if (!dashboardUpdated) return;
   await nextTick();
   await new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());

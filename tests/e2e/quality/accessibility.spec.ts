@@ -112,6 +112,7 @@ test("primary pages and data dialog remain responsive at supported breakpoints",
     { width: 768, height: 1024 },
     { width: 1024, height: 768 },
     { width: 1440, height: 900 },
+    { width: 844, height: 390 },
   ];
 
   for (const viewport of viewports) {

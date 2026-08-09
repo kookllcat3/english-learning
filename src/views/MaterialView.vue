@@ -52,7 +52,7 @@ const loading = ref(true);
 const errorMessage = ref("");
 const actionError = ref("");
 const annotationBusy = ref(false);
-const annotationMode = ref<"erase" | "highlight" | null>(null);
+const annotationMode = ref<"highlight" | null>(null);
 const annotationParagraphKey = ref<string | null>(null);
 const activeHighlightId = ref<string | null>(null);
 const highlights = ref<MaterialHighlightAnnotationRecord[]>([]);
@@ -252,7 +252,7 @@ async function markAllMaterialWordsKnown(): Promise<void> {
 
 function selectAnnotationTool(
   paragraphKey: string,
-  mode: "erase" | "highlight" | null,
+  mode: "highlight" | null,
 ): void {
   if (mode === null) {
     exitAnnotationMode();
@@ -260,7 +260,7 @@ function selectAnnotationTool(
   }
   wordCard.value?.close();
   pendingAnnotationActions.splice(0);
-  annotationMode.value = "highlight";
+  annotationMode.value = mode;
   annotationParagraphKey.value = paragraphKey;
   activeHighlightId.value = null;
 }

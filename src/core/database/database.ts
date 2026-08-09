@@ -437,7 +437,17 @@ export async function replaceMaterialBundle({
   }
 }
 
-export async function deleteMaterialBundle(materialId: string): Promise<void> {
+export type DeletedMaterialVocabularyReconciler = (
+  deletedMaterial: MaterialRecord,
+  remainingMaterials: MaterialRecord[],
+  vocabulary: VocabularyRecord[],
+  timestamp: string,
+) => VocabularyRecord[];
+
+export async function deleteMaterialBundle(
+  materialId: string,
+  reconcileVocabulary: DeletedMaterialVocabularyReconciler,
+): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(
     [
@@ -446,12 +456,49 @@ export async function deleteMaterialBundle(materialId: string): Promise<void> {
       STORES.materialContents,
       STORES.materialTerms,
       STORES.materialAnnotations,
+      STORES.vocabulary,
     ],
     "readwrite",
   );
-  transaction.objectStore(STORES.materials).delete(materialId);
-  transaction.objectStore(STORES.materialContents).delete(materialId);
-  transaction.objectStore(STORES.materialTerms).delete(materialId);
+  const materialStore = transaction.objectStore(STORES.materials);
+  const vocabularyStore = transaction.objectStore(STORES.vocabulary);
+  const materialRequest = materialStore.get(materialId);
+  const materialsRequest = materialStore.getAll();
+  const vocabularyRequest = vocabularyStore.getAll();
+  let materials: MaterialRecord[] | undefined;
+  let vocabulary: VocabularyRecord[] | undefined;
+
+  const applyDeletion = (): void => {
+    if (materials === undefined || vocabulary === undefined || materialRequest.readyState !== "done") {
+      return;
+    }
+    try {
+      const deletedMaterial = materialRequest.result as MaterialRecord | undefined;
+      materialStore.delete(materialId);
+      transaction.objectStore(STORES.materialContents).delete(materialId);
+      transaction.objectStore(STORES.materialTerms).delete(materialId);
+      if (deletedMaterial) {
+        const remainingMaterials = materials.filter((material) => material.id !== materialId);
+        reconcileVocabulary(
+          deletedMaterial,
+          remainingMaterials,
+          vocabulary,
+          new Date().toISOString(),
+        ).forEach((record) => vocabularyStore.put(record));
+      }
+    } catch {
+      transaction.abort();
+    }
+  };
+  materialRequest.addEventListener("success", applyDeletion, { once: true });
+  materialsRequest.addEventListener("success", () => {
+    materials = materialsRequest.result;
+    applyDeletion();
+  }, { once: true });
+  vocabularyRequest.addEventListener("success", () => {
+    vocabulary = vocabularyRequest.result;
+    applyDeletion();
+  }, { once: true });
   const assetStore = transaction.objectStore(STORES.materialAssets);
   const assetRequest = assetStore.index("materialId").getAllKeys(materialId);
   assetRequest.addEventListener("success", () => {
@@ -462,7 +509,7 @@ export async function deleteMaterialBundle(materialId: string): Promise<void> {
   annotationRequest.addEventListener("success", () => {
     annotationRequest.result.forEach((key) => annotationStore.delete(key));
   }, { once: true });
-  await transactionResult(transaction);
+  await transactionResult(transaction, 0, "教材移除失敗，原有資料未變更。");
 }
 
 export async function writeLearningProgress(

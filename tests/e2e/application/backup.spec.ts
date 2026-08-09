@@ -5,6 +5,7 @@ import {
   materialTitle,
   storedContextualNotes,
   storedHighlights,
+  storedSettingValue,
   storedWordNotes,
   validWebpBase64,
 } from "./test-helpers";
@@ -38,7 +39,8 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   expect(savedNote).toBeDefined();
   await page.getByRole("button", { name: "開啟 AI 輔助學習" }).click();
   await page.getByLabel("可編輯提示詞").fill("備份中的自訂 AI 提示詞");
-  await page.waitForTimeout(500);
+  await expect.poll(() => storedSettingValue(page, "aiPrompt"))
+    .toBe("備份中的自訂 AI 提示詞");
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
 

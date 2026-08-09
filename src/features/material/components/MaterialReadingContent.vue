@@ -53,7 +53,7 @@ interface RenderedImageBlock {
 const props = defineProps<{
   activeWord: string;
   annotationBusy: boolean;
-  annotationMode: "erase" | "highlight" | null;
+  annotationMode: "highlight" | null;
   annotationParagraphKey: string | null;
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
@@ -69,7 +69,7 @@ const emit = defineEmits<{
   annotateWord: [paragraphKey: string, occurrenceKey: string, mode: "erase" | "highlight"];
   deactivate: [];
   lookup: [word: string, rect: DOMRect, key: string];
-  selectAnnotationTool: [paragraphKey: string, mode: "erase" | "highlight" | null];
+  selectAnnotationTool: [paragraphKey: string, mode: "highlight" | null];
   toggleReadingParagraph: [paragraphKey: string];
 }>();
 interface AnnotationPointerState {
@@ -194,7 +194,7 @@ const highlightIdByOccurrence = computed(() => new Map(
   ))),
 ));
 
-function annotationModeFor(paragraphKey: string): "erase" | "highlight" | null {
+function annotationModeFor(paragraphKey: string): "highlight" | null {
   return props.annotationParagraphKey === paragraphKey ? props.annotationMode : null;
 }
 

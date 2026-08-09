@@ -6,7 +6,6 @@ import {
   readMany,
   readOne,
   replaceMaterialBundle,
-  writeLearningProgress,
   writeMaterialLearningProgress,
   writeMaterialBundles,
   writeOne,
@@ -204,26 +203,20 @@ export async function addKnownWordsAndUpdateReadingPosition(
 
 export async function removeMaterial(id: string): Promise<void> {
   await ensureMaterialKnowledge();
-  const material = await readOne(STORES.materials, id);
-  await deleteMaterialBundle(id);
-  if (!material?.knownWords?.length) return;
-  const [remainingMaterials, currentRecords] = await Promise.all([
-    readAll(STORES.materials),
-    readMany(STORES.vocabulary, material.knownWords),
-  ]);
-  const timestamp = new Date().toISOString();
-  const vocabulary = material.knownWords.map((word, index) => {
-    const record = currentRecords[index] ?? { word, learned: false };
-    const learned = remainingMaterials.some((item) => item.knownWords?.includes(word));
-    return {
-      ...currentVocabularyRecord(record),
-      word,
-      learned,
-      learnedAt: learned ? record.learnedAt ?? timestamp : null,
-      updatedAt: timestamp,
-    };
+  await deleteMaterialBundle(id, (material, remainingMaterials, vocabulary, timestamp) => {
+    const vocabularyByWord = new Map(vocabulary.map((record) => [record.word, record]));
+    return material.knownWords.map((word) => {
+      const record = vocabularyByWord.get(word) ?? { word, learned: false };
+      const learned = remainingMaterials.some((item) => item.knownWords?.includes(word));
+      return {
+        ...currentVocabularyRecord(record),
+        word,
+        learned,
+        learnedAt: learned ? record.learnedAt ?? timestamp : null,
+        updatedAt: timestamp,
+      };
+    });
   });
-  await writeLearningProgress([], vocabulary);
 }
 
 export async function getVocabularyProgress(

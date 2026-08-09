@@ -54,7 +54,10 @@ test("positions a restored note card before its note has loaded", async ({ page 
   await word.hover();
   await expect(editor).toHaveAttribute("data-placeholder", "這是「bear」的共用筆記，所有教材都會顯示…");
   await editor.fill(note);
-  await page.waitForTimeout(700);
+  await expect.poll(() => storedWordNotes(page)).toContainEqual({
+    markdown: note.trim(),
+    word: "bear",
+  });
   await page.reload();
   await expect(page.locator(".word-card")).toBeAttached();
 
@@ -221,7 +224,10 @@ test("keeps a word note draft visible when IndexedDB persistence fails", async (
     state.restoreWordNotePut?.();
   });
   await editor.fill("recover this note safely");
-  await page.waitForTimeout(800);
+  await expect.poll(() => storedWordNotes(page)).toContainEqual({
+    markdown: "recover this note safely",
+    word: "bear",
+  });
   await page.reload();
   await page.locator('[data-word="bear"]').first().hover();
   await expect(page.getByLabel("單字 Markdown 筆記")).toContainText("recover this note safely");

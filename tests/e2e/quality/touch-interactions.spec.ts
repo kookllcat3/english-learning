@@ -130,3 +130,21 @@ test("allows a current backup package to be chosen on mobile", async ({ page }) 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
   await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
 });
+
+test("keeps primary reading actions operable on a tablet viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await createTouchMaterial(page);
+
+  const marker = page.getByRole("button", { name: "標記目前閱讀段落" });
+  await marker.tap();
+  await expect(marker).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => storedCurrentMaterialKnownWords(page))
+    .toEqual(["an", "original", "sentence"]);
+
+  await page.getByRole("button", { name: "開啟資料管理" }).tap();
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog).toBeVisible();
+  await expect.poll(() => page.evaluate(
+    () => document.documentElement.scrollWidth <= window.innerWidth,
+  )).toBe(true);
+});

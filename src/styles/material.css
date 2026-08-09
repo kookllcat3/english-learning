@@ -216,7 +216,7 @@
 }
 .reading-word.is-highlighted,
 .reading-highlight-gap {
-  background: #ffe58f;
+  background: rgb(255 229 143 / 48%);
 }
 .reading-word.is-highlighted {
   border-radius: 3px;

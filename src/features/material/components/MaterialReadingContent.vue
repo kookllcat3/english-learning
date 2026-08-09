@@ -13,8 +13,9 @@ import {
 import { normalizeWord } from "../../../core/text/text.js";
 import {
   familiarityDelay,
-  familiarityLevel,
+  familiarityPresentation,
   type FamiliarityLevel,
+  type FamiliarityPresentation,
 } from "../familiarity.js";
 import MaterialImage from "./MaterialImage.vue";
 import ParagraphToolbar from "./ParagraphToolbar.vue";
@@ -23,11 +24,6 @@ interface TextSegment {
   delay?: number;
   label: string;
   word?: string;
-}
-
-interface WordPresentation {
-  level: FamiliarityLevel;
-  style: Record<string, string>;
 }
 
 interface RenderedTextBlock {
@@ -175,23 +171,17 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
   }));
 
 const wordPresentations = computed(() => {
-  const presentations = new Map<string, WordPresentation>();
+  const presentations = new Map<string, FamiliarityPresentation>();
   renderedBlocks.value.forEach((block) => {
     if (block.type !== "text") return;
     block.paragraphs.forEach((paragraph) => {
       paragraph.lines.forEach((line) => line.segments.forEach((segment) => {
         if (!segment.word || presentations.has(segment.word)) return;
         const materialCount = props.vocabularyProgress.get(segment.word)?.materialCount ?? 0;
-        const level = familiarityLevel(props.familiarityLevels, materialCount);
-        presentations.set(segment.word, {
-          level,
-          style: {
-            "--familiarity-outline-opacity": String(level.outlineOpacity),
-            "--outline-flow-opacity": String(level.flowOpacity),
-            "--outline-flow-duration": `${level.flowDuration}s`,
-            "--outline-glow-blur": `${level.glowBlur}px`,
-          },
-        });
+        presentations.set(
+          segment.word,
+          familiarityPresentation(props.familiarityLevels, materialCount),
+        );
       }));
     });
   });
@@ -221,7 +211,7 @@ function isHighlightedGap(segments: TextSegment[], segmentIndex: number, lineKey
     && previousHighlightId === highlightIdFor(`${lineKey}-${segmentIndex + 1}`);
 }
 
-function presentationFor(segment: TextSegment): WordPresentation | undefined {
+function presentationFor(segment: TextSegment): FamiliarityPresentation | undefined {
   return segment.word ? wordPresentations.value.get(segment.word) : undefined;
 }
 

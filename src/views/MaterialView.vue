@@ -479,6 +479,8 @@ onBeforeUnmount(() => {
 
       <WordCard
         ref="wordCard"
+        :familiarity-levels="familiarityLevels"
+        :vocabulary-progress="vocabularyProgress"
         @close="handleWordCardClosed"
         @enter="keepWordCardOpen"
         @leave="scheduleWordCardClose"

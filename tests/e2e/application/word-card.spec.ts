@@ -4,8 +4,45 @@ import {
   createMaterial,
   materialContent,
   materialTitle,
+  seedKnownWordsForCurrentMaterial,
   storedWordNotes,
 } from "./test-helpers";
+
+test("shows the source word familiarity effect in the word card title", async ({ page }) => {
+  await createMaterial(page);
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await expect(page).toHaveURL(/#\/materials\/.+/);
+  await seedKnownWordsForCurrentMaterial(page, ["bear"]);
+  await page.reload();
+
+  await page.locator('[data-word="bear"]').first().hover();
+  const title = page.getByRole("heading", { name: "bear", level: 2 });
+  await expect(title).toBeVisible();
+  await expect(title).toHaveClass(/known-word/);
+  await expect(title).toHaveClass(/is-active/);
+  await expect(title.locator(".known-word__glyph")).toHaveCount(4);
+  await expect(title.locator(".known-word__glyph").first())
+    .toHaveCSS("animation-name", "familiarity-outline-flow");
+  const sourceTokens = await page.locator('[data-word="bear"]').first().evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [
+      style.getPropertyValue("--familiarity-outline-opacity"),
+      style.getPropertyValue("--outline-flow-opacity"),
+      style.getPropertyValue("--outline-flow-duration"),
+      style.getPropertyValue("--outline-glow-blur"),
+    ];
+  });
+  const cardTokens = await title.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [
+      style.getPropertyValue("--familiarity-outline-opacity"),
+      style.getPropertyValue("--outline-flow-opacity"),
+      style.getPropertyValue("--outline-flow-duration"),
+      style.getPropertyValue("--outline-glow-blur"),
+    ];
+  });
+  expect(cardTokens).toEqual(sourceTokens);
+});
 
 test("positions a restored note card before its note has loaded", async ({ page }) => {
   await createMaterial(page);

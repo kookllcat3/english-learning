@@ -9,6 +9,11 @@ export interface FamiliarityLevel {
   outlineOpacity: number;
 }
 
+export interface FamiliarityPresentation {
+  level: FamiliarityLevel;
+  style: Record<string, string>;
+}
+
 interface FamiliarityConfig {
   basis: string;
   levels: FamiliarityLevel[];
@@ -59,6 +64,22 @@ export function familiarityLevel(
     (matched, level) => (materialCount >= level.minMaterials ? level : matched),
     levels[0],
   );
+}
+
+export function familiarityPresentation(
+  levels: FamiliarityLevel[],
+  materialCount: number,
+): FamiliarityPresentation {
+  const level = familiarityLevel(levels, materialCount);
+  return {
+    level,
+    style: {
+      "--familiarity-outline-opacity": String(level.outlineOpacity),
+      "--outline-flow-opacity": String(level.flowOpacity),
+      "--outline-flow-duration": `${level.flowDuration}s`,
+      "--outline-glow-blur": `${level.glowBlur}px`,
+    },
+  };
 }
 
 export function familiarityDelay(word: string): number {

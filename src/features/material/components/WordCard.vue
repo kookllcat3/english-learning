@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import type { VocabularyRecord } from "../../../core/models/models.js";
 import {
   getWordNote,
   saveWordNote,
@@ -9,6 +10,19 @@ import { htmlToMarkdown, renderMarkdown } from "../markdown.js";
 import { useWordCardPosition } from "../use-word-card-position.js";
 import { errorMessage } from "../../../shared/errors.js";
 import { acquirePageScrollLock } from "../../../shared/page-scroll-lock.js";
+import {
+  familiarityDelay,
+  familiarityPresentation,
+  type FamiliarityLevel,
+} from "../familiarity.js";
+
+const props = withDefaults(defineProps<{
+  familiarityLevels: FamiliarityLevel[];
+  vocabularyProgress: Map<string, VocabularyRecord>;
+}>(), {
+  familiarityLevels: () => [],
+  vocabularyProgress: () => new Map<string, VocabularyRecord>(),
+});
 
 const emit = defineEmits<{
   close: [];
@@ -37,6 +51,15 @@ let saveTimer: number | undefined;
 let releasePageScrollLock: (() => void) | null = null;
 const NOTE_DRAFT_PREFIX = "english-learning:word-note-draft:";
 const PAGE_SCROLL_LOCK_MEDIA_QUERY = "(hover: none), (pointer: coarse)";
+const selectedWordCharacters = computed(() => [...selectedWord.value]);
+const selectedWordDelay = computed(() => familiarityDelay(normalizeWord(selectedWord.value)));
+const selectedWordFamiliarity = computed(() => {
+  const word = normalizeWord(selectedWord.value);
+  if (!word || props.familiarityLevels.length === 0) return null;
+  const materialCount = props.vocabularyProgress.get(word)?.materialCount ?? 0;
+  const presentation = familiarityPresentation(props.familiarityLevels, materialCount);
+  return presentation.level.level > 0 ? presentation : null;
+});
 const {
   clearAnchor,
   positionAt,
@@ -352,7 +375,19 @@ onBeforeUnmount(() => {
   >
     <div class="word-card__heading">
       <div class="word-card__word">
-        <h2 id="word-card-title" lang="en">{{ selectedWord }}</h2>
+        <h2
+          id="word-card-title"
+          :class="{ 'is-active': selectedWordFamiliarity, 'known-word': selectedWordFamiliarity }"
+          :style="selectedWordFamiliarity?.style"
+          lang="en"
+        ><template v-if="selectedWordFamiliarity"><span
+          v-for="(character, characterIndex) in selectedWordCharacters"
+          :key="characterIndex"
+          class="known-word__glyph"
+          :style="{
+            '--glyph-delay': `${selectedWordDelay + (characterIndex * 85)}ms`,
+          }"
+        >{{ character }}</span></template><template v-else>{{ selectedWord }}</template></h2>
       </div>
       <div class="word-card__actions">
         <button class="icon-button word-card__pronounce" type="button" aria-label="播放單字發音" title="播放發音" @click="speak">

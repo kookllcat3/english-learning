@@ -76,9 +76,14 @@ test("adds and removes a highlight without opening the word card on touch", asyn
 
 test("prevents background touch scrolling while the word card is open", async ({ page }) => {
   await createTouchMaterial(page);
+  await page.locator("[data-reading-paragraph]").first()
+    .locator(".paragraph-toolbar__button").first().tap();
   await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
   await page.locator('[data-word="original"]').first().tap();
   await expect(page.locator(".word-card")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "original", level: 2 }))
+    .toHaveClass(/known-word/);
+  await expect(page.locator("#word-card-title .known-word__glyph")).toHaveCount(8);
   await expect(page.locator(".word-card-backdrop")).toBeVisible();
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).position)).toBe("fixed");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehavior)).toBe("none");

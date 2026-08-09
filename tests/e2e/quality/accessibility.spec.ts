@@ -87,6 +87,17 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
     });
   expect(familiarityPresentation.animationName).toBe("none");
   expect(familiarityPresentation.textShadow).not.toBe("none");
+
+  await page.locator('[data-known-word="bear"]').first().hover();
+  const cardFamiliarityPresentation = await page.getByRole("heading", { name: "bear", level: 2 })
+    .locator(".known-word__glyph")
+    .first()
+    .evaluate((element) => ({
+      animationName: getComputedStyle(element).animationName,
+      textShadow: getComputedStyle(element).textShadow,
+    }));
+  expect(cardFamiliarityPresentation.animationName).toBe("none");
+  expect(cardFamiliarityPresentation.textShadow).not.toBe("none");
 });
 
 test("primary pages and data dialog remain responsive at supported breakpoints", async ({

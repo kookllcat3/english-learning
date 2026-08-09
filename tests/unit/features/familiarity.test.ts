@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   familiarityDelay,
   familiarityLevel,
+  familiarityPresentation,
   type FamiliarityLevel,
 } from "../../../src/features/material/familiarity.js";
 
@@ -33,5 +34,17 @@ describe("familiarity presentation rules", () => {
   it("creates stable animation offsets per word", () => {
     expect(familiarityDelay("animal")).toBe(familiarityDelay("animal"));
     expect(familiarityDelay("animal")).toBeLessThanOrEqual(0);
+  });
+
+  it("maps a familiarity level to reusable visual tokens", () => {
+    expect(familiarityPresentation(levels, 2)).toEqual({
+      level: levels[1],
+      style: {
+        "--familiarity-outline-opacity": "0.4",
+        "--outline-flow-opacity": "0.5",
+        "--outline-flow-duration": "3s",
+        "--outline-glow-blur": "2px",
+      },
+    });
   });
 });

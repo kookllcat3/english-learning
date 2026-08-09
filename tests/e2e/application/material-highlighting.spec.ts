@@ -17,6 +17,7 @@ test("creates jumping highlights, connects adjacent words, persists, and erases 
   const words = firstParagraph.locator(".reading-word");
   await words.nth(0).click();
   await expect(words.nth(0)).toHaveClass(/is-highlighted/);
+  await expect(words.nth(0)).toHaveCSS("background-color", "rgba(255, 229, 143, 0.48)");
   await expect(highlighterEntry).toBeEnabled();
   await words.nth(2).click();
   await expect(words.nth(1)).not.toHaveClass(/is-highlighted/);
@@ -27,6 +28,8 @@ test("creates jumping highlights, connects adjacent words, persists, and erases 
 
   await words.nth(1).click();
   await expect(firstParagraph.locator(".reading-highlight-gap")).toHaveCount(2);
+  await expect(firstParagraph.locator(".reading-highlight-gap").first())
+    .toHaveCSS("background-color", "rgba(255, 229, 143, 0.48)");
   expect((await storedHighlights(page))[0].occurrenceKeys).toHaveLength(3);
 
   await page.reload();

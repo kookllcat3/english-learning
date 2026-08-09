@@ -486,14 +486,7 @@
 
 @media (max-width: 720px) {
   .page-shell { width: min(100% - 32px, 1080px); padding-top: 28px; }
-  .dashboard { gap: 8px; }
-  .dashboard { margin-bottom: 24px; }
-  .metric-card { min-height: 84px; padding: 12px 8px; border-radius: 14px; }
-  .metric-card__label { font-size: .75rem; }
-  .metric-card__value { margin-inline: 5px; font-size: 2rem; }
-  .metric-card__unit { font-size: .78rem; }
   .section-heading { align-items: center; }
-  .library-tools { grid-template-columns: 1fr; gap: 8px; }
   .data-actions { grid-template-columns: 1fr; }
   .data-action-card p { min-height: 0; }
   .history-panel { right: 0; }

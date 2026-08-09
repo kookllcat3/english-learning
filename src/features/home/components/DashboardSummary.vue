@@ -14,17 +14,23 @@ const {
   <section class="dashboard" aria-label="學習統計">
     <article class="metric-card">
       <span class="metric-card__label">已認識單字</span>
-      <strong class="metric-card__value">{{ knownWordCount }}</strong>
-      <span class="metric-card__unit">個</span>
+      <span class="metric-card__measurement">
+        <strong class="metric-card__value">{{ knownWordCount }}</strong>
+        <span class="metric-card__unit">個</span>
+      </span>
     </article>
     <article class="metric-card">
       <span class="metric-card__label">學習教材</span>
-      <strong class="metric-card__value">{{ materialCount }}</strong>
-      <span class="metric-card__unit">份</span>
+      <span class="metric-card__measurement">
+        <strong class="metric-card__value">{{ materialCount }}</strong>
+        <span class="metric-card__unit">份</span>
+      </span>
     </article>
     <article class="metric-card">
       <span class="metric-card__label">平均完成度</span>
-      <strong class="metric-card__value">{{ averageCompletion }}%</strong>
+      <span class="metric-card__measurement">
+        <strong class="metric-card__value">{{ averageCompletion }}%</strong>
+      </span>
     </article>
   </section>
 

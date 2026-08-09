@@ -107,12 +107,12 @@ test("exports and updates the same text material while preserving compatible lea
   const originalContent = "Bear fox.\n\n熊與狐狸。";
   await createMaterial(page, title, originalContent);
   const card = page.getByRole("article").filter({ hasText: title });
-  await expect(card.locator(".material-card__actions").locator("a, button")).toHaveText([
-    "開始閱讀",
-    "匯出",
-    "更新",
-    "移除",
-  ]);
+  const actions = card.locator(".material-card__actions").locator("a, button");
+  await expect(actions).toHaveCount(4);
+  await expect(actions.nth(0)).toHaveAttribute("aria-label", "開始閱讀");
+  await expect(actions.nth(1)).toHaveAttribute("aria-label", `匯出目前教材 ${title}`);
+  await expect(actions.nth(2)).toHaveAttribute("aria-label", `重新匯入並更新教材 ${title}`);
+  await expect(actions.nth(3)).toHaveAttribute("aria-label", `移除教材 ${title}`);
 
   await card.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page).toHaveURL(/#\/materials\//);

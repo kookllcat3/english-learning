@@ -298,6 +298,7 @@ onUnmounted(() => {
     <div class="section-heading">
       <div class="library-heading">
         <p class="eyebrow">Library</p>
+        <h1>我的教材</h1>
       </div>
       <button
         class="add-material-button add-material-button--inline"
@@ -306,7 +307,8 @@ onUnmounted(() => {
         title="新增教材"
         @click="openAddDialog"
       >
-        <span aria-hidden="true">+</span>
+        <span class="add-material-button__icon" aria-hidden="true">+</span>
+        <span class="add-material-button__label">新增教材</span>
       </button>
     </div>
 
@@ -406,6 +408,18 @@ onUnmounted(() => {
         :message="emptyState.description"
       />
       <article v-for="material in materials" v-else :key="material.id" class="material-card">
+        <div class="material-card__identity">
+          <button
+            class="material-card__title-button"
+            type="button"
+            :aria-label="`重新命名 ${material.title}`"
+            :title="material.title"
+            :disabled="materialActionBusy(material.id)"
+            @click="openEditDialog(material)"
+          >
+            <h2>{{ material.title }}</h2>
+          </button>
+        </div>
         <div
           class="material-card__progress"
           :aria-label="`已認識 ${material.knownCount} / ${material.wordCount} 個詞彙`"
@@ -420,61 +434,67 @@ onUnmounted(() => {
         >
           {{ completionPercentage(material) }}%
         </progress>
-        <button
-          class="material-card__title-button"
-          type="button"
-          :aria-label="`重新命名 ${material.title}`"
-          :title="material.title"
-          :disabled="materialActionBusy(material.id)"
-          @click="openEditDialog(material)"
-        >
-          <h2>{{ material.title }}</h2>
-        </button>
         <div class="material-card__actions">
           <RouterLink
-            class="button button--primary"
+            class="button button--primary material-action-button"
             :to="{ name: 'material', params: { id: material.id } }"
+            aria-label="開始閱讀"
             :aria-disabled="materialActionBusy(material.id)"
+            data-tooltip="開始閱讀"
             :tabindex="materialActionBusy(material.id) ? -1 : undefined"
             @click="preventBusyNavigation($event, material.id)"
           >
-            開始閱讀
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+              <path d="M3.75 5.25a2.25 2.25 0 0 1 2.25-2.25h3.25A2.75 2.75 0 0 1 12 5.75V21a3.5 3.5 0 0 0-3.5-3.5H3.75V5.25Z" />
+              <path d="M20.25 5.25A2.25 2.25 0 0 0 18 3h-3.25A2.75 2.75 0 0 0 12 5.75V21a3.5 3.5 0 0 1 3.5-3.5h4.75V5.25Z" />
+            </svg>
           </RouterLink>
           <button
-            class="button button--secondary"
+            class="button button--secondary material-action-button"
             :class="{ 'is-loading': exportingMaterialId === material.id }"
             type="button"
             :aria-label="`匯出目前教材 ${material.title}`"
             :aria-busy="exportingMaterialId === material.id"
-            :title="`匯出目前教材 ${material.title}`"
+            data-tooltip="匯出"
             :disabled="materialActionBusy(material.id)"
             @click="exportMaterial(material)"
           >
-            匯出
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+              <path d="M12 4v11" />
+              <path d="m8 11 4 4 4-4" />
+              <path d="M5 20h14" />
+            </svg>
           </button>
           <button
-            class="button button--secondary"
+            class="button button--secondary material-action-button"
             :class="{ 'is-loading': updatingMaterialId === material.id }"
             type="button"
             :aria-label="`重新匯入並更新教材 ${material.title}`"
             :aria-busy="updatingMaterialId === material.id"
-            :title="`重新匯入並更新教材 ${material.title}`"
+            data-tooltip="更新"
             :disabled="materialActionBusy(material.id)"
             @click="openUpdateFilePicker(material, $event)"
           >
-            更新
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+              <path d="M20 11a8 8 0 1 0-2.35 5.65" />
+              <path d="M20 4v7h-7" />
+            </svg>
           </button>
           <button
-            class="button button--danger"
+            class="button button--danger material-action-button"
             :class="{ 'is-loading': removingMaterialId === material.id }"
             type="button"
             :aria-label="`移除教材 ${material.title}`"
             :aria-busy="removingMaterialId === material.id"
-            :title="`移除教材 ${material.title}`"
+            data-tooltip="移除"
             :disabled="materialActionBusy(material.id)"
             @click="removeSelectedMaterial(material)"
           >
-            移除
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+              <path d="M4 7h16" />
+              <path d="M9 7V4h6v3" />
+              <path d="m7 7 1 13h8l1-13" />
+            </svg>
           </button>
         </div>
       </article>

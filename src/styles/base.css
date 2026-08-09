@@ -2,13 +2,16 @@
   --accent: #a94829;
   --accent-soft: #fdf0ea;
   --card: #fff;
+  --card-muted: #fbfaf7;
   --danger: #a94829;
   --ink: #202536;
   --line: #e6e3db;
+  --line-strong: #d8d4ca;
   --muted: #596174;
   --navy: #27344e;
   --paper: #f6f5f1;
   --shadow: 0 8px 28px rgb(33 27 18 / 6%);
+  --shadow-low: 0 3px 14px rgb(33 27 18 / 5%);
   font-family: Inter, system-ui, -apple-system, "Microsoft JhengHei", sans-serif;
   color: var(--ink);
   background: var(--paper);

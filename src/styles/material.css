@@ -193,12 +193,6 @@
   }
 }
 .reading-content ::selection { color: #17233a; background: #ffe19e; }
-.annotation-status {
-  margin: -12px 0 18px;
-  color: var(--muted);
-  font-size: .86rem;
-  line-height: 1.4;
-}
 .reading-figure { margin: 24px auto; text-align: center; }
 .reading-figure img {
   display: block;
@@ -506,7 +500,6 @@
   .material-heading { margin-bottom: 26px; padding-bottom: 20px; }
   .reading-position-return.is-floating { left: 16px; }
   .reading-content { line-height: 1.85; }
-  .annotation-status { min-height: 2.8em; }
   .reading-content .reading-paragraph { margin-bottom: 1.4em; }
   .material-completion {
     margin-top: 48px;

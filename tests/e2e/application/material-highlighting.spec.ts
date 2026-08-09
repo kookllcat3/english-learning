@@ -11,6 +11,7 @@ test("creates jumping highlights, connects adjacent words, persists, and erases 
   const highlighterEntry = firstParagraph.getByRole("button", { name: "開啟螢光筆工具" });
   await highlighterEntry.click();
   await expect(firstParagraph.getByRole("group", { name: "選擇標記工具" })).toHaveCount(0);
+  await expect(page.locator(".annotation-status")).toHaveCount(0);
   await expect(highlighterEntry).toHaveAttribute("aria-pressed", "true");
 
   const words = firstParagraph.locator(".reading-word");
@@ -18,7 +19,6 @@ test("creates jumping highlights, connects adjacent words, persists, and erases 
   await expect(words.nth(0)).toHaveClass(/is-highlighted/);
   await expect(highlighterEntry).toBeEnabled();
   await words.nth(2).click();
-  await expect(page.getByRole("status")).toContainText("目前這組已標記 2 個單字");
   await expect(words.nth(1)).not.toHaveClass(/is-highlighted/);
   await expect.poll(async () => (await storedHighlights(page))[0]?.occurrenceKeys.length).toBe(2);
   await expect(words.nth(2)).toHaveClass(/is-highlighted/);

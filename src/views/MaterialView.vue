@@ -54,7 +54,6 @@ const actionError = ref("");
 const annotationBusy = ref(false);
 const annotationMode = ref<"erase" | "highlight" | null>(null);
 const annotationParagraphKey = ref<string | null>(null);
-const annotationStatus = ref("");
 const activeHighlightId = ref<string | null>(null);
 const highlights = ref<MaterialHighlightAnnotationRecord[]>([]);
 const activeProgressOperation = ref<"completion" | string | null>(null);
@@ -99,7 +98,6 @@ function exitAnnotationMode(): void {
   annotationMode.value = null;
   annotationParagraphKey.value = null;
   activeHighlightId.value = null;
-  annotationStatus.value = "";
   pendingAnnotationActions.splice(0);
 }
 
@@ -259,7 +257,6 @@ function selectAnnotationTool(
   annotationMode.value = "highlight";
   annotationParagraphKey.value = paragraphKey;
   activeHighlightId.value = null;
-  annotationStatus.value = "螢光筆已開啟；從未標記單字落筆會上色，從已標記單字落筆會擦除。點正文空白、中文翻譯、其他段落或按 Esc 可結束。";
 }
 
 function highlightContaining(occurrenceKey: string): MaterialHighlightAnnotationRecord | undefined {
@@ -278,15 +275,9 @@ async function applyHighlight(paragraphKey: string, occurrenceKey: string): Prom
   const existing = highlightContaining(occurrenceKey);
   if (!activeHighlightId.value && existing) {
     activeHighlightId.value = existing.id;
-    annotationStatus.value = "已接續這組螢光標記。";
     return;
   }
-  if (existing) {
-    annotationStatus.value = existing.id === activeHighlightId.value
-      ? "這個單字已在目前的螢光標記中。"
-      : "這個單字已有其他螢光標記，未重複加入。";
-    return;
-  }
+  if (existing) return;
   const timestamp = new Date().toISOString();
   const active = highlights.value.find((highlight) => highlight.id === activeHighlightId.value);
   const orderedOccurrenceKeys = readingOccurrences.value
@@ -303,17 +294,11 @@ async function applyHighlight(paragraphKey: string, occurrenceKey: string): Prom
   const saved = await saveMaterialHighlight(updated);
   replaceHighlight(saved);
   activeHighlightId.value = saved.id;
-  annotationStatus.value = saved.target.occurrenceKeys.length === 1
-    ? "已開始一組螢光標記。"
-    : `目前這組已標記 ${saved.target.occurrenceKeys.length} 個單字。`;
 }
 
 async function eraseHighlight(occurrenceKey: string): Promise<void> {
   const existing = highlightContaining(occurrenceKey);
-  if (!existing) {
-    annotationStatus.value = "這個單字沒有螢光標記。";
-    return;
-  }
+  if (!existing) return;
   const updated = removeHighlightOccurrence(existing, occurrenceKey, new Date().toISOString());
   if (updated) {
     replaceHighlight(await saveMaterialHighlight(updated));
@@ -322,7 +307,6 @@ async function eraseHighlight(occurrenceKey: string): Promise<void> {
     highlights.value = highlights.value.filter((highlight) => highlight.id !== existing.id);
     if (activeHighlightId.value === existing.id) activeHighlightId.value = null;
   }
-  annotationStatus.value = "已移除這個單字的螢光標記。";
 }
 
 async function annotateWord(
@@ -440,7 +424,6 @@ onBeforeUnmount(() => {
       </section>
 
       <p v-if="actionError" class="form-message is-error" role="alert">{{ actionError }}</p>
-      <p v-if="annotationStatus" class="annotation-status" role="status">{{ annotationStatus }}</p>
 
       <article ref="readingContainer" class="reading-section">
         <MaterialReadingContent

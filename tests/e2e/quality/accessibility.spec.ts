@@ -129,7 +129,31 @@ test("primary pages and data dialog remain responsive at supported breakpoints",
     await page.keyboard.press("Escape");
 
     await page.getByRole("link", { name: "開始閱讀" }).click();
+    await expect(page.locator(".material-heading")).toBeAttached();
+    await expect(page.locator(".material-completion")).toBeAttached();
     await expectNoHorizontalOverflow(page);
     await expect(page.getByRole("button", { name: "教材詞彙" })).toHaveCount(0);
+    const materialLayoutMetrics = await page.evaluate(() => {
+      const headingStyle = getComputedStyle(document.querySelector<HTMLElement>(".material-heading")!);
+      const completionStyle = getComputedStyle(document.querySelector<HTMLElement>(".material-completion")!);
+      const completionButton = document.querySelector<HTMLElement>(".material-completion__button")!;
+      const completionButtonStyle = getComputedStyle(completionButton);
+      return {
+        headingMarginBottom: Number.parseFloat(headingStyle.marginBottom),
+        headingPaddingBottom: Number.parseFloat(headingStyle.paddingBottom),
+        completionMarginTop: Number.parseFloat(completionStyle.marginTop),
+        completionPaddingTop: Number.parseFloat(completionStyle.paddingTop),
+        completionPaddingBottom: Number.parseFloat(completionStyle.paddingBottom),
+        completionButtonHeight: completionButton.getBoundingClientRect().height,
+        completionButtonMinHeight: Number.parseFloat(completionButtonStyle.minHeight),
+      };
+    });
+    expect(materialLayoutMetrics.headingMarginBottom).toBeCloseTo(materialLayoutMetrics.headingPaddingBottom, 3);
+    expect(materialLayoutMetrics.completionPaddingTop).toBeCloseTo(materialLayoutMetrics.completionPaddingBottom, 3);
+    expect(materialLayoutMetrics.headingMarginBottom).toBeLessThanOrEqual(28);
+    expect(materialLayoutMetrics.completionMarginTop).toBeLessThanOrEqual(28);
+    expect(materialLayoutMetrics.completionPaddingTop).toBeLessThanOrEqual(14);
+    expect(materialLayoutMetrics.completionButtonHeight).toBeLessThanOrEqual(42);
+    expect(materialLayoutMetrics.completionButtonMinHeight).toBe(40);
   }
 });

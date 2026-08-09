@@ -1,10 +1,12 @@
 .material-page .page-shell {
+  --material-completion-padding: clamp(10px, 1.5vw, 14px);
+  --material-section-gap: clamp(20px, 3vw, 28px);
   width: min(100% - 48px, 960px);
   padding-block: clamp(32px, 5vw, 52px) 0;
 }
 .material-heading {
-  margin-bottom: clamp(28px, 5vw, 48px);
-  padding-bottom: clamp(20px, 3vw, 30px);
+  margin-bottom: var(--material-section-gap);
+  padding-bottom: var(--material-section-gap);
   border-bottom: 1px solid var(--line);
 }
 .material-heading h1 {
@@ -38,15 +40,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: clamp(48px, 8vw, 80px);
-  padding-block: clamp(20px, 3vw, 28px);
+  margin-top: var(--material-section-gap);
+  padding-block: var(--material-completion-padding);
   border-top: 1px solid var(--line);
 }
 .material-completion__action { flex: none; text-align: center; }
 .material-completion__button {
-  min-width: 168px;
+  min-width: 152px;
+  min-height: 40px;
+  padding: 7px 14px;
   color: #fff;
   background: #533a82;
+  font-size: .9rem;
   box-shadow: 0 8px 18px rgb(83 58 130 / 20%);
 }
 .material-completion__button:hover:not(:disabled) { background: #65499a; }
@@ -497,14 +502,8 @@
     width: min(100% - 32px, 960px);
     padding-block: 28px 0;
   }
-  .material-heading { margin-bottom: 26px; padding-bottom: 20px; }
   .reading-position-return.is-floating { left: 16px; }
   .reading-content { line-height: 1.85; }
   .reading-content .reading-paragraph { margin-bottom: 1.4em; }
-  .material-completion {
-    margin-top: 48px;
-    padding-block: 20px;
-  }
-  .material-completion__button { min-height: 48px; }
   .material-completion__status { max-width: none; text-align: center; }
 }

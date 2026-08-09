@@ -10,13 +10,7 @@ test("creates jumping highlights, connects adjacent words, persists, and erases 
   const firstParagraph = paragraphs.first();
   const highlighterEntry = firstParagraph.getByRole("button", { name: "開啟螢光筆工具" });
   await highlighterEntry.click();
-  const toolMenu = firstParagraph.getByRole("group", { name: "選擇標記工具" });
-  await expect(toolMenu).toBeVisible();
-  expect(await toolMenu.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    return rect.left >= 0 && rect.right <= window.innerWidth;
-  })).toBe(true);
-  await firstParagraph.getByRole("button", { name: "淡黃色螢光筆" }).click();
+  await expect(firstParagraph.getByRole("group", { name: "選擇標記工具" })).toHaveCount(0);
   await expect(highlighterEntry).toHaveAttribute("aria-pressed", "true");
 
   const words = firstParagraph.locator(".reading-word");
@@ -39,7 +33,6 @@ test("creates jumping highlights, connects adjacent words, persists, and erases 
   const reloadedParagraph = page.locator("[data-reading-paragraph]").first();
   await expect(reloadedParagraph.locator(".reading-word.is-highlighted")).toHaveCount(3);
   await reloadedParagraph.getByRole("button", { name: "開啟螢光筆工具" }).click();
-  await reloadedParagraph.getByRole("button", { name: "橡皮擦" }).click();
   await reloadedParagraph.locator(".reading-word").nth(1).click();
   await expect(reloadedParagraph.locator(".reading-word").nth(1)).not.toHaveClass(/is-highlighted/);
   expect((await storedHighlights(page))[0].occurrenceKeys).toHaveLength(2);
@@ -57,7 +50,6 @@ test("paints and erases words by dragging across the paragraph", async ({ page }
   const entry = paragraph.getByRole("button", { name: "開啟螢光筆工具" });
   const words = paragraph.locator(".reading-word");
   await entry.click();
-  await paragraph.getByRole("button", { name: "淡黃色螢光筆" }).click();
 
   const firstWord = await words.nth(0).boundingBox();
   const secondWord = await words.nth(1).boundingBox();
@@ -75,10 +67,8 @@ test("paints and erases words by dragging across the paragraph", async ({ page }
   await expect.poll(async () => (await storedHighlights(page))[0]?.occurrenceKeys.length).toBe(3);
 
   await entry.click();
-  await expect(entry).toHaveAttribute("aria-pressed", "false");
+  await expect(entry).toHaveAttribute("aria-pressed", "true");
   await expect(entry).toHaveCSS("border-top-right-radius", "8px");
-  await entry.click();
-  await paragraph.getByRole("button", { name: "橡皮擦" }).click();
   await expect(words.nth(0)).toHaveCSS("cursor", /url\(/);
   await page.mouse.move(firstWord.x + firstWord.width / 2, firstWord.y + firstWord.height / 2);
   await page.mouse.down();
@@ -92,21 +82,38 @@ test("paints and erases words by dragging across the paragraph", async ({ page }
 });
 
 test("limits tools to one paragraph, supports keyboard, and restores word cards after exit", async ({ page }) => {
-  await createMaterial(page, "螢光鍵盤測試", "A bear runs.\n\nThe fox sleeps.");
+  await createMaterial(page, "螢光鍵盤測試", "A bear runs.\n中文翻譯。\n\nThe fox sleeps.");
   await page.getByRole("link", { name: "開始閱讀" }).click();
   const paragraphs = page.locator("[data-reading-paragraph]");
   const firstEntry = paragraphs.nth(0).getByRole("button", { name: "開啟螢光筆工具" });
   const secondEntry = paragraphs.nth(1).getByRole("button", { name: "開啟螢光筆工具" });
 
   await firstEntry.click();
-  await paragraphs.nth(0).getByRole("button", { name: "淡黃色螢光筆" }).click();
   const firstWord = paragraphs.nth(0).locator(".reading-word").first();
   await firstWord.focus();
   await page.keyboard.press("Enter");
   await expect(firstWord).toHaveClass(/is-highlighted/);
 
+  await firstEntry.click();
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "true");
+
+  const firstParagraphBox = await paragraphs.nth(0).boundingBox();
+  if (!firstParagraphBox) throw new Error("找不到第一段落的位置");
+  await paragraphs.nth(0).click({
+    position: { x: firstParagraphBox.width - 2, y: firstParagraphBox.height - 2 },
+  });
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "false");
+
+  await firstEntry.click();
+  await paragraphs.nth(0).locator(".reading-line-wrap.is-translation").click();
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "false");
+
+  await firstEntry.click();
+  await paragraphs.nth(1).locator(".reading-word").first().click();
+  await expect(firstEntry).toHaveAttribute("aria-pressed", "false");
+  await expect(paragraphs.nth(1).locator(".reading-word.is-highlighted")).toHaveCount(0);
+
   await secondEntry.click();
-  await paragraphs.nth(1).getByRole("button", { name: "淡黃色螢光筆" }).click();
   await expect(firstEntry).toHaveAttribute("aria-pressed", "false");
   await expect(secondEntry).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");

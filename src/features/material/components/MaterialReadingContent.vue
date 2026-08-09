@@ -70,7 +70,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
-  annotateWord: [paragraphKey: string, occurrenceKey: string];
+  annotateWord: [paragraphKey: string, occurrenceKey: string, mode: "erase" | "highlight"];
   deactivate: [];
   lookup: [word: string, rect: DOMRect, key: string];
   selectAnnotationTool: [paragraphKey: string, mode: "erase" | "highlight" | null];
@@ -80,6 +80,7 @@ interface AnnotationPointerState {
   lastOccurrenceKey: string;
   lastX: number;
   lastY: number;
+  mode: "erase" | "highlight";
   pointerId: number;
 }
 
@@ -262,22 +263,24 @@ function annotationTarget(target: EventTarget | null): AnnotationTarget | null {
 function annotateWordElement(target: EventTarget | null): boolean {
   const annotation = annotationTarget(target);
   if (!annotation) return false;
-  emit("annotateWord", annotation.paragraphKey, annotation.occurrenceKey);
+  const mode = highlightIdFor(annotation.occurrenceKey) ? "erase" : "highlight";
+  emit("annotateWord", annotation.paragraphKey, annotation.occurrenceKey, mode);
   return true;
 }
 
 function annotateStrokeTarget(target: EventTarget | null): boolean {
   const annotation = annotationTarget(target);
   if (!annotation) return false;
-  if (annotationPointer?.lastOccurrenceKey === annotation.occurrenceKey) return true;
-  if (annotationPointer) annotationPointer.lastOccurrenceKey = annotation.occurrenceKey;
-  emit("annotateWord", annotation.paragraphKey, annotation.occurrenceKey);
+  if (!annotationPointer) return false;
+  if (annotationPointer.lastOccurrenceKey === annotation.occurrenceKey) return true;
+  annotationPointer.lastOccurrenceKey = annotation.occurrenceKey;
+  emit("annotateWord", annotation.paragraphKey, annotation.occurrenceKey, annotationPointer.mode);
   return true;
 }
 
 function activateWordElement(target: EventTarget | null): void {
   const element = wordElement(target);
-  if (isAnnotationActiveFor(element)) return;
+  if (props.annotationMode) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "focus");
@@ -286,7 +289,7 @@ function activateWordElement(target: EventTarget | null): void {
 function handlePointerOver(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (isAnnotationActiveFor(element)) return;
+  if (props.annotationMode) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const word = element.dataset.word;
   const key = element.dataset.wordKey;
@@ -296,7 +299,7 @@ function handlePointerOver(event: PointerEvent): void {
 function handlePointerOut(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (isAnnotationActiveFor(element)) return;
+  if (props.annotationMode) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
   if (nextElement?.closest(".word-card, .word-card-hover-bridge, .reading-word")) return;
@@ -305,6 +308,13 @@ function handlePointerOut(event: PointerEvent): void {
 
 function beginPointerInteraction(event: PointerEvent): void {
   const element = wordElement(event.target);
+  if (props.annotationMode && !isAnnotationActiveFor(element)) {
+    event.preventDefault();
+    touchStart = null;
+    emit("deactivate");
+    emit("selectAnnotationTool", props.annotationParagraphKey ?? "", null);
+    return;
+  }
   if (isAnnotationActiveFor(element) && event.pointerType !== "touch") {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
@@ -313,6 +323,7 @@ function beginPointerInteraction(event: PointerEvent): void {
       lastOccurrenceKey: "",
       lastX: event.clientX,
       lastY: event.clientY,
+      mode: highlightIdFor(element?.dataset.wordKey ?? "") ? "erase" : "highlight",
       pointerId: event.pointerId,
     };
     annotateStrokeTarget(element);
@@ -374,7 +385,7 @@ function cancelPointerInteraction(event: PointerEvent): void {
 
 function handleDoubleClick(event: MouseEvent): void {
   const element = wordElement(event.target);
-  if (isAnnotationActiveFor(element)) return;
+  if (props.annotationMode) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("lookup", word, element.getBoundingClientRect(), key);
@@ -491,8 +502,10 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 'known-word': hasFamiliarity(segment),
                 'is-highlighted': highlightIdFor(`${line.key}-${segmentIndex}`),
                 'is-annotation-target': annotationModeFor(paragraph.key) !== null,
-                'is-highlight-target': annotationModeFor(paragraph.key) === 'highlight',
-                'is-erase-target': annotationModeFor(paragraph.key) === 'erase',
+                'is-highlight-target': annotationModeFor(paragraph.key) !== null
+                  && !highlightIdFor(`${line.key}-${segmentIndex}`),
+                'is-erase-target': annotationModeFor(paragraph.key) !== null
+                  && highlightIdFor(`${line.key}-${segmentIndex}`),
               }"
               :data-known-word="segment.word"
               :data-word="segment.word"

@@ -250,16 +250,16 @@ function selectAnnotationTool(
   paragraphKey: string,
   mode: "erase" | "highlight" | null,
 ): void {
+  if (mode === null) {
+    exitAnnotationMode();
+    return;
+  }
   wordCard.value?.close();
   pendingAnnotationActions.splice(0);
-  annotationMode.value = mode;
-  annotationParagraphKey.value = mode ? paragraphKey : null;
+  annotationMode.value = "highlight";
+  annotationParagraphKey.value = paragraphKey;
   activeHighlightId.value = null;
-  annotationStatus.value = mode === "highlight"
-    ? "螢光筆已開啟；點選單字可建立同一組標記，再次選擇工具或按 Esc 結束。"
-    : mode === "erase"
-      ? "橡皮擦已開啟；點選已標記的單字即可移除。"
-      : "";
+  annotationStatus.value = "螢光筆已開啟；從未標記單字落筆會上色，從已標記單字落筆會擦除。點正文空白、中文翻譯、其他段落或按 Esc 可結束。";
 }
 
 function highlightContaining(occurrenceKey: string): MaterialHighlightAnnotationRecord | undefined {
@@ -325,9 +325,12 @@ async function eraseHighlight(occurrenceKey: string): Promise<void> {
   annotationStatus.value = "已移除這個單字的螢光標記。";
 }
 
-async function annotateWord(paragraphKey: string, occurrenceKey: string): Promise<void> {
-  const mode = annotationMode.value;
-  if (!mode || annotationParagraphKey.value !== paragraphKey) return;
+async function annotateWord(
+  paragraphKey: string,
+  occurrenceKey: string,
+  mode: "erase" | "highlight",
+): Promise<void> {
+  if (!annotationMode.value || annotationParagraphKey.value !== paragraphKey) return;
   if (annotationBusy.value) {
     pendingAnnotationActions.push({ mode, occurrenceKey, paragraphKey });
     return;
@@ -345,9 +348,8 @@ async function annotateWord(paragraphKey: string, occurrenceKey: string): Promis
     const pending = pendingAnnotationActions.shift();
     if (
       pending
-      && pending.mode === annotationMode.value
       && pending.paragraphKey === annotationParagraphKey.value
-    ) void annotateWord(pending.paragraphKey, pending.occurrenceKey);
+    ) void annotateWord(pending.paragraphKey, pending.occurrenceKey, pending.mode);
   }
 }
 

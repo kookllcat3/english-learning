@@ -44,20 +44,20 @@ test("adds and removes a highlight without opening the word card on touch", asyn
   const paragraph = page.locator("[data-reading-paragraph]").first();
   const entry = paragraph.getByRole("button", { name: "開啟螢光筆工具" });
   await entry.tap();
-  await paragraph.getByRole("button", { name: "淡黃色螢光筆" }).tap();
+  await expect(paragraph.getByRole("group", { name: "選擇標記工具" })).toHaveCount(0);
   const word = paragraph.locator('[data-word="original"]');
   await word.tap();
   await expect(word).toHaveClass(/is-highlighted/);
   await expect(page.locator(".word-card")).toBeHidden();
   await expect.poll(() => storedHighlights(page)).toHaveLength(1);
 
-  await entry.tap();
-  await expect(entry).toHaveAttribute("aria-pressed", "false");
-  await entry.tap();
-  await paragraph.getByRole("button", { name: "橡皮擦" }).tap();
   await word.tap();
   await expect(word).not.toHaveClass(/is-highlighted/);
   await expect.poll(() => storedHighlights(page)).toEqual([]);
+  await expect(entry).toHaveAttribute("aria-pressed", "true");
+
+  await paragraph.locator(".reading-line-wrap.is-translation").tap();
+  await expect(entry).toHaveAttribute("aria-pressed", "false");
 });
 
 test("prevents background touch scrolling while the word card is open", async ({ page }) => {

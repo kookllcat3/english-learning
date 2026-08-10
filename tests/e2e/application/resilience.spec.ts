@@ -136,6 +136,8 @@ test("migrates version 8 contextual notes while preserving global word notes", a
 
   await page.goto("/");
   await expect(page.getByRole("link", { name: "回到英文學習庫首頁" })).toBeVisible();
+  await expect(page.locator(".material-grid")).toHaveAttribute("aria-busy", "false");
+  await page.goto("/tests/e2e/fixtures/same-origin.html");
   const state = await page.evaluate(async () => new Promise<{
     stores: string[];
     version: number;

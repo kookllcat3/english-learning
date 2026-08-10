@@ -15,9 +15,7 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.getByRole("button", { name: "查看教材製作教學" }).click();
   const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
   await guideDialog.getByLabel("純文字教材生成提示詞").fill("備份中的純文字教材提示詞");
-  await guideDialog.getByRole("tab", { name: "圖文" }).click();
-  await guideDialog.getByLabel("圖文教材生成提示詞").fill("備份中的圖文教材提示詞");
-  await expect(guideDialog.getByRole("status")).toContainText("圖文提示詞已儲存");
+  await expect(guideDialog.getByRole("status")).toContainText("純文字提示詞已儲存");
   await guideDialog.getByRole("button", { name: "關閉" }).click();
 
   await createMaterial(page);
@@ -82,7 +80,6 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
     const settings = transaction.objectStore("settings");
     settings.delete("aiPrompt");
     settings.delete("materialGuideTextPrompt");
-    settings.delete("materialGuideDocxPrompt");
     settings.delete("familiarityColor");
     await new Promise<void>((resolve, reject) => {
       transaction.addEventListener("complete", () => resolve(), { once: true });
@@ -142,9 +139,6 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.getByRole("button", { name: "查看教材製作教學" }).click();
   await expect(guideDialog.getByLabel("純文字教材生成提示詞"))
     .toHaveValue("備份中的純文字教材提示詞");
-  await guideDialog.getByRole("tab", { name: "圖文" }).click();
-  await expect(guideDialog.getByLabel("圖文教材生成提示詞"))
-    .toHaveValue("備份中的圖文教材提示詞");
   const restoredLegacyColor = await page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("english-learning");

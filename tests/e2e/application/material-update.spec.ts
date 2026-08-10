@@ -156,7 +156,7 @@ test("exports and updates the same text material while preserving compatible lea
   expect(after.foxLearned).toBe(false);
 });
 
-test("exports an illustrated material as DOCX and imports it back with its image order", async ({ page }) => {
+test("rejects illustrated export and DOCX updates while preserving the material", async ({ page }) => {
   const title = "圖文往返教材";
   await page.goto("/");
   await expect(page.locator(".material-grid")).toHaveAttribute("aria-busy", "false");
@@ -212,22 +212,32 @@ test("exports an illustrated material as DOCX and imports it back with its image
   }), { materialTitle: title, webpBase64: validWebpBase64 });
   await page.reload();
 
-  const downloadPromise = page.waitForEvent("download");
+  const before = await storedMaterial(page, title);
+  const dialogMessages: string[] = [];
+  page.on("dialog", async (dialog) => {
+    dialogMessages.push(dialog.message());
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: new RegExp(`匯出目前教材 ${title}`) }).click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe(`${title}.docx`);
-  const downloadPath = await download.path();
-  if (!downloadPath) throw new Error("Illustrated material export was not downloaded.");
+  await expect.poll(() => dialogMessages)
+    .toContain("目前暫不支援含圖片教材的 DOCX 匯出，請先使用純文字教材。");
 
-  await chooseReplacementFile(
-    page,
-    new RegExp(`重新匯入並更新教材 ${title}`),
-    { name: `${title}.docx`, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: await fs.readFile(downloadPath) },
-  );
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: new RegExp(`重新匯入並更新教材 ${title}`) }).click();
+  const chooser = await chooserPromise;
+  expect(await chooser.element().getAttribute("accept")).toBe(".txt,text/plain");
+  await chooser.setFiles({
+    name: `${title}.docx`,
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: Buffer.from("unsupported DOCX input", "utf8"),
+  });
   await expect(page.getByRole("button", { name: new RegExp(`重新匯入並更新教材 ${title}`) }))
     .toHaveAttribute("aria-busy", "false");
+  await expect.poll(() => dialogMessages)
+    .toContain("目前只支援 UTF-8 TXT 檔案或直接貼上文字。");
   const snapshot = await storedMaterial(page, title);
   expect(snapshot.assets).toBe(1);
+  expect(snapshot.updatedAt).toBe(before.updatedAt);
 
   await page.getByRole("article").filter({ hasText: title }).getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("img", { name: "測試圖片" })).toBeVisible();

@@ -7,7 +7,17 @@ import {
   storedCurrentMaterialReadingParagraphKey,
 } from "./test-helpers";
 
-test("copies paragraphs and keeps one reading position", async ({ page }) => {
+async function setReadingAnchor(
+  page: import("@playwright/test").Page,
+  paragraphIndex = 0,
+): Promise<import("@playwright/test").Locator> {
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  const paragraph = page.locator("[data-reading-paragraph]").nth(paragraphIndex);
+  await paragraph.locator(".reading-word").first().click();
+  return paragraph.getByRole("button", { name: "管理本段閱讀錨點" });
+}
+
+test("uses one toolbar for translations, copy, and a movable reading anchor", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -27,47 +37,39 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
 
   const paragraphs = page.locator("[data-reading-paragraph]");
   await expect(paragraphs).toHaveCount(3);
-  await expect(page.getByRole("button", { name: "將本段單字標記為認識" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(3);
-  await expect(page.getByRole("button", { name: "複製整段英文" })).toHaveCount(3);
-  await expect(page.getByRole("button", { name: "隱藏這段中文翻譯" })).toHaveCount(2);
-
-  const firstToolbar = paragraphs.nth(0).getByRole("group", { name: "段落閱讀工具" });
-  await expect(firstToolbar).toHaveCount(1);
-  expect(await paragraphs.nth(0).evaluate((paragraph) =>
-    paragraph.firstElementChild?.classList.contains("paragraph-toolbar"))).toBe(true);
-  expect(await firstToolbar.getByRole("button").evaluateAll((buttons) =>
+  const toolbar = page.getByRole("toolbar", { name: "教材閱讀工具" });
+  await expect(toolbar).toHaveCount(1);
+  expect(await toolbar.getByRole("button").evaluateAll((buttons) =>
     buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
-    "標記目前閱讀段落",
-    "隱藏這段中文翻譯",
-    "複製整段英文",
-    "開啟螢光筆工具",
-  ]);
-  expect(await paragraphs.nth(2).getByRole("group", { name: "段落閱讀工具" })
-    .getByRole("button").evaluateAll((buttons) =>
-      buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
-    "標記目前閱讀段落",
-    "複製整段英文",
-    "開啟螢光筆工具",
+    "設定閱讀錨點",
+    "隱藏全部中文翻譯",
+    "複製英文段落",
+    "螢光筆",
   ]);
 
-  const firstTranslationToggle = firstToolbar.locator('button[aria-label*="這段中文翻譯"]');
-  const firstTranslations = paragraphs.nth(0).locator(".reading-line-wrap.is-translation .reading-line");
-  await expect(firstTranslations).toHaveCount(2);
-  await firstTranslationToggle.click();
-  await expect(firstTranslationToggle).toHaveAccessibleName("顯示這段中文翻譯");
-  await expect(firstTranslationToggle).toHaveAttribute("aria-pressed", "true");
-  await expect(firstTranslations).toHaveClass([/translation-mask/, /translation-mask/]);
-  await firstTranslationToggle.click();
-  await expect(firstTranslations).toHaveClass(["reading-line", "reading-line"]);
+  const translationToggle = toolbar.getByRole("button", { name: "隱藏全部中文翻譯" });
+  const translations = page.locator(".reading-line-wrap.is-translation .reading-line");
+  await expect(translations).toHaveCount(3);
+  await translationToggle.click();
+  await expect(toolbar.getByRole("button", { name: "顯示全部中文翻譯" }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(translations).toHaveClass([
+    /translation-mask/,
+    /translation-mask/,
+    /translation-mask/,
+  ]);
+  await toolbar.getByRole("button", { name: "顯示全部中文翻譯" }).click();
+  await expect(translations).toHaveClass(["reading-line", "reading-line", "reading-line"]);
 
-  const firstCopyButton = paragraphs.nth(0).getByRole("button", { name: "複製整段英文" });
-  await firstCopyButton.focus();
+  const copyButton = toolbar.getByRole("button", { name: "複製英文段落" });
+  await copyButton.focus();
   await page.keyboard.press("Enter");
-  await expect(paragraphs.nth(0).getByRole("status")).toHaveText("已複製");
+  await expect(copyButton).toHaveAttribute("aria-pressed", "true");
+  await paragraphs.nth(0).locator(".reading-word").first().click();
+  await expect(toolbar.getByRole("status")).toHaveText("已複製");
   expect(await page.evaluate(() =>
     (window as unknown as { copiedParagraph?: string }).copiedParagraph)).toBe("A bear runs.");
-  await expect(firstCopyButton).toHaveAccessibleName("已複製整段英文");
+  await expect(copyButton).toHaveAttribute("aria-pressed", "false");
 
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -75,41 +77,40 @@ test("copies paragraphs and keeps one reading position", async ({ page }) => {
       value: { writeText: async () => Promise.reject(new Error("clipboard denied")) },
     });
   });
-  await paragraphs.nth(1).getByRole("button", { name: "複製整段英文" }).click();
-  await expect(paragraphs.nth(1).getByRole("alert")).toHaveText("複製失敗");
+  await toolbar.getByRole("button", { name: "複製英文段落" }).click();
+  await expect(copyButton).toHaveAttribute("aria-pressed", "true");
+  await paragraphs.nth(1).locator(".reading-word").first().dispatchEvent("click");
+  await expect(toolbar.getByRole("alert")).toHaveText("複製失敗");
 
-  const firstMarker = paragraphs.nth(0).getByRole("button", { name: "標記目前閱讀段落" });
-  const secondMarker = paragraphs.nth(1).getByRole("button", { name: "標記目前閱讀段落" });
-  await firstMarker.click();
-  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  const anchorTool = toolbar.getByRole("button", { name: "設定閱讀錨點" });
+  await anchorTool.click();
+  await paragraphs.nth(0).locator(".reading-word").first().click();
+  const anchor = page.getByRole("button", { name: "管理本段閱讀錨點" });
+  await expect(anchor).toHaveCount(1);
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "runs"]);
-  await secondMarker.click();
-  await expect(firstMarker).toHaveAttribute("aria-pressed", "false");
-  await expect(secondMarker).toHaveAttribute("aria-pressed", "true");
+
+  await anchor.click();
+  await page.getByRole("menuitem", { name: "移動錨點" }).click();
+  await expect(anchor).toHaveCount(1);
+  await paragraphs.nth(1).locator(".reading-word").first().click();
+  await expect(paragraphs.nth(1).getByRole("button", { name: "管理本段閱讀錨點" }))
+    .toHaveCount(1);
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
-  await secondMarker.click();
-  await expect(secondMarker).toHaveAttribute("aria-pressed", "false");
+
+  const secondParagraphKey = await paragraphs.nth(1).getAttribute("data-paragraph-key");
+  await expect.poll(() => storedCurrentMaterialReadingParagraphKey(page))
+    .toBe(secondParagraphKey);
+  await page.reload();
+  const restoredAnchor = page.getByRole("button", { name: "管理本段閱讀錨點" });
+  await expect(restoredAnchor).toHaveCount(1);
+  await restoredAnchor.click();
+  await page.getByRole("menuitem", { name: "移除錨點" }).click();
+  await expect(restoredAnchor).toHaveCount(0);
+  await expect.poll(() => storedCurrentMaterialReadingParagraphKey(page)).toBeNull();
   await expect(storedCurrentMaterialKnownWords(page))
     .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
-
-  await firstMarker.click();
-  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
-  const firstParagraphKey = await paragraphs.nth(0).getAttribute("data-paragraph-key");
-  await expect.poll(() => storedCurrentMaterialReadingParagraphKey(page))
-    .toBe(firstParagraphKey);
-  await page.reload();
-  await expect(
-    page.locator("[data-reading-paragraph]").nth(0)
-      .getByRole("button", { name: "標記目前閱讀段落" }),
-  ).toHaveAttribute("aria-pressed", "true");
-
-  const reloadedMarkers = page.getByRole("button", { name: "標記目前閱讀段落" });
-  await reloadedMarkers.nth(1).focus();
-  await page.keyboard.press("Enter");
-  await expect(reloadedMarkers.nth(0)).toHaveAttribute("aria-pressed", "false");
-  await expect(reloadedMarkers.nth(1)).toHaveAttribute("aria-pressed", "true");
 });
 
 test("marks every word in the material as known from the footer action", async ({ page }) => {
@@ -120,9 +121,8 @@ test("marks every word in the material as known from the footer action", async (
   );
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
-  const firstMarker = page.getByRole("button", { name: "標記目前閱讀段落" }).first();
-  await firstMarker.click();
-  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  const firstMarker = await setReadingAnchor(page);
+  await expect(firstMarker).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "runs"]);
 
@@ -138,12 +138,11 @@ test("marks every word in the material as known from the footer action", async (
   await expect(page.getByText("已將本篇全部單字標記為認識。", { exact: true })).toHaveCount(0);
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
-  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await expect(firstMarker).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
-    .toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
   await expect(storedCurrentMaterialKnownWords(page))
     .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
 });
@@ -166,11 +165,12 @@ test("rolls back reading position and words when the progress transaction fails"
   await page.waitForURL(/#\/materials\/[^/]+$/);
   await page.evaluate(() => sessionStorage.setItem("simulateProgressFailure", "true"));
 
-  const marker = page.getByRole("button", { name: "標記目前閱讀段落" }).first();
-  await marker.click();
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await page.locator("[data-reading-paragraph]").first().locator(".reading-word").first().click();
 
   await expect(page.getByRole("alert")).toContainText("學習進度更新失敗");
-  await expect(marker).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "設定閱讀錨點" }))
+    .toHaveAttribute("aria-pressed", "false");
   await expect(storedCurrentMaterialKnownWords(page)).resolves.toEqual([]);
   const storedReadingParagraphKey = await page.evaluate(async () => {
     const materialId = location.hash.match(/^#\/materials\/([^/?]+)/)?.[1];
@@ -206,7 +206,7 @@ test("keeps paragraph and footer progress actions mutually exclusive", async ({ 
     });
     const transaction = database.transaction(["materials", "vocabulary"], "readwrite");
     const store = transaction.objectStore("materials");
-    const releaseAt = performance.now() + 250;
+    const releaseAt = performance.now() + 1000;
     const keepAlive = (): void => {
       const request = store.get(materialId);
       request.addEventListener("success", () => {
@@ -217,16 +217,15 @@ test("keeps paragraph and footer progress actions mutually exclusive", async ({ 
     transaction.addEventListener("complete", () => database.close(), { once: true });
   });
 
-  const markers = page.getByRole("button", { name: "標記目前閱讀段落" });
-  const firstMarker = markers.first();
+  const anchorTool = page.getByRole("button", { name: "設定閱讀錨點" });
   const completionButton = page.getByRole("button", { name: "完成本次學習" });
-  await firstMarker.click();
+  await anchorTool.click();
+  await page.locator("[data-reading-paragraph]").first().locator(".reading-word").first().click();
 
-  await expect(firstMarker).toHaveAttribute("aria-busy", "true");
-  await expect(markers.nth(1)).toBeDisabled();
+  await expect(page.getByRole("button", { name: /閱讀錨點/ }).first()).toBeDisabled();
   await expect(completionButton).toBeDisabled();
   await completionButton.click({ force: true });
-  await expect(firstMarker).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "runs"]);
 });
@@ -237,14 +236,13 @@ test("synchronizes reading position and known words across tabs", async ({ conte
   await page.waitForURL(/#\/materials\/[^/]+$/);
   const secondPage = await context.newPage();
   await secondPage.goto(page.url());
-  const firstPageMarker = page.getByRole("button", { name: "標記目前閱讀段落" }).first();
-  const secondPageMarker = secondPage.getByRole("button", { name: "標記目前閱讀段落" }).first();
-  await expect(secondPageMarker).toHaveAttribute("aria-pressed", "false");
+  await expect(secondPage.getByRole("button", { name: "設定閱讀錨點" }))
+    .toHaveAttribute("aria-pressed", "false");
 
-  await firstPageMarker.click();
+  const firstPageMarker = await setReadingAnchor(page);
 
-  await expect(firstPageMarker).toHaveAttribute("aria-pressed", "true");
-  await expect(secondPageMarker).toHaveAttribute("aria-pressed", "true");
+  await expect(firstPageMarker).toBeVisible();
+  await expect(secondPage.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(secondPage))
     .toEqual(["a", "bear", "runs"]);
 });
@@ -387,20 +385,20 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(readingGroup).toHaveCount(1);
   await expect(readingGroup).toContainText("EN Birds can fly.");
   await expect(readingGroup).toContainText("中 birds 是鳥類。");
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" })).toHaveCount(1);
+  await expect(page.getByRole("toolbar", { name: "教材閱讀工具" })).toHaveCount(1);
   await expect(page.locator(".reading-line-wrap.is-translation")).toHaveCount(1);
   await expect(page.locator('[data-word="birds"]')).toHaveCount(1);
   await expect(page.locator('[data-word="en"]')).toHaveCount(0);
   await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
-  const paragraphToolbar = readingGroup.getByRole("group", { name: "段落閱讀工具" });
-  await expect(paragraphToolbar).toHaveClass(/paragraph-toolbar/);
-  await expect(paragraphToolbar.getByRole("button")).toHaveCount(4);
+  const readingToolbar = page.getByRole("toolbar", { name: "教材閱讀工具" });
+  await expect(readingToolbar).toHaveClass(/reading-toolbar/);
+  await expect(readingToolbar.getByRole("button")).toHaveCount(4);
   await expect(page.getByRole("button", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /編輯這段中文解釋/ })).toHaveCount(0);
-  await paragraphToolbar.getByRole("button", { name: "隱藏這段中文翻譯" }).click();
+  await readingToolbar.getByRole("button", { name: "隱藏全部中文翻譯" }).click();
   await expect(page.locator(".reading-line-wrap.is-translation .reading-line"))
     .toHaveClass(/translation-mask/);
-  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "回到閱讀錨點" })).toBeHidden();
 
   const migrated = await page.evaluate(async (materialId) => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -452,7 +450,7 @@ test("classifies structured reading content and repairs polluted learning data",
   });
 });
 
-test("offers a return action whenever a reading position is marked", async ({ page }) => {
+test("keeps the single toolbar available and returns to a reading anchor", async ({ page }) => {
   const paragraphs = Array.from(
     { length: 24 },
     (_, index) => {
@@ -467,37 +465,35 @@ test("offers a return action whenever a reading position is marked", async ({ pa
 
   const readingParagraphs = page.locator("[data-reading-paragraph]");
   const lastParagraph = readingParagraphs.last();
-  const lastMarker = lastParagraph.getByRole("button", { name: "標記目前閱讀段落" });
-  const returnAction = page.getByRole("button", { name: "回到閱讀位置" });
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await lastParagraph.locator(".reading-word").first().click();
+  const lastMarker = lastParagraph.getByRole("button", { name: "管理本段閱讀錨點" });
+  const returnAction = page.getByRole("button", { name: "回到閱讀錨點" });
 
-  await lastMarker.scrollIntoViewIfNeeded();
-  await lastMarker.click();
-  await expect(lastMarker).toHaveClass(/is-active/);
+  await expect(lastMarker).toBeVisible();
   await expect(lastParagraph.locator(".reading-line-wrap").first())
     .toHaveClass(/is-reading-position/);
   await expect(lastParagraph.locator(".reading-line-wrap.is-translation"))
     .not.toHaveClass(/is-reading-position/);
   await expect(returnAction).toBeVisible();
-  expect(await returnAction.evaluate((button) => Boolean(button.closest(".material-heading")))).toBe(true);
-  await expect(returnAction).toHaveClass(/is-floating/);
-  await expect(returnAction).toHaveCSS("position", "fixed");
+  await expect(page.getByRole("toolbar", { name: "教材閱讀工具" })).toHaveCSS("position", "sticky");
   await expect(page.locator(".material-view-switcher")).toHaveCount(0);
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(lastMarker).not.toBeInViewport();
   await expect(returnAction).toBeVisible();
-  await expect(returnAction).not.toHaveClass(/is-floating/);
   await returnAction.focus();
   await page.keyboard.press("Enter");
   await expect(returnAction).toBeVisible();
   await expect(lastMarker).toBeFocused();
   await expect(lastParagraph).toBeInViewport();
 
-  await lastMarker.click();
-  await expect(lastMarker).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Enter");
+  await page.getByRole("menuitem", { name: "移除錨點" }).click();
+  await expect(lastMarker).toHaveCount(0);
   await expect(lastParagraph.locator(".reading-line-wrap").first())
     .not.toHaveClass(/is-reading-position/);
-  await expect(returnAction).toBeHidden();
+  await expect(page.getByRole("button", { name: "設定閱讀錨點" })).toBeVisible();
 });
 
 test("returns to the marked paragraph on the first click after entering from home", async ({ page }) => {
@@ -510,18 +506,18 @@ test("returns to the marked paragraph on the first click after entering from hom
 
   const readingParagraphs = page.locator("[data-reading-paragraph]");
   const markedParagraph = readingParagraphs.nth(52);
-  const markedButton = markedParagraph.getByRole("button", { name: "標記目前閱讀段落" });
-  await markedButton.scrollIntoViewIfNeeded();
-  await markedButton.click();
-  await expect(markedButton).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await markedParagraph.locator(".reading-word").first().click();
+  const markedButton = markedParagraph.getByRole("button", { name: "管理本段閱讀錨點" });
+  await expect(markedButton).toBeVisible();
 
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "回到閱讀位置" }).click();
+  await page.getByRole("button", { name: "回到閱讀錨點" }).click();
 
   await expect(markedParagraph).toBeInViewport();
   await expect(markedButton).toBeFocused();
-  await expect(markedButton).toHaveClass(/is-active/);
+  await expect(markedButton).toBeVisible();
 });
 
 test("centers the marked paragraph on the first click immediately after reloading", async ({ page }) => {
@@ -533,14 +529,14 @@ test("centers the marked paragraph on the first click immediately after reloadin
   await page.getByRole("link", { name: "開始閱讀" }).click();
 
   const markedParagraph = page.locator("[data-reading-paragraph]").nth(52);
-  const markedButton = markedParagraph.getByRole("button", { name: "標記目前閱讀段落" });
-  await markedButton.scrollIntoViewIfNeeded();
-  await markedButton.click();
-  await expect(markedButton).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await markedParagraph.locator(".reading-word").first().click();
+  const markedButton = markedParagraph.getByRole("button", { name: "管理本段閱讀錨點" });
+  await expect(markedButton).toBeVisible();
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.reload();
-  await page.getByRole("button", { name: "回到閱讀位置" }).click();
+  await page.getByRole("button", { name: "回到閱讀錨點" }).click();
 
   await expect.poll(async () => markedParagraph.evaluate((paragraph) => {
     const bounds = paragraph.getBoundingClientRect();
@@ -578,7 +574,7 @@ test("ignores an orphaned reading position stored in IndexedDB", async ({ page }
   }, materialId);
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
+  await expect(page.getByRole("button", { name: "回到閱讀錨點" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "設定閱讀錨點" }))
     .toHaveAttribute("aria-pressed", "false");
 });

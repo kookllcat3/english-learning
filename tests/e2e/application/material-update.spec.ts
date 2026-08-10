@@ -118,7 +118,8 @@ test("exports and updates the same text material while preserving compatible lea
   await expect(page).toHaveURL(/#\/materials\//);
   await seedKnownWordsForCurrentMaterial(page, ["bear", "fox"]);
   await seedSharedNote(page);
-  await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await page.locator("[data-reading-paragraph]").first().locator(".reading-word").first().click();
   await page.goto("/");
   const before = await storedMaterial(page, title);
 
@@ -230,7 +231,9 @@ test("exports an illustrated material as DOCX and imports it back with its image
   await page.getByRole("article").filter({ hasText: title }).getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("img", { name: "測試圖片" })).toBeVisible();
   await expect(page.getByText("圖片說明")).toBeVisible();
-  const visibleOrder = await page.locator(".reading-content > *").evaluateAll((elements) => (
+  const visibleOrder = await page.locator(
+    ".reading-content > .reading-paragraph, .reading-content > .reading-figure",
+  ).evaluateAll((elements) => (
     elements.map((element) => element.tagName.toLocaleLowerCase())
   ));
   expect(visibleOrder).toEqual(["div", "figure", "div"]);

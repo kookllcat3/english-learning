@@ -351,7 +351,7 @@ test("keeps translation text selectable while preserving its blur control", asyn
 
   const translationLine = page.locator(".reading-line-wrap.is-translation").first();
   const translationText = translationLine.locator(".reading-line");
-  const toggle = page.getByRole("button", { name: "隱藏這段中文翻譯" });
+  const toggle = page.getByRole("button", { name: "隱藏全部中文翻譯" });
   const textBounds = await translationText.boundingBox();
   if (!textBounds) throw new Error("translation line is not visible");
 

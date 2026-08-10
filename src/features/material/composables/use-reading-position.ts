@@ -1,8 +1,7 @@
-import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
+import { ref, type Ref } from "vue";
 
 interface ReadingPositionOptions {
   readingContainer: Ref<HTMLElement | null>;
-  returnActionAnchor: Ref<HTMLElement | null>;
   save: (paragraphKey: string | null) => Promise<boolean>;
 }
 
@@ -17,36 +16,10 @@ function waitForStableLayout(): Promise<void> {
   });
 }
 
-const FLOATING_ACTION_TOP_PX = 80;
-
 export function useReadingPosition(options: ReadingPositionOptions) {
   const currentParagraphKey = ref<string | null>(null);
-  const returnActionFloating = ref(false);
-  const showReturnAction = computed(() => currentParagraphKey.value !== null);
-  let returnActionObserver: IntersectionObserver | null = null;
-
-  function observeReturnAction(anchor: HTMLElement | null): void {
-    returnActionObserver?.disconnect();
-    returnActionObserver = null;
-    returnActionFloating.value = false;
-    if (!anchor || typeof IntersectionObserver === "undefined") return;
-
-    returnActionObserver = new IntersectionObserver(([entry]) => {
-      returnActionFloating.value = !entry.isIntersecting
-        && entry.boundingClientRect.top < FLOATING_ACTION_TOP_PX;
-    }, { rootMargin: `-${FLOATING_ACTION_TOP_PX}px 0px 0px` });
-    returnActionObserver.observe(anchor);
-  }
-
-  watch(options.returnActionAnchor, observeReturnAction);
-  watch(showReturnAction, (visible) => {
-    if (!visible) returnActionFloating.value = false;
-  });
-  onBeforeUnmount(() => returnActionObserver?.disconnect());
-
-  async function toggle(paragraphKey: string): Promise<void> {
-    const nextParagraphKey = currentParagraphKey.value === paragraphKey ? null : paragraphKey;
-    if (await options.save(nextParagraphKey)) currentParagraphKey.value = nextParagraphKey;
+  async function save(paragraphKey: string | null): Promise<void> {
+    if (await options.save(paragraphKey)) currentParagraphKey.value = paragraphKey;
   }
 
   async function returnToPosition(): Promise<void> {
@@ -57,22 +30,21 @@ export function useReadingPosition(options: ReadingPositionOptions) {
 
     let paragraph = findReadingParagraph(options.readingContainer.value, paragraphKey);
     if (!paragraph) return;
-    paragraph.scrollIntoView({ behavior: "auto", block: "center" });
+    const anchor = paragraph.querySelector<HTMLElement>('[aria-label="管理本段閱讀錨點"]');
+    (anchor ?? paragraph).scrollIntoView({ behavior: "auto", block: "center" });
     await waitForStableLayout();
     if (currentParagraphKey.value !== paragraphKey) return;
 
     paragraph = findReadingParagraph(options.readingContainer.value, paragraphKey);
     if (!paragraph) return;
-    paragraph.scrollIntoView({ behavior: "auto", block: "center" });
-    paragraph.querySelector<HTMLElement>('[aria-label="標記目前閱讀段落"]')
-      ?.focus({ preventScroll: true });
+    const stableAnchor = paragraph.querySelector<HTMLElement>('[aria-label="管理本段閱讀錨點"]');
+    (stableAnchor ?? paragraph).scrollIntoView({ behavior: "auto", block: "center" });
+    stableAnchor?.focus({ preventScroll: true });
   }
 
   return {
     currentParagraphKey,
-    returnActionFloating,
     returnToPosition,
-    showReturnAction,
-    toggle,
+    save,
   };
 }

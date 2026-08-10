@@ -22,9 +22,10 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
 
   await createMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await page.getByRole("button", { name: "標記目前閱讀段落" }).first().click();
   const firstParagraph = page.locator("[data-reading-paragraph]").first();
-  await firstParagraph.getByRole("button", { name: "開啟螢光筆工具" }).click();
+  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await firstParagraph.locator(".reading-word").first().click();
+  await page.getByRole("button", { name: "螢光筆" }).click();
   await firstParagraph.locator('[data-word="bear"]').first().click();
   await expect.poll(() => storedHighlights(page)).toHaveLength(1);
   await page.keyboard.press("Escape");
@@ -127,9 +128,8 @@ test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.getByRole("button", { name: "關閉", exact: true }).click();
   await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
   await page.getByRole("link", { name: "開始閱讀" }).click();
-  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }).first())
-    .toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "回到閱讀錨點" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
   await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/is-highlighted/);
   await expect.poll(() => storedHighlights(page)).toHaveLength(1);
   const restoredNotes = await storedWordNotes(page);
@@ -570,8 +570,8 @@ test("clears a legacy reading marker that points to a newly classified heading",
     .click();
 
   await expect(page.locator("[data-reading-paragraph]")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "回到閱讀位置" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "標記目前閱讀段落" }))
+  await expect(page.getByRole("button", { name: "回到閱讀錨點" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "設定閱讀錨點" }))
     .toHaveAttribute("aria-pressed", "false");
 });
 

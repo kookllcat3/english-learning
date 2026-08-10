@@ -53,13 +53,11 @@ const errorMessage = ref("");
 const actionError = ref("");
 const annotationBusy = ref(false);
 const annotationMode = ref<"highlight" | null>(null);
-const annotationParagraphKey = ref<string | null>(null);
 const activeHighlightId = ref<string | null>(null);
 const highlights = ref<MaterialHighlightAnnotationRecord[]>([]);
 const activeProgressOperation = ref<"completion" | string | null>(null);
 const completionError = ref("");
 const readingContainer = ref<HTMLElement | null>(null);
-const readingPositionReturnAnchor = ref<HTMLElement | null>(null);
 let loadSequence = 0;
 let progressSequence = 0;
 const pendingAnnotationActions: Array<{
@@ -77,9 +75,6 @@ const readingOccurrences = computed(() => readingWordOccurrencesForBlocks(
 ));
 const readingProgressBusy = computed(() => activeProgressOperation.value !== null);
 const markingAllWords = computed(() => activeProgressOperation.value === "completion");
-const savingReadingParagraphKey = computed(() => (
-  activeProgressOperation.value === "completion" ? null : activeProgressOperation.value
-));
 const allMaterialWordsKnown = computed(() => (
   hasMaterialWords.value
   && [...vocabularyProgress.value.values()].every((record) => record.learned)
@@ -96,20 +91,16 @@ function materialId(): string {
 
 function exitAnnotationMode(): void {
   annotationMode.value = null;
-  annotationParagraphKey.value = null;
   activeHighlightId.value = null;
   pendingAnnotationActions.splice(0);
 }
 
 const {
   currentParagraphKey,
-  returnActionFloating: readingPositionReturnFloating,
   returnToPosition: returnToReadingPosition,
-  showReturnAction: showReadingPositionReturn,
-  toggle: toggleReadingParagraph,
+  save: saveReadingParagraph,
 } = useReadingPosition({
   readingContainer,
-  returnActionAnchor: readingPositionReturnAnchor,
   save: saveReadingPosition,
 });
 
@@ -177,12 +168,12 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
   handleWordCardPointerDown(event);
-  const word = target.closest<HTMLElement>(".reading-word");
-  const isActiveAnnotationWord = Boolean(
-    annotationMode.value
-    && word?.dataset.paragraphKey === annotationParagraphKey.value,
-  );
-  if (annotationMode.value && !isActiveAnnotationWord) exitAnnotationMode();
+  const paragraph = target.closest<HTMLElement>("[data-reading-paragraph]");
+  const translation = target.closest(".reading-line-wrap.is-translation");
+  const isActiveAnnotationArea = Boolean(annotationMode.value && paragraph && !translation);
+  if (annotationMode.value && !isActiveAnnotationArea && !target.closest(".reading-toolbar")) {
+    exitAnnotationMode();
+  }
 }
 
 function unknownWords(words: string[]): string[] {
@@ -250,10 +241,7 @@ async function markAllMaterialWordsKnown(): Promise<void> {
   await saveProgress(readingProgressIndex.value.orderedUniqueWords, undefined, "completion");
 }
 
-function selectAnnotationTool(
-  paragraphKey: string,
-  mode: "highlight" | null,
-): void {
+function selectAnnotationTool(mode: "highlight" | null): void {
   if (mode === null) {
     exitAnnotationMode();
     return;
@@ -261,7 +249,6 @@ function selectAnnotationTool(
   wordCard.value?.close();
   pendingAnnotationActions.splice(0);
   annotationMode.value = mode;
-  annotationParagraphKey.value = paragraphKey;
   activeHighlightId.value = null;
 }
 
@@ -285,7 +272,9 @@ async function applyHighlight(paragraphKey: string, occurrenceKey: string): Prom
   }
   if (existing) return;
   const timestamp = new Date().toISOString();
-  const active = highlights.value.find((highlight) => highlight.id === activeHighlightId.value);
+  const active = highlights.value.find((highlight) => (
+    highlight.id === activeHighlightId.value && highlight.target.paragraphKey === paragraphKey
+  ));
   const orderedOccurrenceKeys = readingOccurrences.value
     .filter((occurrence) => occurrence.paragraphKey === paragraphKey)
     .map((occurrence) => occurrence.wordKey);
@@ -320,7 +309,7 @@ async function annotateWord(
   occurrenceKey: string,
   mode: "erase" | "highlight",
 ): Promise<void> {
-  if (!annotationMode.value || annotationParagraphKey.value !== paragraphKey) return;
+  if (!annotationMode.value) return;
   if (annotationBusy.value) {
     pendingAnnotationActions.push({ mode, occurrenceKey, paragraphKey });
     return;
@@ -336,10 +325,9 @@ async function annotateWord(
   } finally {
     annotationBusy.value = false;
     const pending = pendingAnnotationActions.shift();
-    if (
-      pending
-      && pending.paragraphKey === annotationParagraphKey.value
-    ) void annotateWord(pending.paragraphKey, pending.occurrenceKey, pending.mode);
+    if (pending && annotationMode.value) {
+      void annotateWord(pending.paragraphKey, pending.occurrenceKey, pending.mode);
+    }
   }
 }
 
@@ -416,17 +404,6 @@ onBeforeUnmount(() => {
         <p class="eyebrow">Reading material</p>
         <h1 id="material-title" :title="material.title">{{ material.title }}</h1>
         <p v-if="material.description" class="lead">{{ material.description }}</p>
-        <div ref="readingPositionReturnAnchor" class="material-heading__actions">
-          <button
-            v-if="showReadingPositionReturn"
-            class="reading-position-return"
-            :class="{ 'is-floating': readingPositionReturnFloating }"
-            type="button"
-            @click="returnToReadingPosition"
-          >
-            回到閱讀位置
-          </button>
-        </div>
       </section>
 
       <p v-if="actionError" class="form-message is-error" role="alert">{{ actionError }}</p>
@@ -436,13 +413,11 @@ onBeforeUnmount(() => {
           :active-word="activeWord"
           :annotation-busy="annotationBusy"
           :annotation-mode="annotationMode"
-          :annotation-paragraph-key="annotationParagraphKey"
           :blocks="material.contentBlocks"
           :current-paragraph-key="currentParagraphKey"
           :familiarity-levels="familiarityLevels"
           :highlights="highlights"
           :reading-progress-busy="readingProgressBusy"
-          :saving-reading-paragraph-key="savingReadingParagraphKey"
           :vocabulary-progress="vocabularyProgress"
           @mouseup="handleWordSelection"
           @dblclick="nextTick(handleWordSelection)"
@@ -451,8 +426,9 @@ onBeforeUnmount(() => {
           @activate="openWordCard"
           @annotate-word="annotateWord"
           @deactivate="scheduleWordCardClose"
+          @return-to-reading-paragraph="returnToReadingPosition"
+          @save-reading-paragraph="saveReadingParagraph"
           @select-annotation-tool="selectAnnotationTool"
-          @toggle-reading-paragraph="toggleReadingParagraph"
         />
       </article>
 

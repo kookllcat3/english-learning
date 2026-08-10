@@ -19,8 +19,7 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
 
   const translationLine = page.locator(".reading-line-wrap.is-translation").first();
   const translationText = translationLine.locator(".reading-line");
-  const firstParagraph = page.locator(".reading-paragraph").first();
-  const toggle = firstParagraph.getByRole("button", { name: "隱藏這段中文翻譯" });
+  const toggle = page.getByRole("button", { name: "隱藏全部中文翻譯" });
 
   await expect(toggle).toHaveCSS("pointer-events", "auto");
   await toggle.tap();
@@ -30,10 +29,11 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
 test("marks paragraph words through the reading position control with touch", async ({ page }) => {
   await createTouchMaterial(page);
 
-  const marker = page.getByRole("button", { name: "標記目前閱讀段落" });
+  const marker = page.getByRole("button", { name: "設定閱讀錨點" });
   await marker.tap();
+  await page.locator("[data-reading-paragraph]").first().tap({ position: { x: 120, y: 12 } });
 
-  await expect(marker).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["an", "original", "sentence"]);
   await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
@@ -42,16 +42,11 @@ test("marks paragraph words through the reading position control with touch", as
 test("adds and removes a highlight without opening the word card on touch", async ({ page }) => {
   await createTouchMaterial(page);
   const paragraph = page.locator("[data-reading-paragraph]").first();
-  const entry = paragraph.getByRole("button", { name: "開啟螢光筆工具" });
+  const entry = page.getByRole("button", { name: "螢光筆" });
   await entry.tap();
   await expect(paragraph.getByRole("group", { name: "選擇標記工具" })).toHaveCount(0);
 
-  const toolbar = paragraph.locator(".paragraph-toolbar");
-  const toolbarBox = await toolbar.boundingBox();
-  if (!toolbarBox) throw new Error("找不到段落工具列的位置");
-  await toolbar.tap({
-    position: { x: toolbarBox.width - 2, y: toolbarBox.height / 2 },
-  });
+  await entry.tap();
   await expect(entry).toHaveAttribute("aria-pressed", "false");
 
   await entry.tap();
@@ -76,8 +71,8 @@ test("adds and removes a highlight without opening the word card on touch", asyn
 
 test("prevents background touch scrolling while the word card is open", async ({ page }) => {
   await createTouchMaterial(page);
-  await page.locator("[data-reading-paragraph]").first()
-    .locator(".paragraph-toolbar__button").first().tap();
+  await page.getByRole("button", { name: "設定閱讀錨點" }).tap();
+  await page.locator("[data-reading-paragraph]").first().tap({ position: { x: 120, y: 12 } });
   await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
   await page.locator('[data-word="original"]').first().tap();
   await expect(page.locator(".word-card")).toBeVisible();
@@ -135,9 +130,10 @@ test("keeps primary reading actions operable on a tablet viewport", async ({ pag
   await page.setViewportSize({ width: 768, height: 1024 });
   await createTouchMaterial(page);
 
-  const marker = page.getByRole("button", { name: "標記目前閱讀段落" });
+  const marker = page.getByRole("button", { name: "設定閱讀錨點" });
   await marker.tap();
-  await expect(marker).toHaveAttribute("aria-pressed", "true");
+  await page.locator("[data-reading-paragraph]").first().tap({ position: { x: 120, y: 12 } });
+  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["an", "original", "sentence"]);
 

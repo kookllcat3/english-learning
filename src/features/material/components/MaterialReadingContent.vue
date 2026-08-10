@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type {
   ContentBlock,
   MaterialHighlightAnnotationRecord,
@@ -18,7 +18,7 @@ import {
   type FamiliarityPresentation,
 } from "../familiarity.js";
 import MaterialImage from "./MaterialImage.vue";
-import ParagraphToolbar from "./ParagraphToolbar.vue";
+import ReadingToolbar from "./ReadingToolbar.vue";
 
 interface TextSegment {
   delay?: number;
@@ -54,12 +54,10 @@ const props = defineProps<{
   activeWord: string;
   annotationBusy: boolean;
   annotationMode: "highlight" | null;
-  annotationParagraphKey: string | null;
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
   familiarityLevels: FamiliarityLevel[];
   readingProgressBusy: boolean;
-  savingReadingParagraphKey: string | null;
   highlights: MaterialHighlightAnnotationRecord[];
   vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
@@ -69,8 +67,9 @@ const emit = defineEmits<{
   annotateWord: [paragraphKey: string, occurrenceKey: string, mode: "erase" | "highlight"];
   deactivate: [];
   lookup: [word: string, rect: DOMRect, key: string];
-  selectAnnotationTool: [paragraphKey: string, mode: "highlight" | null];
-  toggleReadingParagraph: [paragraphKey: string];
+  returnToReadingParagraph: [];
+  saveReadingParagraph: [paragraphKey: string | null];
+  selectAnnotationTool: [mode: "highlight" | null];
 }>();
 interface AnnotationPointerState {
   lastOccurrenceKey: string;
@@ -89,30 +88,34 @@ const ANNOTATION_STROKE_SAMPLE_INTERVAL_PX = 4;
 let annotationPointer: AnnotationPointerState | null = null;
 let ignoreNextAnnotationClick = false;
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
-const hiddenTranslationParagraphs = ref(new Set<string>());
-const copyFeedback = ref<{ key: string; status: "error" | "success" } | null>(null);
+const activeSelectionTool = ref<"anchor" | "copy" | "move-anchor" | null>(null);
+const anchorMenuOpen = ref(false);
+const translationsHidden = ref(false);
+const copyFeedback = ref<"error" | "success" | null>(null);
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-function setCopyFeedback(key: string, status: "error" | "success"): void {
+function setCopyFeedback(status: "error" | "success"): void {
   if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
-  copyFeedback.value = { key, status };
+  copyFeedback.value = status;
   copyFeedbackTimer = setTimeout(() => {
     copyFeedback.value = null;
     copyFeedbackTimer = null;
   }, 1600);
 }
 
-async function copyParagraph(key: string, text: string): Promise<void> {
+async function copyParagraph(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
-    setCopyFeedback(key, "success");
+    setCopyFeedback("success");
   } catch {
-    setCopyFeedback(key, "error");
+    setCopyFeedback("error");
   }
 }
 
 onBeforeUnmount(() => {
   if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+  document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  document.removeEventListener("keydown", handleDocumentKeydown);
 });
 
 function textSegments(text: string): TextSegment[] {
@@ -194,9 +197,9 @@ const highlightIdByOccurrence = computed(() => new Map(
   ))),
 ));
 
-function annotationModeFor(paragraphKey: string): "highlight" | null {
-  return props.annotationParagraphKey === paragraphKey ? props.annotationMode : null;
-}
+const hasTranslations = computed(() => renderedBlocks.value.some((block) => (
+  block.type === "text" && block.paragraphs.some((paragraph) => paragraph.hasTranslation)
+)));
 
 function highlightIdFor(occurrenceKey: string): string | undefined {
   return highlightIdByOccurrence.value.get(occurrenceKey);
@@ -219,27 +222,31 @@ function hasFamiliarity(segment: TextSegment): boolean {
   return (presentationFor(segment)?.level.level ?? 0) > 0;
 }
 
-function isTranslationHidden(paragraphKey: string): boolean {
-  return hiddenTranslationParagraphs.value.has(paragraphKey);
-}
-
-function toggleTranslation(paragraphKey: string): void {
-  const nextHiddenParagraphs = new Set(hiddenTranslationParagraphs.value);
-  if (nextHiddenParagraphs.has(paragraphKey)) nextHiddenParagraphs.delete(paragraphKey);
-  else nextHiddenParagraphs.add(paragraphKey);
-  hiddenTranslationParagraphs.value = nextHiddenParagraphs;
-}
-
 function wordElement(target: EventTarget | null): HTMLElement | null {
   return target instanceof Element ? target.closest<HTMLElement>(".reading-word") : null;
 }
 
+function paragraphElement(target: EventTarget | null): HTMLElement | null {
+  return target instanceof Element
+    ? target.closest<HTMLElement>("[data-reading-paragraph]")
+    : null;
+}
+
+function isTranslationTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(".reading-line-wrap.is-translation"));
+}
+
+function paragraphSourceText(paragraphKey: string): string {
+  for (const block of renderedBlocks.value) {
+    if (block.type !== "text") continue;
+    const paragraph = block.paragraphs.find((candidate) => candidate.key === paragraphKey);
+    if (paragraph) return paragraph.sourceText;
+  }
+  return "";
+}
+
 function isAnnotationActiveFor(element: HTMLElement | null): boolean {
-  return Boolean(
-    element
-    && props.annotationMode
-    && element.dataset.paragraphKey === props.annotationParagraphKey,
-  );
+  return Boolean(element && props.annotationMode);
 }
 
 function annotationTarget(target: EventTarget | null): AnnotationTarget | null {
@@ -270,7 +277,7 @@ function annotateStrokeTarget(target: EventTarget | null): boolean {
 
 function activateWordElement(target: EventTarget | null): void {
   const element = wordElement(target);
-  if (props.annotationMode) return;
+  if (props.annotationMode || activeSelectionTool.value) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "focus");
@@ -279,7 +286,7 @@ function activateWordElement(target: EventTarget | null): void {
 function handlePointerOver(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (props.annotationMode) return;
+  if (props.annotationMode || activeSelectionTool.value) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const word = element.dataset.word;
   const key = element.dataset.wordKey;
@@ -289,7 +296,7 @@ function handlePointerOver(event: PointerEvent): void {
 function handlePointerOut(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (props.annotationMode) return;
+  if (props.annotationMode || activeSelectionTool.value) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
   if (nextElement?.closest(".word-card, .word-card-hover-bridge, .reading-word")) return;
@@ -298,13 +305,6 @@ function handlePointerOut(event: PointerEvent): void {
 
 function beginPointerInteraction(event: PointerEvent): void {
   const element = wordElement(event.target);
-  if (props.annotationMode && !isAnnotationActiveFor(element)) {
-    event.preventDefault();
-    touchStart = null;
-    emit("deactivate");
-    emit("selectAnnotationTool", props.annotationParagraphKey ?? "", null);
-    return;
-  }
   if (isAnnotationActiveFor(element) && event.pointerType !== "touch") {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
@@ -375,7 +375,7 @@ function cancelPointerInteraction(event: PointerEvent): void {
 
 function handleDoubleClick(event: MouseEvent): void {
   const element = wordElement(event.target);
-  if (props.annotationMode) return;
+  if (props.annotationMode || activeSelectionTool.value) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("lookup", word, element.getBoundingClientRect(), key);
@@ -396,7 +396,94 @@ function handleClick(event: MouseEvent): void {
     event.preventDefault();
     return;
   }
+  if (event.target instanceof Element && event.target.closest(".reading-toolbar, .reading-anchor")) {
+    return;
+  }
+  const paragraph = paragraphElement(event.target);
+  if (activeSelectionTool.value) {
+    if (!paragraph || isTranslationTarget(event.target)) {
+      activeSelectionTool.value = null;
+      return;
+    }
+    const paragraphKey = paragraph.dataset.paragraphKey;
+    if (!paragraphKey) return;
+    if (activeSelectionTool.value === "copy") {
+      activeSelectionTool.value = null;
+      void copyParagraph(paragraphSourceText(paragraphKey));
+    } else {
+      activeSelectionTool.value = null;
+      emit("saveReadingParagraph", paragraphKey);
+    }
+    event.preventDefault();
+    return;
+  }
+  if (props.annotationMode && (!paragraph || isTranslationTarget(event.target))) {
+    emit("selectAnnotationTool", null);
+    return;
+  }
   if (annotateWordElement(event.target)) event.preventDefault();
+}
+
+function clearSelectionTools(): void {
+  activeSelectionTool.value = null;
+  anchorMenuOpen.value = false;
+}
+
+function activateAnchorTool(): void {
+  anchorMenuOpen.value = false;
+  if (activeSelectionTool.value === "anchor" || activeSelectionTool.value === "move-anchor") {
+    activeSelectionTool.value = null;
+    return;
+  }
+  if (props.currentParagraphKey) {
+    clearSelectionTools();
+    emit("selectAnnotationTool", null);
+    emit("returnToReadingParagraph");
+    return;
+  }
+  emit("selectAnnotationTool", null);
+  activeSelectionTool.value = "anchor";
+}
+
+function activateCopyTool(): void {
+  emit("selectAnnotationTool", null);
+  anchorMenuOpen.value = false;
+  activeSelectionTool.value = activeSelectionTool.value === "copy" ? null : "copy";
+  copyFeedback.value = null;
+}
+
+function activateHighlightTool(): void {
+  clearSelectionTools();
+  emit("selectAnnotationTool", props.annotationMode ? null : "highlight");
+}
+
+function openAnchorMenu(): void {
+  clearSelectionTools();
+  emit("selectAnnotationTool", null);
+  anchorMenuOpen.value = true;
+}
+
+function moveAnchor(): void {
+  anchorMenuOpen.value = false;
+  activeSelectionTool.value = "move-anchor";
+}
+
+function removeAnchor(): void {
+  clearSelectionTools();
+  emit("saveReadingParagraph", null);
+}
+
+function handleDocumentPointerDown(event: PointerEvent): void {
+  if (!activeSelectionTool.value && !anchorMenuOpen.value) return;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest(".reading-toolbar, .reading-anchor")) return;
+  if (target?.closest(".reading-content")) return;
+  clearSelectionTools();
+}
+
+function handleDocumentKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Escape") return;
+  clearSelectionTools();
 }
 
 function handleWordKeydown(event: KeyboardEvent): void {
@@ -419,6 +506,17 @@ function handleWordKeydown(event: KeyboardEvent): void {
   event.preventDefault();
 }
 
+watch(() => props.currentParagraphKey, () => {
+  if (activeSelectionTool.value === "anchor" || activeSelectionTool.value === "move-anchor") {
+    activeSelectionTool.value = null;
+  }
+});
+
+onMounted(() => {
+  document.addEventListener("pointerdown", handleDocumentPointerDown);
+  document.addEventListener("keydown", handleDocumentKeydown);
+});
+
 </script>
 
 <template>
@@ -440,30 +538,57 @@ function handleWordKeydown(event: KeyboardEvent): void {
     @focusout="handleFocusOut"
     @keydown="handleWordKeydown"
   >
+    <ReadingToolbar
+      :annotation-active="annotationMode !== null"
+      :annotation-busy="annotationBusy"
+      :anchor-busy="readingProgressBusy"
+      :anchor-exists="currentParagraphKey !== null"
+      :anchor-selection-active="activeSelectionTool === 'anchor' || activeSelectionTool === 'move-anchor'"
+      :copy-active="activeSelectionTool === 'copy'"
+      :copy-status="copyFeedback"
+      :has-translations="hasTranslations"
+      :translations-hidden="translationsHidden"
+      @activate-anchor="activateAnchorTool"
+      @activate-copy="activateCopyTool"
+      @activate-highlight="activateHighlightTool"
+      @toggle-translations="translationsHidden = !translationsHidden"
+    />
     <template v-for="block in renderedBlocks" :key="block.key">
       <template v-if="block.type === 'text'">
         <div
           v-for="paragraph in block.paragraphs"
           :key="paragraph.key"
           class="reading-paragraph"
+          :class="{
+            'is-anchor-selection-target': activeSelectionTool === 'anchor'
+              || activeSelectionTool === 'move-anchor',
+            'is-copy-selection-target': activeSelectionTool === 'copy',
+          }"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
-          <ParagraphToolbar
-            v-if="paragraph.words.length > 0"
-            :annotation-busy="annotationBusy"
-            :annotation-mode="annotationModeFor(paragraph.key)"
-            :copy-status="copyFeedback?.key === paragraph.key ? copyFeedback.status : null"
-            :has-translation="paragraph.hasTranslation"
-            :is-current-reading-position="currentParagraphKey === paragraph.key"
-            :is-translation-hidden="isTranslationHidden(paragraph.key)"
-            :reading-position-disabled="readingProgressBusy"
-            :reading-position-loading="savingReadingParagraphKey === paragraph.key"
-            @copy="copyParagraph(paragraph.key, paragraph.sourceText)"
-            @select-annotation-tool="emit('selectAnnotationTool', paragraph.key, $event)"
-            @toggle-reading-position="emit('toggleReadingParagraph', paragraph.key)"
-            @toggle-translation="toggleTranslation(paragraph.key)"
-          />
+          <span
+            v-if="currentParagraphKey === paragraph.key"
+            class="reading-anchor"
+          >
+            <button
+              class="reading-anchor__button"
+              type="button"
+              aria-label="管理本段閱讀錨點"
+              aria-haspopup="menu"
+              :aria-expanded="anchorMenuOpen"
+              title="管理閱讀錨點"
+              @click.stop="openAnchorMenu"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M6 3h12v18l-6-4-6 4V3Z" />
+              </svg>
+            </button>
+            <span v-if="anchorMenuOpen" class="reading-anchor__menu" role="menu">
+              <button type="button" role="menuitem" @click.stop="moveAnchor">移動錨點</button>
+              <button type="button" role="menuitem" @click.stop="removeAnchor">移除錨點</button>
+            </span>
+          </span>
           <template v-for="line in paragraph.lines" :key="line.key">
             <span
               class="reading-line-wrap"
@@ -477,7 +602,7 @@ function handleWordKeydown(event: KeyboardEvent): void {
             <span
               class="reading-line"
               :class="{
-                'translation-mask': line.isTranslation && isTranslationHidden(paragraph.key),
+                'translation-mask': line.isTranslation && translationsHidden,
               }"
             >
             <template
@@ -491,10 +616,10 @@ function handleWordKeydown(event: KeyboardEvent): void {
                 'is-active': activeWord === `${line.key}-${segmentIndex}`,
                 'known-word': hasFamiliarity(segment),
                 'is-highlighted': highlightIdFor(`${line.key}-${segmentIndex}`),
-                'is-annotation-target': annotationModeFor(paragraph.key) !== null,
-                'is-highlight-target': annotationModeFor(paragraph.key) !== null
+                'is-annotation-target': annotationMode !== null,
+                'is-highlight-target': annotationMode !== null
                   && !highlightIdFor(`${line.key}-${segmentIndex}`),
-                'is-erase-target': annotationModeFor(paragraph.key) !== null
+                'is-erase-target': annotationMode !== null
                   && highlightIdFor(`${line.key}-${segmentIndex}`),
               }"
               :data-known-word="segment.word"

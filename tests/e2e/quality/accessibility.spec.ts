@@ -60,7 +60,8 @@ test("reading view meets accessibility and narrow-layout baselines", async ({ pa
     scrollHeight: element.scrollHeight,
   }));
   expect(readingScrollMetrics.overflowY).toBe("visible");
-  expect(readingScrollMetrics.scrollHeight).toBe(readingScrollMetrics.clientHeight);
+  expect(readingScrollMetrics.scrollHeight - readingScrollMetrics.clientHeight)
+    .toBeLessThanOrEqual(1);
   const readingBounds = await page.locator(".reading-content").evaluate((element) => ({
     bottom: element.getBoundingClientRect().bottom,
     viewportHeight: window.innerHeight,

@@ -85,8 +85,8 @@
 }
 .data-capacity-note p { margin: 3px 0 0; color: #6f5a3d; font-size: .84rem; }
 .material-guide-dialog {
-  width: min(620px, calc(100% - 32px));
-  height: min(880px, calc(100dvh - 32px));
+  width: min(900px, calc(100% - 32px));
+  height: min(720px, calc(100dvh - 32px));
 }
 .material-guide-dialog .dialog__body {
   display: flex;
@@ -97,19 +97,47 @@
 }
 .guide-steps {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin: 14px 0;
-  padding-left: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 22px;
+  padding: 0;
+  list-style: none;
 }
-.guide-steps li { padding-left: 4px; font-size: .9rem; }
-.guide-steps p { margin: 2px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.4; }
+.guide-steps li {
+  position: relative;
+  min-height: 74px;
+  padding: 14px 14px 12px 46px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfaf6;
+  font-size: .9rem;
+}
+.guide-steps li::before {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--navy);
+  content: counter(list-item);
+  font-size: .78rem;
+  font-weight: 800;
+}
+.guide-steps p { margin: 5px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.45; }
 .guide-prompt {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  margin-top: 10px;
+  margin-top: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f2f5f8;
 }
 .guide-prompt__heading {
   margin-bottom: 10px;
@@ -171,7 +199,7 @@
   overflow-y: auto;
   resize: none;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--ink);
   background: white;
   font: .88rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -181,13 +209,20 @@
 .copy-status__message { color: inherit; }
 
 @media (max-width: 560px) {
-  .material-guide-dialog .dialog__body { padding: 20px; }
-  .guide-steps {
-    gap: 7px;
-    margin-block: 10px;
+  .material-guide-dialog {
+    width: min(100% - 20px, 620px);
+    height: min(760px, calc(100dvh - 20px));
   }
-  .guide-steps li { padding-left: 2px; font-size: .9rem; }
+  .material-guide-dialog .dialog__body { padding: 16px; }
+  .guide-steps {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-block: 12px 16px;
+  }
+  .guide-steps li { min-height: 0; padding: 11px 12px 10px 43px; font-size: .88rem; }
+  .guide-steps li::before { top: 11px; left: 12px; }
   .guide-steps p { font-size: .8rem; line-height: 1.35; }
+  .guide-prompt { padding: 12px; border-radius: 13px; }
   .material-guide-dialog .guide-prompt__heading { margin-bottom: 7px; }
   .prompt-tabs { margin-bottom: 7px; }
   .prompt-tab { min-height: 38px; padding-block: 6px; }

@@ -54,21 +54,25 @@ defineExpose({ close, showModal });
     >
       <div class="dialog__body">
         <div class="dialog__heading">
-          <div>
+          <div class="dialog__heading-copy">
             <p class="eyebrow">{{ eyebrow }}</p>
             <h2 :id="titleId">{{ title }}</h2>
           </div>
           <button
-            class="icon-button"
+            class="dialog__close"
             type="button"
             aria-label="關閉"
             autofocus
             @click="close"
           >
-            ×
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 6 18 18M18 6 6 18" />
+            </svg>
           </button>
         </div>
-        <slot />
+        <div class="dialog__content">
+          <slot />
+        </div>
       </div>
     </dialog>
   </Teleport>

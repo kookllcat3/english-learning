@@ -34,8 +34,41 @@ test("home and shared dialogs meet the automated accessibility baseline", async 
 
   await page.getByRole("button", { name: "新增教材" }).click();
   const addDialog = page.getByRole("dialog", { name: "新增學習教材" });
+  const closeButton = addDialog.getByRole("button", { name: "關閉" });
   await expect(addDialog).toBeVisible();
-  await expect(addDialog.getByRole("button", { name: "關閉" })).toBeFocused();
+  await expect(closeButton).toBeFocused();
+  await expect(closeButton.locator("svg")).toHaveCount(1);
+  const closeButtonLayout = await closeButton.evaluate((button) => {
+    const buttonRect = button.getBoundingClientRect();
+    const headingRect = button.closest(".dialog__heading")?.getBoundingClientRect();
+    const dialogBody = button.closest<HTMLElement>(".dialog__body");
+    const dialogContentRect = dialogBody?.querySelector(".dialog__content")?.getBoundingClientRect();
+    const dialogBodyStyle = dialogBody ? getComputedStyle(dialogBody) : null;
+    return {
+      contentGap: headingRect && dialogContentRect ? dialogContentRect.top - headingRect.bottom : null,
+      height: buttonRect.height,
+      padding: dialogBodyStyle
+        ? [
+            dialogBodyStyle.paddingTop,
+            dialogBodyStyle.paddingRight,
+            dialogBodyStyle.paddingBottom,
+            dialogBodyStyle.paddingLeft,
+          ]
+        : [],
+      rightOffset: headingRect ? headingRect.right - buttonRect.right : null,
+      topOffset: headingRect ? buttonRect.top - headingRect.top : null,
+      width: buttonRect.width,
+    };
+  });
+  const expectedCloseButtonSize = (page.viewportSize()?.width ?? 0) <= 560 ? 44 : 40;
+  const expectedContentGap = (page.viewportSize()?.width ?? 0) <= 560 ? 20 : 24;
+  const expectedDialogPadding = (page.viewportSize()?.width ?? 0) <= 560 ? "20px" : "28px";
+  expect(closeButtonLayout.contentGap).toBeCloseTo(expectedContentGap, 0);
+  expect(closeButtonLayout.height).toBeCloseTo(expectedCloseButtonSize, 0);
+  expect(closeButtonLayout.width).toBeCloseTo(expectedCloseButtonSize, 0);
+  expect(closeButtonLayout.padding).toEqual(Array.from({ length: 4 }, () => expectedDialogPadding));
+  expect(closeButtonLayout.rightOffset).toBeCloseTo(0, 0);
+  expect(closeButtonLayout.topOffset).toBeCloseTo(0, 0);
   await expectNoAccessibilityViolations(page);
 
   await page.keyboard.press("Escape");
@@ -128,6 +161,30 @@ test("primary pages and data dialog remain responsive at supported breakpoints",
     expect(dialogBox).not.toBeNull();
     expect(dialogBox?.x ?? -1).toBeGreaterThanOrEqual(0);
     expect((dialogBox?.x ?? 0) + (dialogBox?.width ?? 0)).toBeLessThanOrEqual(viewport.width);
+    const dialogScrollMetrics = await dataDialog.evaluate((dialog) => {
+      const body = dialog.querySelector<HTMLElement>(".dialog__body")!;
+      const content = dialog.querySelector<HTMLElement>(".dialog__content")!;
+      const heading = dialog.querySelector<HTMLElement>(".dialog__heading")!;
+      const headingTopBeforeScroll = heading.getBoundingClientRect().top;
+      content.scrollTop = content.scrollHeight;
+      return {
+        bodyScrollTop: body.scrollTop,
+        contentHasHorizontalOverflow: content.scrollWidth > content.clientWidth,
+        contentHasVerticalOverflow: content.scrollHeight > content.clientHeight,
+        contentScrollTop: content.scrollTop,
+        headingTopAfterScroll: heading.getBoundingClientRect().top,
+        headingTopBeforeScroll,
+      };
+    });
+    expect(dialogScrollMetrics.bodyScrollTop).toBe(0);
+    expect(dialogScrollMetrics.contentHasHorizontalOverflow).toBe(false);
+    expect(dialogScrollMetrics.headingTopAfterScroll).toBeCloseTo(
+      dialogScrollMetrics.headingTopBeforeScroll,
+      3,
+    );
+    if (dialogScrollMetrics.contentHasVerticalOverflow) {
+      expect(dialogScrollMetrics.contentScrollTop).toBeGreaterThan(0);
+    }
     await page.keyboard.press("Escape");
 
     await page.getByRole("link", { name: "開始閱讀" }).click();

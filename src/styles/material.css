@@ -496,7 +496,7 @@
   );
 }
 .ai-assistant-dialog .dialog__body { box-sizing: border-box; max-height: inherit; }
-.ai-dialog-intro { margin: 16px 0 20px; color: var(--muted); }
+.ai-dialog-intro { margin: 0 0 20px; color: var(--muted); }
 .ai-guide { padding: 16px 18px; border-radius: 12px; background: #f1f4f9; }
 .ai-guide ol { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 22px; color: #4d586f; font-size: .86rem; }
 .ai-prompt-field { margin-bottom: 14px; }

@@ -333,8 +333,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dialog,
-  .dialog::backdrop,
-  .prompt-tab {
+  .dialog::backdrop {
     animation-duration: 0.01ms;
     transition-duration: 0.01ms;
   }

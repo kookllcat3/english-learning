@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import {
   getMaterialGuidePrompt,
   MATERIAL_GUIDE_PROMPT_MAX_LENGTH,
@@ -10,7 +10,7 @@ import { APP_VERSION } from "../../../core/app/app-version.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 import type { DialogController } from "../../../shared/components/base-dialog.js";
 
-type PromptType = Extract<MaterialGuidePromptType, "text">;
+type PromptType = MaterialGuidePromptType;
 
 const TEXT_PROMPT = `你是一位專業的英語教材編輯。請依照我提供的主題或原始內容，製作一份內容充實、可直接匯入英文學習網站的純文字教材。
 
@@ -61,13 +61,11 @@ const DOCX_PROMPT = `你是一位專業的英語教材編輯與圖文文件設�
 void DOCX_PROMPT;
 
 const dialog = ref<DialogController | null>(null);
-const promptType = ref<PromptType>("text");
 const status = ref("");
 const prompts = ref<Record<PromptType, string>>({
   text: TEXT_PROMPT,
 });
 const visiblePrompt = ref(TEXT_PROMPT);
-const currentPrompt = computed(() => prompts.value[promptType.value]);
 const isLoadingPrompts = ref(false);
 const promptSaveTimers: Partial<Record<PromptType, number>> = {};
 const pendingPromptSaves = new Set<Promise<void>>();
@@ -84,27 +82,21 @@ async function loadPrompts(): Promise<void> {
     await Promise.all(pendingPromptSaves);
     const text = await getMaterialGuidePrompt("text", TEXT_PROMPT);
     prompts.value = { text };
-    visiblePrompt.value = prompts.value[promptType.value];
+    visiblePrompt.value = prompts.value.text;
   } catch {
     prompts.value = { text: TEXT_PROMPT };
-    visiblePrompt.value = prompts.value[promptType.value];
+    visiblePrompt.value = prompts.value.text;
     status.value = "無法讀取已儲存的提示詞，目前顯示預設內容。";
   } finally {
     isLoadingPrompts.value = false;
   }
 }
 
-function selectPrompt(type: PromptType): void {
-  promptType.value = type;
-  status.value = "";
-  visiblePrompt.value = currentPrompt.value;
-}
-
 function updatePrompt(event: Event): void {
   const value = (event.target as HTMLTextAreaElement).value;
   visiblePrompt.value = value;
-  prompts.value[promptType.value] = value;
-  schedulePromptSave(promptType.value, value);
+  prompts.value.text = value;
+  schedulePromptSave("text", value);
 }
 
 function schedulePromptSave(type: PromptType, value: string): void {
@@ -139,12 +131,12 @@ function flushPromptSaves(): void {
 }
 
 async function copyPrompt(): Promise<void> {
-  if (!currentPrompt.value.trim()) {
+  if (!visiblePrompt.value.trim()) {
     status.value = "提示詞不可留白。";
     return;
   }
   try {
-    await navigator.clipboard.writeText(currentPrompt.value);
+    await navigator.clipboard.writeText(visiblePrompt.value);
     status.value = "已複製，可貼到你慣用的 AI 工具。";
   } catch {
     status.value = "複製失敗，請手動選取提示詞後按 Ctrl+C。";
@@ -190,7 +182,7 @@ onBeforeUnmount(() => {
         <div class="guide-prompt__title-row">
           <strong id="guide-prompt-title">AI 教材生成提示詞</strong>
           <button
-            class="icon-button guide-prompt__copy"
+            class="text-button guide-prompt__copy"
             type="button"
             aria-label="複製提示詞"
             title="複製提示詞"
@@ -200,24 +192,13 @@ onBeforeUnmount(() => {
               <rect x="8" y="8" width="11" height="11" rx="2" />
               <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
             </svg>
+            <span>複製提示詞</span>
           </button>
         </div>
       </div>
-      <div class="prompt-tabs" role="tablist" aria-label="提示詞版本">
-        <button
-          class="prompt-tab"
-          :class="{ 'is-active': promptType === 'text' }"
-          type="button"
-          role="tab"
-          :aria-selected="promptType === 'text'"
-          @click="selectPrompt('text')"
-        >
-          純文字
-        </button>
-      </div>
       <textarea
         :value="visiblePrompt"
-        :aria-label="promptType === 'text' ? '純文字教材生成提示詞' : '圖文教材生成提示詞'"
+        aria-label="純文字教材生成提示詞"
         :disabled="isLoadingPrompts"
         :maxlength="MATERIAL_GUIDE_PROMPT_MAX_LENGTH"
         rows="22"

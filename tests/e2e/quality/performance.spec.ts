@@ -4,7 +4,6 @@ const MAX_FIRST_CONTENTFUL_PAINT_MS = 2_000;
 const MAX_LARGE_MATERIAL_OPEN_MS = 2_000;
 const MAX_LAST_PARAGRAPH_PROGRESS_MS = 500;
 const MAX_DIALOG_OPEN_MS = 120;
-const MAX_PROMPT_TAB_SWITCH_MS = 150;
 
 async function waitForDialogOpen(dialog: import("@playwright/test").Locator): Promise<void> {
   await expect(dialog).toBeVisible();
@@ -42,7 +41,7 @@ test("keeps startup and large-material opening within the performance baseline",
   );
 });
 
-test("keeps dialogs and prompt tabs responsive", async ({ page }, testInfo) => {
+test("keeps dialogs responsive", async ({ page }, testInfo) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
@@ -77,20 +76,8 @@ test("keeps dialogs and prompt tabs responsive", async ({ page }, testInfo) => {
     promptCanScroll: true,
   });
 
-  const docxTab = guideDialog.getByRole("tab", { name: "圖文" });
-  const promptSwitchDuration = await page.evaluate(async () => {
-    const button = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-      .find((candidate) => candidate.textContent?.trim() === "圖文");
-    if (!button) throw new Error("DOCX prompt tab was not found.");
-    const startedAt = performance.now();
-    button.click();
-    await new Promise<void>((resolve) => requestAnimationFrame(() =>
-      requestAnimationFrame(() => resolve())));
-    return performance.now() - startedAt;
-  });
-  await expect(docxTab).toHaveClass(/is-active/);
-  await expect(guideDialog.locator("textarea")).toHaveValue(/圖文文件設計師/);
-  expect(promptSwitchDuration).toBeLessThan(MAX_PROMPT_TAB_SWITCH_MS);
+  await expect(guideDialog.getByRole("tablist")).toHaveCount(0);
+  await expect(guideDialog.getByRole("button", { name: "複製提示詞" })).toBeVisible();
 
   await guideDialog.getByRole("button", { name: "關閉" }).click();
   await expect(guideDialog).toBeHidden();
@@ -111,7 +98,6 @@ test("keeps dialogs and prompt tabs responsive", async ({ page }, testInfo) => {
 
   testInfo.annotations.push(
     { type: "guide-dialog", description: `${guideDuration} ms` },
-    { type: "prompt-tab-switch", description: `${promptSwitchDuration} ms` },
     { type: "data-dialog", description: `${dataDialogDuration} ms` },
   );
 });

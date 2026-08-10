@@ -197,63 +197,35 @@
   flex: 1;
   flex-direction: column;
   margin-top: 0;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #f2f5f8;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 .guide-prompt__heading {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-.guide-prompt__title-row { display: flex; align-items: center; gap: 4px; }
+.guide-prompt__title-row { display: flex; align-items: center; gap: 8px; }
 .guide-prompt__copy {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  place-items: center;
+  display: inline-flex;
+  width: auto;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px 10px;
+  white-space: nowrap;
 }
 .guide-prompt__copy svg {
   display: block;
-  width: 16px;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
 }
-.prompt-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-  margin-bottom: 10px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #ebe9e2;
-}
-.prompt-tab {
-  min-height: 42px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 9px;
-  color: var(--muted);
-  background: transparent;
-  font-weight: 800;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: color 120ms ease-out, background 120ms ease-out, box-shadow 120ms ease-out, transform 120ms ease-out;
-}
-.prompt-tab.is-active {
-  color: var(--navy);
-  background: white;
-  box-shadow: 0 3px 12px rgb(33 27 18 / 9%);
-}
-.prompt-tab:focus-visible {
-  outline: 3px solid rgb(39 52 78 / 18%);
-  outline-offset: 2px;
-}
-.prompt-tab:active { transform: scale(.985); }
 .guide-prompt textarea {
   width: 100%;
   min-height: 140px;
@@ -290,10 +262,8 @@
   .guide-steps li { min-height: 0; padding: 11px 12px 10px 43px; font-size: .88rem; }
   .guide-steps li::before { top: 11px; left: 12px; }
   .guide-steps p { font-size: .8rem; line-height: 1.35; }
-  .guide-prompt { padding: 12px; border-radius: 13px; }
+  .guide-prompt { padding-top: 16px; }
   .material-guide-dialog .guide-prompt__heading { margin-bottom: 7px; }
-  .prompt-tabs { margin-bottom: 7px; }
-  .prompt-tab { min-height: 38px; padding-block: 6px; }
   .guide-prompt textarea { min-height: 100px; padding: 10px; font-size: .8rem; }
   .copy-status { min-height: 18px; margin-top: 3px; font-size: .78rem; }
 }

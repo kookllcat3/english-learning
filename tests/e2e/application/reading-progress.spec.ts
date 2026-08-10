@@ -97,6 +97,35 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
   await anchorTool.click();
   await expect(toolbar).not.toContainText("選擇英文段落");
   await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(3);
+  await copyButton.click();
+  await expect(copyButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(3);
+  const highlightButton = toolbar.getByRole("button", { name: "螢光筆" });
+  await highlightButton.click();
+  await expect(highlightButton).toHaveAttribute("aria-pressed", "true");
+  await expect(copyButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(3);
+  const firstBookmarkButton = paragraphs.nth(0).getByRole("button", { name: anchorOptionName });
+  await expect.poll(async () => {
+    const bookmarkIconBox = await firstBookmarkButton.locator("svg").boundingBox();
+    const sourceTextTop = await paragraphs.nth(0).locator(".reading-line-wrap").first()
+      .evaluate((line) => {
+        const range = document.createRange();
+        range.selectNodeContents(line);
+        return range.getBoundingClientRect().top;
+      });
+    return bookmarkIconBox ? Math.abs(bookmarkIconBox.y - sourceTextTop - 4) : 999;
+  }).toBeLessThan(1.5);
+  const bookmarkButtons = page.locator(".reading-anchor__button");
+  await bookmarkButtons.evaluateAll((buttons) => {
+    buttons.forEach((button) => button.setAttribute("disabled", ""));
+  });
+  await expect.poll(async () => bookmarkButtons.evaluateAll((buttons) => [
+    ...new Set(buttons.map((button) => getComputedStyle(button).opacity)),
+  ])).toEqual(["1"]);
+  await bookmarkButtons.evaluateAll((buttons) => {
+    buttons.forEach((button) => button.removeAttribute("disabled"));
+  });
   const sourceLine = paragraphs.nth(0).locator(".reading-line-wrap").first();
   const translationLine = paragraphs.nth(0).locator(".reading-line-wrap.is-translation").first();
   await expect.poll(async () => {
@@ -105,12 +134,16 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
     return sourceBox && translationBox ? Math.abs(sourceBox.x - translationBox.x) : 999;
   }).toBeLessThan(1);
   await paragraphs.nth(0).getByRole("button", { name: anchorOptionName }).click();
+  await expect(highlightButton).toHaveAttribute("aria-pressed", "false");
   const anchor = selectedAnchor(paragraphs.nth(0));
   await expect(anchor).toHaveCount(1);
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["a", "bear", "runs"]);
 
+  await copyButton.click();
+  await expect(copyButton).toHaveAttribute("aria-pressed", "true");
   await paragraphs.nth(1).getByRole("button", { name: anchorOptionName }).click();
+  await expect(copyButton).toHaveAttribute("aria-pressed", "false");
   await expect(selectedAnchor(paragraphs.nth(1))).toHaveCount(1);
   await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(2);
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
@@ -122,7 +155,7 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
   await page.reload();
   const restoredAnchor = selectedAnchor(paragraphs.nth(1));
   await expect(restoredAnchor).toHaveCount(1);
-  await restoredAnchor.click();
+  await expect(page.locator(".reading-anchor__button")).toHaveCount(3);
   await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(2);
   await restoredAnchor.click();
   await expect(restoredAnchor).toHaveCount(0);
@@ -568,6 +601,7 @@ test("returns to the marked paragraph on the first click after entering from hom
 
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
   await page.getByRole("link", { name: "開始閱讀" }).click();
+  await expect(readingParagraphs.locator(".reading-anchor__button")).toHaveCount(90);
   await page.getByRole("button", { name: "回到閱讀書籤" }).click();
 
   await expect(markedParagraph).toBeInViewport();
@@ -591,6 +625,7 @@ test("centers the marked paragraph on the first click immediately after reloadin
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.reload();
+  await expect(page.locator("[data-reading-paragraph] .reading-anchor__button")).toHaveCount(90);
   await page.getByRole("button", { name: "回到閱讀書籤" }).click();
 
   await expect.poll(async () => markedParagraph.evaluate((paragraph) => {

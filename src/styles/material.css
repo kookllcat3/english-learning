@@ -175,7 +175,7 @@
 .reading-anchor {
   position: absolute;
   z-index: 5;
-  top: .12em;
+  top: .58em;
   left: 0;
   font: 700 .76rem/1.2 Inter, system-ui, sans-serif;
 }
@@ -189,7 +189,7 @@
   color: #6f7788;
   background: transparent;
   cursor: pointer;
-  place-items: center;
+  place-items: start center;
   touch-action: manipulation;
   user-select: none;
 }
@@ -208,7 +208,7 @@
   outline-offset: 2px;
 }
 .reading-anchor__button:hover { color: var(--accent); }
-.reading-anchor__button:disabled { opacity: .45; cursor: wait; }
+.reading-anchor__button:disabled { opacity: 1; cursor: wait; }
 .reading-paragraph.is-anchor-selection-target:hover,
 .reading-paragraph.is-anchor-selection-target:focus-within,
 .reading-paragraph.is-copy-selection-target:hover,
@@ -228,6 +228,7 @@
   .reading-content { --reading-gutter: 24px; }
   .reading-toolbar { top: 72px; }
   .reading-toolbar__button { width: 36px; height: 32px; }
+  .reading-anchor { top: .42em; }
   .reading-content .reading-line.translation-mask {
     --translation-blur-radius: 3px;
   }

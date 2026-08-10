@@ -89,7 +89,8 @@ const COPY_FEEDBACK_DURATION_MS = 3000;
 let annotationPointer: AnnotationPointerState | null = null;
 let ignoreNextAnnotationClick = false;
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
-const activeSelectionTool = ref<"anchor" | "copy" | null>(null);
+const anchorSelectionActive = ref(props.currentParagraphKey !== null);
+const copySelectionActive = ref(false);
 const translationsHidden = ref(false);
 const copyFeedback = ref<"error" | "success" | null>(null);
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -277,7 +278,7 @@ function annotateStrokeTarget(target: EventTarget | null): boolean {
 
 function activateWordElement(target: EventTarget | null): void {
   const element = wordElement(target);
-  if (props.annotationMode || activeSelectionTool.value) return;
+  if (props.annotationMode || copySelectionActive.value) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "focus");
@@ -286,7 +287,7 @@ function activateWordElement(target: EventTarget | null): void {
 function handlePointerOver(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (props.annotationMode || activeSelectionTool.value) return;
+  if (props.annotationMode || copySelectionActive.value) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const word = element.dataset.word;
   const key = element.dataset.wordKey;
@@ -296,7 +297,7 @@ function handlePointerOver(event: PointerEvent): void {
 function handlePointerOut(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (props.annotationMode || activeSelectionTool.value) return;
+  if (props.annotationMode || copySelectionActive.value) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
   if (nextElement?.closest(".word-card, .word-card-hover-bridge, .reading-word")) return;
@@ -305,7 +306,7 @@ function handlePointerOut(event: PointerEvent): void {
 
 function beginPointerInteraction(event: PointerEvent): void {
   const element = wordElement(event.target);
-  if (activeSelectionTool.value) {
+  if (copySelectionActive.value) {
     touchStart = null;
     return;
   }
@@ -379,7 +380,7 @@ function cancelPointerInteraction(event: PointerEvent): void {
 
 function handleDoubleClick(event: MouseEvent): void {
   const element = wordElement(event.target);
-  if (props.annotationMode || activeSelectionTool.value) return;
+  if (props.annotationMode || copySelectionActive.value) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("lookup", word, element.getBoundingClientRect(), key);
@@ -403,19 +404,16 @@ function handleClick(event: MouseEvent): void {
   if (event.target instanceof Element && event.target.closest(".reading-toolbar, .reading-anchor")) {
     return;
   }
-  if (activeSelectionTool.value === "anchor") return;
   const paragraph = paragraphElement(event.target);
-  if (activeSelectionTool.value) {
+  if (copySelectionActive.value) {
     if (!paragraph || isTranslationTarget(event.target)) {
-      activeSelectionTool.value = null;
+      copySelectionActive.value = false;
       return;
     }
     const paragraphKey = paragraph.dataset.paragraphKey;
     if (!paragraphKey) return;
-    if (activeSelectionTool.value === "copy") {
-      activeSelectionTool.value = null;
-      void copyParagraph(paragraphSourceText(paragraphKey));
-    }
+    copySelectionActive.value = false;
+    void copyParagraph(paragraphSourceText(paragraphKey));
     event.preventDefault();
     return;
   }
@@ -427,48 +425,47 @@ function handleClick(event: MouseEvent): void {
 }
 
 function clearSelectionTools(): void {
-  activeSelectionTool.value = null;
+  anchorSelectionActive.value = false;
+  copySelectionActive.value = false;
 }
 
 function activateAnchorTool(): void {
-  if (activeSelectionTool.value === "anchor") {
+  if (anchorSelectionActive.value) {
     if (props.currentParagraphKey) emit("returnToReadingParagraph");
-    else activeSelectionTool.value = null;
+    else anchorSelectionActive.value = false;
     return;
   }
   if (props.currentParagraphKey) {
-    clearSelectionTools();
-    emit("selectAnnotationTool", null);
     emit("returnToReadingParagraph");
     return;
   }
-  emit("selectAnnotationTool", null);
-  activeSelectionTool.value = "anchor";
+  anchorSelectionActive.value = true;
 }
 
 function activateCopyTool(): void {
   emit("selectAnnotationTool", null);
-  activeSelectionTool.value = activeSelectionTool.value === "copy" ? null : "copy";
+  copySelectionActive.value = !copySelectionActive.value;
   copyFeedback.value = null;
 }
 
 function activateHighlightTool(): void {
-  clearSelectionTools();
+  copySelectionActive.value = false;
   emit("selectAnnotationTool", props.annotationMode ? null : "highlight");
 }
 
 function handleAnchorClick(event: MouseEvent, paragraphKey: string): void {
   event.stopPropagation();
+  copySelectionActive.value = false;
   emit("selectAnnotationTool", null);
-  if (activeSelectionTool.value !== "anchor") {
-    activeSelectionTool.value = "anchor";
+  if (!anchorSelectionActive.value) {
+    anchorSelectionActive.value = true;
     return;
   }
   emit("saveReadingParagraph", props.currentParagraphKey === paragraphKey ? null : paragraphKey);
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
-  if (!activeSelectionTool.value) return;
+  if (!anchorSelectionActive.value && !copySelectionActive.value) return;
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest(".reading-toolbar, .reading-anchor")) return;
   if (target?.closest(".reading-content")) return;
@@ -531,8 +528,8 @@ onMounted(() => {
       :annotation-busy="annotationBusy"
       :anchor-busy="readingProgressBusy"
       :anchor-exists="currentParagraphKey !== null"
-      :anchor-selection-active="activeSelectionTool === 'anchor'"
-      :copy-active="activeSelectionTool === 'copy'"
+      :anchor-selection-active="anchorSelectionActive"
+      :copy-active="copySelectionActive"
       :has-translations="hasTranslations"
       :translations-hidden="translationsHidden"
       @activate-anchor="activateAnchorTool"
@@ -554,15 +551,15 @@ onMounted(() => {
           :key="paragraph.key"
           class="reading-paragraph"
           :class="{
-            'is-anchor-selection-target': activeSelectionTool === 'anchor',
-            'is-copy-selection-target': activeSelectionTool === 'copy',
+            'is-anchor-selection-target': anchorSelectionActive,
+            'is-copy-selection-target': copySelectionActive,
           }"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
           <span
             v-if="paragraph.role === 'source' && (
-              activeSelectionTool === 'anchor' || currentParagraphKey === paragraph.key
+              anchorSelectionActive || currentParagraphKey === paragraph.key
             )"
             class="reading-anchor"
             :class="{ 'is-selected': currentParagraphKey === paragraph.key }"
@@ -572,14 +569,14 @@ onMounted(() => {
               :class="{ 'is-selected': currentParagraphKey === paragraph.key }"
               type="button"
               :aria-label="currentParagraphKey === paragraph.key
-                ? activeSelectionTool === 'anchor'
+                ? anchorSelectionActive
                   ? '移除此段閱讀書籤'
                   : '編輯閱讀書籤'
                 : '將閱讀書籤設在此段'"
               :aria-pressed="currentParagraphKey === paragraph.key"
               :disabled="readingProgressBusy"
               :title="currentParagraphKey === paragraph.key
-                ? activeSelectionTool === 'anchor'
+                ? anchorSelectionActive
                   ? '移除此段閱讀書籤'
                   : '顯示所有段落書籤'
                 : '將閱讀書籤移到此段'"

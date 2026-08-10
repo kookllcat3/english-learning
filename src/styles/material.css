@@ -144,6 +144,11 @@
   background: #533a82;
   outline: none;
 }
+.reading-toolbar__button:disabled:not(.is-loading) {
+  color: #9aa1ad;
+  background: transparent;
+  cursor: default;
+}
 .reading-toolbar__button.is-loading:disabled { cursor: wait; }
 .reading-toolbar__button.is-loading svg { animation: reading-toolbar-loading 0.8s linear infinite; }
 

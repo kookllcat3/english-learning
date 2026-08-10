@@ -31,8 +31,6 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
 test("marks paragraph words through the reading position control with touch", async ({ page }) => {
   await createTouchMaterial(page);
 
-  const marker = page.getByRole("button", { name: "設定閱讀書籤" });
-  await marker.tap();
   const paragraph = page.locator("[data-reading-paragraph]").first();
   await paragraph.getByRole("button", { name: anchorOptionName }).tap();
 
@@ -57,7 +55,6 @@ test("switches a reading bookmark with touch gutter buttons", async ({ page }) =
     .getByRole("link", { name: "開始閱讀" }).click();
 
   const paragraphs = page.locator("[data-reading-paragraph]");
-  await page.getByRole("button", { name: "設定閱讀書籤" }).tap();
   await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(2);
   await paragraphs.nth(0).getByRole("button", { name: anchorOptionName }).tap();
   await expect(paragraphs.nth(0).locator(".reading-anchor__button.is-selected")).toBeVisible();
@@ -98,7 +95,6 @@ test("adds and removes a highlight without opening the word card on touch", asyn
 
 test("prevents background touch scrolling while the word card is open", async ({ page }) => {
   await createTouchMaterial(page);
-  await page.getByRole("button", { name: "設定閱讀書籤" }).tap();
   await page.locator("[data-reading-paragraph]").first()
     .getByRole("button", { name: anchorOptionName }).tap();
   await page.locator(".material-heading").tap({ position: { x: 2, y: 2 } });
@@ -159,8 +155,6 @@ test("keeps primary reading actions operable on a tablet viewport", async ({ pag
   await page.setViewportSize({ width: 768, height: 1024 });
   await createTouchMaterial(page);
 
-  const marker = page.getByRole("button", { name: "設定閱讀書籤" });
-  await marker.tap();
   const paragraph = page.locator("[data-reading-paragraph]").first();
   await paragraph.getByRole("button", { name: anchorOptionName }).tap();
   await expect(paragraph.locator(".reading-anchor__button.is-selected")).toBeVisible();

@@ -89,7 +89,6 @@ const COPY_FEEDBACK_DURATION_MS = 3000;
 let annotationPointer: AnnotationPointerState | null = null;
 let ignoreNextAnnotationClick = false;
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
-const anchorSelectionActive = ref(props.currentParagraphKey !== null);
 const copySelectionActive = ref(false);
 const translationsHidden = ref(false);
 const copyFeedback = ref<"error" | "success" | null>(null);
@@ -424,8 +423,7 @@ function handleClick(event: MouseEvent): void {
   if (annotateWordElement(event.target)) event.preventDefault();
 }
 
-function clearSelectionTools(): void {
-  anchorSelectionActive.value = false;
+function clearCopySelection(): void {
   copySelectionActive.value = false;
 }
 
@@ -436,16 +434,7 @@ function deactivateTransientTools(): void {
 
 function activateAnchorTool(): void {
   deactivateTransientTools();
-  if (anchorSelectionActive.value) {
-    if (props.currentParagraphKey) emit("returnToReadingParagraph");
-    else anchorSelectionActive.value = false;
-    return;
-  }
-  if (props.currentParagraphKey) {
-    emit("returnToReadingParagraph");
-    return;
-  }
-  anchorSelectionActive.value = true;
+  if (props.currentParagraphKey) emit("returnToReadingParagraph");
 }
 
 function activateCopyTool(): void {
@@ -462,10 +451,6 @@ function activateHighlightTool(): void {
 function handleAnchorClick(event: MouseEvent, paragraphKey: string): void {
   event.stopPropagation();
   deactivateTransientTools();
-  if (!anchorSelectionActive.value) {
-    anchorSelectionActive.value = true;
-    return;
-  }
   emit("saveReadingParagraph", props.currentParagraphKey === paragraphKey ? null : paragraphKey);
 }
 
@@ -475,16 +460,16 @@ function toggleTranslations(): void {
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
-  if (!anchorSelectionActive.value && !copySelectionActive.value) return;
+  if (!copySelectionActive.value) return;
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest(".reading-toolbar, .reading-anchor")) return;
   if (target?.closest(".reading-content")) return;
-  clearSelectionTools();
+  clearCopySelection();
 }
 
 function handleDocumentKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
-  clearSelectionTools();
+  clearCopySelection();
 }
 
 function handleWordKeydown(event: KeyboardEvent): void {
@@ -538,7 +523,6 @@ onMounted(() => {
       :annotation-busy="annotationBusy"
       :anchor-busy="readingProgressBusy"
       :anchor-exists="currentParagraphKey !== null"
-      :anchor-selection-active="anchorSelectionActive"
       :copy-active="copySelectionActive"
       :has-translations="hasTranslations"
       :translations-hidden="translationsHidden"
@@ -561,16 +545,14 @@ onMounted(() => {
           :key="paragraph.key"
           class="reading-paragraph"
           :class="{
-            'is-anchor-selection-target': anchorSelectionActive,
+            'is-anchor-selection-target': paragraph.role === 'source',
             'is-copy-selection-target': copySelectionActive,
           }"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
           <span
-            v-if="paragraph.role === 'source' && (
-              anchorSelectionActive || currentParagraphKey === paragraph.key
-            )"
+            v-if="paragraph.role === 'source'"
             class="reading-anchor"
             :class="{ 'is-selected': currentParagraphKey === paragraph.key }"
           >
@@ -579,16 +561,12 @@ onMounted(() => {
               :class="{ 'is-selected': currentParagraphKey === paragraph.key }"
               type="button"
               :aria-label="currentParagraphKey === paragraph.key
-                ? anchorSelectionActive
-                  ? '移除此段閱讀書籤'
-                  : '編輯閱讀書籤'
+                ? '移除此段閱讀書籤'
                 : '將閱讀書籤設在此段'"
               :aria-pressed="currentParagraphKey === paragraph.key"
               :disabled="readingProgressBusy"
               :title="currentParagraphKey === paragraph.key
-                ? anchorSelectionActive
-                  ? '移除此段閱讀書籤'
-                  : '顯示所有段落書籤'
+                ? '移除此段閱讀書籤'
                 : '將閱讀書籤移到此段'"
               @click="handleAnchorClick($event, paragraph.key)"
             >

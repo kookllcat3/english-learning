@@ -136,7 +136,6 @@ test("marks a long material through its last paragraph within the progress basel
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.locator(".reading-word")).toHaveCount(350);
 
-  await page.getByRole("button", { name: "設定閱讀書籤" }).click();
   const lastParagraph = page.locator("[data-reading-paragraph]").last();
   const lastParagraphBookmark = lastParagraph.getByRole("button", { name: "將閱讀書籤設在此段" });
   await lastParagraphBookmark.scrollIntoViewIfNeeded();

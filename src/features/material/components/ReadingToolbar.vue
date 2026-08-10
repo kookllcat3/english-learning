@@ -4,7 +4,6 @@ defineProps<{
   annotationBusy: boolean;
   anchorBusy: boolean;
   anchorExists: boolean;
-  anchorSelectionActive: boolean;
   copyActive: boolean;
   hasTranslations: boolean;
   translationsHidden: boolean;
@@ -24,18 +23,19 @@ const emit = defineEmits<{
       <button
         class="reading-toolbar__button"
         :class="{
-          'is-active': anchorExists || anchorSelectionActive,
+          'is-active': anchorExists,
           'is-loading': anchorBusy,
         }"
         type="button"
-        :aria-label="anchorExists ? '回到閱讀書籤' : anchorSelectionActive ? '取消設定閱讀書籤' : '設定閱讀書籤'"
-        :aria-pressed="anchorExists || anchorSelectionActive"
-        :disabled="anchorBusy"
-        :title="anchorExists ? '回到閱讀書籤' : anchorSelectionActive ? '取消設定閱讀書籤' : '設定閱讀書籤'"
+        aria-label="回到閱讀書籤"
+        :aria-pressed="anchorExists"
+        :disabled="anchorBusy || !anchorExists"
+        :title="anchorExists ? '回到閱讀書籤' : '尚未設定閱讀書籤'"
         @click.stop="emit('activateAnchor')"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M6 4h12v16l-6-4-6 4V4Z" />
+          <path d="M9 4h10v16l-5-3.5L9 20V4Z" />
+          <path d="M10 9H3m0 0 3-3M3 9l3 3" />
         </svg>
       </button>
       <button

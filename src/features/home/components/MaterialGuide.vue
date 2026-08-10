@@ -10,7 +10,7 @@ import { APP_VERSION } from "../../../core/app/app-version.js";
 import BaseDialog from "../../../shared/components/BaseDialog.vue";
 import type { DialogController } from "../../../shared/components/base-dialog.js";
 
-type PromptType = MaterialGuidePromptType;
+type PromptType = Extract<MaterialGuidePromptType, "text">;
 
 const TEXT_PROMPT = `你是一位專業的英語教材編輯。請依照我提供的主題或原始內容，製作一份內容充實、可直接匯入英文學習網站的純文字教材。
 
@@ -58,12 +58,13 @@ const DOCX_PROMPT = `你是一位專業的英語教材編輯與圖文文件設�
 - 希望的單元數量：[可留空，預設 12 至 20]
 - 圖片風格或其他限制：[可留空]`;
 
+void DOCX_PROMPT;
+
 const dialog = ref<DialogController | null>(null);
 const promptType = ref<PromptType>("text");
 const status = ref("");
 const prompts = ref<Record<PromptType, string>>({
   text: TEXT_PROMPT,
-  docx: DOCX_PROMPT,
 });
 const visiblePrompt = ref(TEXT_PROMPT);
 const currentPrompt = computed(() => prompts.value[promptType.value]);
@@ -81,14 +82,11 @@ async function loadPrompts(): Promise<void> {
   isLoadingPrompts.value = true;
   try {
     await Promise.all(pendingPromptSaves);
-    const [text, docx] = await Promise.all([
-      getMaterialGuidePrompt("text", TEXT_PROMPT),
-      getMaterialGuidePrompt("docx", DOCX_PROMPT),
-    ]);
-    prompts.value = { text, docx };
+    const text = await getMaterialGuidePrompt("text", TEXT_PROMPT);
+    prompts.value = { text };
     visiblePrompt.value = prompts.value[promptType.value];
   } catch {
-    prompts.value = { text: TEXT_PROMPT, docx: DOCX_PROMPT };
+    prompts.value = { text: TEXT_PROMPT };
     visiblePrompt.value = prompts.value[promptType.value];
     status.value = "無法讀取已儲存的提示詞，目前顯示預設內容。";
   } finally {
@@ -182,7 +180,7 @@ onBeforeUnmount(() => {
   >
     <ol class="guide-steps">
       <li><strong>選擇想學的英文內容</strong><p>文章、對話、逐字稿或你想練習的句子都可以。</p></li>
-      <li><strong>選擇純文字或圖文格式</strong><p>純文字可貼上或存成 UTF-8 TXT；需要圖片時請使用 DOCX。</p></li>
+      <li><strong>準備純文字內容</strong><p>請直接貼上教材內容，或選擇 UTF-8 TXT 檔案。</p></li>
       <li><strong>保持內容聚焦</strong><p>一份教材建議只包含一個主題，篇幅以一次能讀完為準。</p></li>
       <li><strong>上傳到教材庫</strong><p>按頁面右下角的「＋」，選擇檔案或直接貼上文字。</p></li>
     </ol>
@@ -215,16 +213,6 @@ onBeforeUnmount(() => {
           @click="selectPrompt('text')"
         >
           純文字
-        </button>
-        <button
-          class="prompt-tab"
-          :class="{ 'is-active': promptType === 'docx' }"
-          type="button"
-          role="tab"
-          :aria-selected="promptType === 'docx'"
-          @click="selectPrompt('docx')"
-        >
-          圖文
         </button>
       </div>
       <textarea

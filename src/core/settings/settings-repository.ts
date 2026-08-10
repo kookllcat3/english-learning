@@ -6,11 +6,10 @@ const AI_PROMPT_KEY = "aiPrompt";
 const PROMPT_MAX_LENGTH = 20_000;
 export const AI_PROMPT_MAX_LENGTH = PROMPT_MAX_LENGTH;
 
-export type MaterialGuidePromptType = "text" | "docx";
+export type MaterialGuidePromptType = "text";
 
 const MATERIAL_GUIDE_PROMPT_KEYS: Record<MaterialGuidePromptType, string> = {
   text: "materialGuideTextPrompt",
-  docx: "materialGuideDocxPrompt",
 };
 
 export const MATERIAL_GUIDE_PROMPT_SETTING_KEYS = Object.values(

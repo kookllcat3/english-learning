@@ -169,7 +169,7 @@ async function exportedImages(
   }));
 }
 
-async function createDocx(material: BackupMaterial, loadAsset: AssetLoader): Promise<Blob> {
+export async function createDocx(material: BackupMaterial, loadAsset: AssetLoader): Promise<Blob> {
   const images = await exportedImages(material, loadAsset);
   const imagesByAssetId = new Map(images.map((image) => [image.asset.id, image]));
   const JsZip = await loadJsZip();
@@ -188,7 +188,8 @@ async function createDocx(material: BackupMaterial, loadAsset: AssetLoader): Pro
 
 export async function createMaterialExport(
   material: BackupMaterial,
-  loadAsset: AssetLoader,
+  _loadAsset: AssetLoader,
+  allowDocx = true,
 ): Promise<MaterialExportFile> {
   const hasImages = material.contentBlocks.some((block) => block.type === "image");
   if (!hasImages) {
@@ -197,8 +198,9 @@ export async function createMaterialExport(
       fileName: safeMaterialFileName(material.title, "txt"),
     };
   }
+  if (!allowDocx) throw new Error("目前暫不支援含圖片教材的 DOCX 匯出，請先使用純文字教材。");
   return {
-    blob: await createDocx(material, loadAsset),
+    blob: await createDocx(material, _loadAsset),
     fileName: safeMaterialFileName(material.title, "docx"),
   };
 }

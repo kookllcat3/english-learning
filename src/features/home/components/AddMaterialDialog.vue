@@ -56,7 +56,7 @@ async function save(): Promise<void> {
 
   try {
     if (!normalizedPastedContent && !file?.name) {
-      throw new Error("請選擇 TXT、PDF、DOCX，或直接貼上教材內容。");
+      throw new Error("請選擇 TXT，或直接貼上教材內容。");
     }
     message.value = "讀取教材…";
     const imported: ImportedMaterialFile = normalizedPastedContent
@@ -91,7 +91,7 @@ defineExpose({ open });
         <input name="title" maxlength="80" placeholder="未填時使用檔名或自動名稱">
       </label>
       <label class="field">
-        <span>選擇 TXT、PDF 或 DOCX</span>
+        <span>選擇 TXT 檔案</span>
         <input
           ref="fileInput"
           name="file"
@@ -99,7 +99,7 @@ defineExpose({ open });
           :disabled="Boolean(pastedContent.trim())"
           :accept="MATERIAL_FILE_ACCEPT"
         >
-        <small>DOCX 可包含文字與圖片，原檔上限 30 MB、最多 50 張圖片；圖片會在瀏覽器逐張轉成 WebP。限制圖片數量是為了避免轉檔時占用過多記憶體、瀏覽器儲存空間及備份容量。TXT 上限 2 MB；文字型 PDF 上限 20 MB。</small>
+        <small>僅支援 UTF-8 TXT，檔案內容上限 2 MB。</small>
       </label>
       <div class="input-divider"><span>或</span></div>
       <label class="field">

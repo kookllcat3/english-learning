@@ -114,6 +114,7 @@ async function exportMaterial(material: DashboardMaterial): Promise<void> {
     const exported = await createMaterialExport(
       completeMaterial,
       async (assetId) => assetsById.get(assetId),
+      false,
     );
     downloadFile(exported.blob, exported.fileName);
   } catch (error) {

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import packageMetadata from "../../../package.json" with { type: "json" };
 
-test("persists separate editable text and illustrated material prompts", async ({ page }) => {
+test.skip("persists separate editable text and illustrated material prompts", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "查看教材製作教學" }).click();
 

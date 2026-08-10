@@ -5,8 +5,8 @@ import { MATERIAL_FILE_ACCEPT, readMaterialFile } from "../../../src/core/materi
 describe("material file import", () => {
   it("shares the supported file picker types", () => {
     expect(MATERIAL_FILE_ACCEPT).toContain(".txt");
-    expect(MATERIAL_FILE_ACCEPT).toContain(".pdf");
-    expect(MATERIAL_FILE_ACCEPT).toContain(".docx");
+    expect(MATERIAL_FILE_ACCEPT).not.toContain(".pdf");
+    expect(MATERIAL_FILE_ACCEPT).not.toContain(".docx");
   });
 
   it("reads a UTF-8 text file", async () => {
@@ -25,6 +25,6 @@ describe("material file import", () => {
 
   it("rejects unsupported files", async () => {
     const file = new File(["data"], "lesson.html", { type: "text/html" });
-    await expect(readMaterialFile(file)).rejects.toThrow("只支援 UTF-8 TXT、文字型 PDF 或 DOCX");
+    await expect(readMaterialFile(file)).rejects.toThrow("目前只支援 UTF-8 TXT 檔案或直接貼上文字");
   });
 });

@@ -7,6 +7,7 @@ import {
   ref,
 } from "vue";
 import { RouterLink } from "vue-router";
+import { BookOpen, Download, RefreshCw, Trash2 } from "@lucide/vue";
 import {
   getDashboard,
   getMaterial,
@@ -445,10 +446,7 @@ onUnmounted(() => {
             :tabindex="materialActionBusy(material.id) ? -1 : undefined"
             @click="preventBusyNavigation($event, material.id)"
           >
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-              <path d="M3.75 5.25a2.25 2.25 0 0 1 2.25-2.25h3.25A2.75 2.75 0 0 1 12 5.75V21a3.5 3.5 0 0 0-3.5-3.5H3.75V5.25Z" />
-              <path d="M20.25 5.25A2.25 2.25 0 0 0 18 3h-3.25A2.75 2.75 0 0 0 12 5.75V21a3.5 3.5 0 0 1 3.5-3.5h4.75V5.25Z" />
-            </svg>
+            <BookOpen aria-hidden="true" :stroke-width="2" />
           </RouterLink>
           <button
             class="button button--secondary material-action-button"
@@ -460,11 +458,7 @@ onUnmounted(() => {
             :disabled="materialActionBusy(material.id)"
             @click="exportMaterial(material)"
           >
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-              <path d="M12 4v11" />
-              <path d="m8 11 4 4 4-4" />
-              <path d="M5 20h14" />
-            </svg>
+            <Download aria-hidden="true" :stroke-width="2" />
           </button>
           <button
             class="button button--secondary material-action-button"
@@ -476,10 +470,7 @@ onUnmounted(() => {
             :disabled="materialActionBusy(material.id)"
             @click="openUpdateFilePicker(material, $event)"
           >
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-              <path d="M20 11a8 8 0 1 0-2.35 5.65" />
-              <path d="M20 4v7h-7" />
-            </svg>
+            <RefreshCw aria-hidden="true" :stroke-width="2" />
           </button>
           <button
             class="button button--danger material-action-button"
@@ -491,11 +482,7 @@ onUnmounted(() => {
             :disabled="materialActionBusy(material.id)"
             @click="removeSelectedMaterial(material)"
           >
-            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-              <path d="M4 7h16" />
-              <path d="M9 7V4h6v3" />
-              <path d="m7 7 1 13h8l1-13" />
-            </svg>
+            <Trash2 aria-hidden="true" :stroke-width="2" />
           </button>
         </div>
       </article>

@@ -94,13 +94,30 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
   await expect(copySnackbar).toHaveCount(0, { timeout: 4000 });
 
   const anchorTool = toolbar.getByRole("button", { name: "設定閱讀書籤" });
+  const highlightButton = toolbar.getByRole("button", { name: "螢光筆" });
   await anchorTool.click();
   await expect(toolbar).not.toContainText("選擇英文段落");
   await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(3);
+
+  await copyButton.click();
+  await expect(copyButton).toHaveAttribute("aria-pressed", "true");
+  await translationToggle.click();
+  await expect(copyButton).toHaveAttribute("aria-pressed", "false");
+  await expect(toolbar.getByRole("button", { name: "顯示全部中文翻譯" }))
+    .toHaveAttribute("aria-pressed", "true");
+  await toolbar.getByRole("button", { name: "顯示全部中文翻譯" }).click();
+
+  await highlightButton.click();
+  await expect(highlightButton).toHaveAttribute("aria-pressed", "true");
+  await anchorTool.click();
+  await expect(highlightButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".reading-anchor__button")).toHaveCount(0);
+  await anchorTool.click();
+  await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(3);
+
   await copyButton.click();
   await expect(copyButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(3);
-  const highlightButton = toolbar.getByRole("button", { name: "螢光筆" });
   await highlightButton.click();
   await expect(highlightButton).toHaveAttribute("aria-pressed", "true");
   await expect(copyButton).toHaveAttribute("aria-pressed", "false");

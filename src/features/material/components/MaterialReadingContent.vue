@@ -429,7 +429,13 @@ function clearSelectionTools(): void {
   copySelectionActive.value = false;
 }
 
+function deactivateTransientTools(): void {
+  copySelectionActive.value = false;
+  emit("selectAnnotationTool", null);
+}
+
 function activateAnchorTool(): void {
+  deactivateTransientTools();
   if (anchorSelectionActive.value) {
     if (props.currentParagraphKey) emit("returnToReadingParagraph");
     else anchorSelectionActive.value = false;
@@ -455,13 +461,17 @@ function activateHighlightTool(): void {
 
 function handleAnchorClick(event: MouseEvent, paragraphKey: string): void {
   event.stopPropagation();
-  copySelectionActive.value = false;
-  emit("selectAnnotationTool", null);
+  deactivateTransientTools();
   if (!anchorSelectionActive.value) {
     anchorSelectionActive.value = true;
     return;
   }
   emit("saveReadingParagraph", props.currentParagraphKey === paragraphKey ? null : paragraphKey);
+}
+
+function toggleTranslations(): void {
+  deactivateTransientTools();
+  translationsHidden.value = !translationsHidden.value;
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -535,7 +545,7 @@ onMounted(() => {
       @activate-anchor="activateAnchorTool"
       @activate-copy="activateCopyTool"
       @activate-highlight="activateHighlightTool"
-      @toggle-translations="translationsHidden = !translationsHidden"
+      @toggle-translations="toggleTranslations"
     />
     <div
       v-if="copyFeedback"

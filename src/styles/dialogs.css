@@ -1,5 +1,5 @@
 .dialog {
-  width: min(540px, calc(100% - 32px));
+  --dialog-width: 640px;
   padding: 0;
   border: 0;
   border-radius: 18px;
@@ -11,7 +11,15 @@
 .dialog[open] {
   animation: dialog-enter 160ms cubic-bezier(.2, .8, .2, 1);
 }
-.rename-material-dialog { width: min(460px, calc(100% - 32px)); }
+.dialog--compact { --dialog-width: 480px; }
+.dialog--standard { --dialog-width: 640px; }
+.dialog { width: min(var(--dialog-width), calc(100% - 32px)); }
+.dialog--form .dialog__actions { margin-top: 8px; }
+.dialog--dashboard .dialog__body { max-height: calc(100dvh - 48px); }
+.dialog--workspace .dialog__body {
+  box-sizing: border-box;
+  max-height: calc(100dvh - 48px);
+}
 .dialog::backdrop {
   background: rgb(23 32 51 / 48%);
 }
@@ -57,7 +65,6 @@
 .input-divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .78rem; }
 .input-divider::before, .input-divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
 .form-message { min-height: 24px; color: var(--danger); }
-.data-management-dialog { width: min(680px, calc(100% - 32px)); }
 .data-management-intro { margin: 18px 0 8px; color: var(--muted); }
 .storage-usage {
   margin-bottom: 20px;
@@ -85,7 +92,6 @@
 }
 .data-capacity-note p { margin: 3px 0 0; color: #6f5a3d; font-size: .84rem; }
 .material-guide-dialog {
-  width: min(900px, calc(100% - 32px));
   height: min(720px, calc(100dvh - 32px));
 }
 .material-guide-dialog .dialog__body {

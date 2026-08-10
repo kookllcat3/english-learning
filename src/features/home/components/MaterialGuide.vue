@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
 
   <BaseDialog
     ref="dialog"
-    dialog-class="material-guide-dialog"
+    dialog-class="dialog--standard dialog--workspace material-guide-dialog"
     eyebrow="Material guide"
     title="如何製作學習教材"
     @close="flushPromptSaves"

@@ -157,7 +157,7 @@ function chooseBackupFile(): void {
 
   <BaseDialog
     ref="dialog"
-    dialog-class="data-management-dialog"
+    dialog-class="dialog--standard dialog--dashboard data-management-dialog"
     eyebrow="Local data"
     title="資料管理"
   >

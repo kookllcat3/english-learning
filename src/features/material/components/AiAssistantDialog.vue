@@ -110,7 +110,7 @@ onBeforeUnmount(() => window.clearTimeout(promptSaveTimer));
 <template>
   <BaseDialog
     ref="dialog"
-    dialog-class="ai-assistant-dialog"
+    dialog-class="dialog--standard dialog--workspace ai-assistant-dialog"
     eyebrow="AI learning assistant"
     title="啟用 AI 學習"
   >

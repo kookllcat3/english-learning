@@ -49,7 +49,7 @@ defineExpose({ open });
 <template>
   <BaseDialog
     ref="dialog"
-    dialog-class="rename-material-dialog"
+    dialog-class="dialog--compact dialog--form rename-material-dialog"
     eyebrow="Rename material"
     title="重新命名教材"
     @close="reset"

@@ -84,7 +84,7 @@ defineExpose({ open });
 </script>
 
 <template>
-  <BaseDialog ref="dialog" eyebrow="New material" title="新增學習教材" @close="reset">
+  <BaseDialog ref="dialog" dialog-class="dialog--standard dialog--form" eyebrow="New material" title="新增學習教材" @close="reset">
     <form ref="form" class="dialog-form" @submit.prevent="save">
       <label class="field">
         <span>教材名稱（選填）</span>

@@ -490,7 +490,6 @@
 .ai-assistant-dialog {
   --dialog-edge-space: clamp(16px, 7dvh, 64px);
 
-  width: min(720px, calc(100% - 32px));
   max-height: min(
     860px,
     calc(100dvh - var(--dialog-edge-space) - var(--dialog-edge-space))

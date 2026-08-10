@@ -34,8 +34,8 @@ const emit = defineEmits<{
         @click.stop="emit('activateAnchor')"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M9 4h10v16l-5-3.5L9 20V4Z" />
-          <path d="M10 9H3m0 0 3-3M3 9l3 3" />
+          <path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2Z" />
+          <path d="m9 10 2 2 4-4" />
         </svg>
       </button>
       <button

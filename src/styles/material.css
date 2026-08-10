@@ -145,7 +145,7 @@
   outline: none;
 }
 .reading-toolbar__button:disabled:not(.is-loading) {
-  color: #9aa1ad;
+  color: var(--muted);
   background: transparent;
   cursor: default;
 }

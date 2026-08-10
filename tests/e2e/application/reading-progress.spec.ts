@@ -51,6 +51,8 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
     "複製英文段落",
     "螢光筆",
   ]);
+  expect(await toolbar.getByRole("button").evaluateAll((buttons) =>
+    new Set(buttons.map((button) => getComputedStyle(button).color)).size)).toBe(1);
 
   const translationToggle = toolbar.getByRole("button", { name: "隱藏全部中文翻譯" });
   const translations = page.locator(".reading-line-wrap.is-translation .reading-line");

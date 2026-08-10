@@ -30,14 +30,14 @@ export function useReadingPosition(options: ReadingPositionOptions) {
 
     let paragraph = findReadingParagraph(options.readingContainer.value, paragraphKey);
     if (!paragraph) return;
-    const anchor = paragraph.querySelector<HTMLElement>('[aria-label="管理本段閱讀錨點"]');
+    const anchor = paragraph.querySelector<HTMLElement>(".reading-anchor__button");
     (anchor ?? paragraph).scrollIntoView({ behavior: "auto", block: "center" });
     await waitForStableLayout();
     if (currentParagraphKey.value !== paragraphKey) return;
 
     paragraph = findReadingParagraph(options.readingContainer.value, paragraphKey);
     if (!paragraph) return;
-    const stableAnchor = paragraph.querySelector<HTMLElement>('[aria-label="管理本段閱讀錨點"]');
+    const stableAnchor = paragraph.querySelector<HTMLElement>(".reading-anchor__button");
     (stableAnchor ?? paragraph).scrollIntoView({ behavior: "auto", block: "center" });
     stableAnchor?.focus({ preventScroll: true });
   }

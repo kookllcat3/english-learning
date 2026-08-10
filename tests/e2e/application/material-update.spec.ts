@@ -118,8 +118,10 @@ test("exports and updates the same text material while preserving compatible lea
   await expect(page).toHaveURL(/#\/materials\//);
   await seedKnownWordsForCurrentMaterial(page, ["bear", "fox"]);
   await seedSharedNote(page);
-  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
-  await page.locator("[data-reading-paragraph]").first().locator(".reading-word").first().click();
+  await page.getByRole("button", { name: "設定閱讀書籤" }).click();
+  await page.locator("[data-reading-paragraph]").first()
+    .getByRole("button", { name: "將閱讀書籤設在此段" })
+    .click();
   await page.goto("/");
   const before = await storedMaterial(page, title);
 

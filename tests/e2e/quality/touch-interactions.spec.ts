@@ -4,6 +4,8 @@ import {
   storedHighlights,
 } from "../application/test-helpers";
 
+const anchorOptionName = "將閱讀書籤設在此段";
+
 async function createTouchMaterial(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "新增教材" }).click();
@@ -29,14 +31,39 @@ test("toggles a fixed translation blur control with touch", async ({ page }) => 
 test("marks paragraph words through the reading position control with touch", async ({ page }) => {
   await createTouchMaterial(page);
 
-  const marker = page.getByRole("button", { name: "設定閱讀錨點" });
+  const marker = page.getByRole("button", { name: "設定閱讀書籤" });
   await marker.tap();
-  await page.locator("[data-reading-paragraph]").first().tap({ position: { x: 120, y: 12 } });
+  const paragraph = page.locator("[data-reading-paragraph]").first();
+  await paragraph.getByRole("button", { name: anchorOptionName }).tap();
 
-  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
+  const readingAnchor = paragraph.locator(".reading-anchor__button.is-selected");
+  await expect(readingAnchor).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["an", "original", "sentence"]);
   await expect(page.getByRole("button", { name: "本篇單字已全部認識" })).toBeDisabled();
+  await readingAnchor.tap();
+  await expect(readingAnchor).toHaveCount(0);
+});
+
+test("switches a reading bookmark with touch gutter buttons", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "新增教材" }).click();
+  await page.locator('input[name="title"]').fill("Touch bookmark switching");
+  await page.locator('textarea[name="content"]').fill(
+    "First touch paragraph.\n第一段翻譯。\n\nSecond touch paragraph.\n第二段翻譯。",
+  );
+  await page.getByRole("button", { name: "儲存教材" }).click();
+  await page.getByRole("article").filter({ hasText: "Touch bookmark switching" })
+    .getByRole("link", { name: "開始閱讀" }).click();
+
+  const paragraphs = page.locator("[data-reading-paragraph]");
+  await page.getByRole("button", { name: "設定閱讀書籤" }).tap();
+  await expect(page.getByRole("button", { name: anchorOptionName })).toHaveCount(2);
+  await paragraphs.nth(0).getByRole("button", { name: anchorOptionName }).tap();
+  await expect(paragraphs.nth(0).locator(".reading-anchor__button.is-selected")).toBeVisible();
+  await paragraphs.nth(1).getByRole("button", { name: anchorOptionName }).tap();
+  await expect(paragraphs.nth(0).locator(".reading-anchor__button.is-selected")).toHaveCount(0);
+  await expect(paragraphs.nth(1).locator(".reading-anchor__button.is-selected")).toBeVisible();
 });
 
 test("adds and removes a highlight without opening the word card on touch", async ({ page }) => {
@@ -71,8 +98,10 @@ test("adds and removes a highlight without opening the word card on touch", asyn
 
 test("prevents background touch scrolling while the word card is open", async ({ page }) => {
   await createTouchMaterial(page);
-  await page.getByRole("button", { name: "設定閱讀錨點" }).tap();
-  await page.locator("[data-reading-paragraph]").first().tap({ position: { x: 120, y: 12 } });
+  await page.getByRole("button", { name: "設定閱讀書籤" }).tap();
+  await page.locator("[data-reading-paragraph]").first()
+    .getByRole("button", { name: anchorOptionName }).tap();
+  await page.locator(".material-heading").tap({ position: { x: 2, y: 2 } });
   await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
   await page.locator('[data-word="original"]').first().tap();
   await expect(page.locator(".word-card")).toBeVisible();
@@ -130,10 +159,11 @@ test("keeps primary reading actions operable on a tablet viewport", async ({ pag
   await page.setViewportSize({ width: 768, height: 1024 });
   await createTouchMaterial(page);
 
-  const marker = page.getByRole("button", { name: "設定閱讀錨點" });
+  const marker = page.getByRole("button", { name: "設定閱讀書籤" });
   await marker.tap();
-  await page.locator("[data-reading-paragraph]").first().tap({ position: { x: 120, y: 12 } });
-  await expect(page.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
+  const paragraph = page.locator("[data-reading-paragraph]").first();
+  await paragraph.getByRole("button", { name: anchorOptionName }).tap();
+  await expect(paragraph.locator(".reading-anchor__button.is-selected")).toBeVisible();
   await expect.poll(() => storedCurrentMaterialKnownWords(page))
     .toEqual(["an", "original", "sentence"]);
 

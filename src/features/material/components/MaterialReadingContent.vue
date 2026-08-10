@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type {
   ContentBlock,
   MaterialHighlightAnnotationRecord,
@@ -85,11 +85,11 @@ interface AnnotationTarget {
 }
 
 const ANNOTATION_STROKE_SAMPLE_INTERVAL_PX = 4;
+const COPY_FEEDBACK_DURATION_MS = 3000;
 let annotationPointer: AnnotationPointerState | null = null;
 let ignoreNextAnnotationClick = false;
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
-const activeSelectionTool = ref<"anchor" | "copy" | "move-anchor" | null>(null);
-const anchorMenuOpen = ref(false);
+const activeSelectionTool = ref<"anchor" | "copy" | null>(null);
 const translationsHidden = ref(false);
 const copyFeedback = ref<"error" | "success" | null>(null);
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,7 +100,7 @@ function setCopyFeedback(status: "error" | "success"): void {
   copyFeedbackTimer = setTimeout(() => {
     copyFeedback.value = null;
     copyFeedbackTimer = null;
-  }, 1600);
+  }, COPY_FEEDBACK_DURATION_MS);
 }
 
 async function copyParagraph(text: string): Promise<void> {
@@ -305,6 +305,10 @@ function handlePointerOut(event: PointerEvent): void {
 
 function beginPointerInteraction(event: PointerEvent): void {
   const element = wordElement(event.target);
+  if (activeSelectionTool.value) {
+    touchStart = null;
+    return;
+  }
   if (isAnnotationActiveFor(element) && event.pointerType !== "touch") {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
@@ -399,6 +403,7 @@ function handleClick(event: MouseEvent): void {
   if (event.target instanceof Element && event.target.closest(".reading-toolbar, .reading-anchor")) {
     return;
   }
+  if (activeSelectionTool.value === "anchor") return;
   const paragraph = paragraphElement(event.target);
   if (activeSelectionTool.value) {
     if (!paragraph || isTranslationTarget(event.target)) {
@@ -410,9 +415,6 @@ function handleClick(event: MouseEvent): void {
     if (activeSelectionTool.value === "copy") {
       activeSelectionTool.value = null;
       void copyParagraph(paragraphSourceText(paragraphKey));
-    } else {
-      activeSelectionTool.value = null;
-      emit("saveReadingParagraph", paragraphKey);
     }
     event.preventDefault();
     return;
@@ -426,13 +428,12 @@ function handleClick(event: MouseEvent): void {
 
 function clearSelectionTools(): void {
   activeSelectionTool.value = null;
-  anchorMenuOpen.value = false;
 }
 
 function activateAnchorTool(): void {
-  anchorMenuOpen.value = false;
-  if (activeSelectionTool.value === "anchor" || activeSelectionTool.value === "move-anchor") {
-    activeSelectionTool.value = null;
+  if (activeSelectionTool.value === "anchor") {
+    if (props.currentParagraphKey) emit("returnToReadingParagraph");
+    else activeSelectionTool.value = null;
     return;
   }
   if (props.currentParagraphKey) {
@@ -447,7 +448,6 @@ function activateAnchorTool(): void {
 
 function activateCopyTool(): void {
   emit("selectAnnotationTool", null);
-  anchorMenuOpen.value = false;
   activeSelectionTool.value = activeSelectionTool.value === "copy" ? null : "copy";
   copyFeedback.value = null;
 }
@@ -457,24 +457,18 @@ function activateHighlightTool(): void {
   emit("selectAnnotationTool", props.annotationMode ? null : "highlight");
 }
 
-function openAnchorMenu(): void {
-  clearSelectionTools();
+function handleAnchorClick(event: MouseEvent, paragraphKey: string): void {
+  event.stopPropagation();
   emit("selectAnnotationTool", null);
-  anchorMenuOpen.value = true;
-}
-
-function moveAnchor(): void {
-  anchorMenuOpen.value = false;
-  activeSelectionTool.value = "move-anchor";
-}
-
-function removeAnchor(): void {
-  clearSelectionTools();
-  emit("saveReadingParagraph", null);
+  if (activeSelectionTool.value !== "anchor") {
+    activeSelectionTool.value = "anchor";
+    return;
+  }
+  emit("saveReadingParagraph", props.currentParagraphKey === paragraphKey ? null : paragraphKey);
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
-  if (!activeSelectionTool.value && !anchorMenuOpen.value) return;
+  if (!activeSelectionTool.value) return;
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest(".reading-toolbar, .reading-anchor")) return;
   if (target?.closest(".reading-content")) return;
@@ -505,12 +499,6 @@ function handleWordKeydown(event: KeyboardEvent): void {
   words[nextIndex].focus();
   event.preventDefault();
 }
-
-watch(() => props.currentParagraphKey, () => {
-  if (activeSelectionTool.value === "anchor" || activeSelectionTool.value === "move-anchor") {
-    activeSelectionTool.value = null;
-  }
-});
 
 onMounted(() => {
   document.addEventListener("pointerdown", handleDocumentPointerDown);
@@ -543,9 +531,8 @@ onMounted(() => {
       :annotation-busy="annotationBusy"
       :anchor-busy="readingProgressBusy"
       :anchor-exists="currentParagraphKey !== null"
-      :anchor-selection-active="activeSelectionTool === 'anchor' || activeSelectionTool === 'move-anchor'"
+      :anchor-selection-active="activeSelectionTool === 'anchor'"
       :copy-active="activeSelectionTool === 'copy'"
-      :copy-status="copyFeedback"
       :has-translations="hasTranslations"
       :translations-hidden="translationsHidden"
       @activate-anchor="activateAnchorTool"
@@ -553,6 +540,13 @@ onMounted(() => {
       @activate-highlight="activateHighlightTool"
       @toggle-translations="translationsHidden = !translationsHidden"
     />
+    <div
+      v-if="copyFeedback"
+      class="reading-snackbar"
+      :class="{ 'is-error': copyFeedback === 'error' }"
+      :role="copyFeedback === 'error' ? 'alert' : 'status'"
+      aria-atomic="true"
+    >{{ copyFeedback === "success" ? "英文段落已複製" : "複製失敗，請再試一次" }}</div>
     <template v-for="block in renderedBlocks" :key="block.key">
       <template v-if="block.type === 'text'">
         <div
@@ -560,34 +554,41 @@ onMounted(() => {
           :key="paragraph.key"
           class="reading-paragraph"
           :class="{
-            'is-anchor-selection-target': activeSelectionTool === 'anchor'
-              || activeSelectionTool === 'move-anchor',
+            'is-anchor-selection-target': activeSelectionTool === 'anchor',
             'is-copy-selection-target': activeSelectionTool === 'copy',
           }"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >
           <span
-            v-if="currentParagraphKey === paragraph.key"
+            v-if="paragraph.role === 'source' && (
+              activeSelectionTool === 'anchor' || currentParagraphKey === paragraph.key
+            )"
             class="reading-anchor"
+            :class="{ 'is-selected': currentParagraphKey === paragraph.key }"
           >
             <button
               class="reading-anchor__button"
+              :class="{ 'is-selected': currentParagraphKey === paragraph.key }"
               type="button"
-              aria-label="管理本段閱讀錨點"
-              aria-haspopup="menu"
-              :aria-expanded="anchorMenuOpen"
-              title="管理閱讀錨點"
-              @click.stop="openAnchorMenu"
+              :aria-label="currentParagraphKey === paragraph.key
+                ? activeSelectionTool === 'anchor'
+                  ? '移除此段閱讀書籤'
+                  : '編輯閱讀書籤'
+                : '將閱讀書籤設在此段'"
+              :aria-pressed="currentParagraphKey === paragraph.key"
+              :disabled="readingProgressBusy"
+              :title="currentParagraphKey === paragraph.key
+                ? activeSelectionTool === 'anchor'
+                  ? '移除此段閱讀書籤'
+                  : '顯示所有段落書籤'
+                : '將閱讀書籤移到此段'"
+              @click="handleAnchorClick($event, paragraph.key)"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M6 3h12v18l-6-4-6 4V3Z" />
               </svg>
             </button>
-            <span v-if="anchorMenuOpen" class="reading-anchor__menu" role="menu">
-              <button type="button" role="menuitem" @click.stop="moveAnchor">移動錨點</button>
-              <button type="button" role="menuitem" @click.stop="removeAnchor">移除錨點</button>
-            </span>
           </span>
           <template v-for="line in paragraph.lines" :key="line.key">
             <span

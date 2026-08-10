@@ -136,15 +136,15 @@ test("marks a long material through its last paragraph within the progress basel
   await page.getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.locator(".reading-word")).toHaveCount(350);
 
-  await page.getByRole("button", { name: "設定閱讀錨點" }).click();
+  await page.getByRole("button", { name: "設定閱讀書籤" }).click();
   const lastParagraph = page.locator("[data-reading-paragraph]").last();
-  const lastParagraphWord = lastParagraph.locator(".reading-word").first();
-  await lastParagraphWord.scrollIntoViewIfNeeded();
+  const lastParagraphBookmark = lastParagraph.getByRole("button", { name: "將閱讀書籤設在此段" });
+  await lastParagraphBookmark.scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     (window as unknown as { progressStartedAt: number }).progressStartedAt = performance.now();
   });
-  await lastParagraphWord.click();
-  await expect(lastParagraph.getByRole("button", { name: "管理本段閱讀錨點" })).toBeVisible();
+  await lastParagraphBookmark.click();
+  await expect(lastParagraph.getByRole("button", { name: "移除此段閱讀書籤" })).toBeVisible();
   const progressDuration = await page.evaluate(() => (
     performance.now() - (window as unknown as { progressStartedAt: number }).progressStartedAt
   ));

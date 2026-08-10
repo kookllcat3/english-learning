@@ -6,7 +6,6 @@ defineProps<{
   anchorExists: boolean;
   anchorSelectionActive: boolean;
   copyActive: boolean;
-  copyStatus: "error" | "success" | null;
   hasTranslations: boolean;
   translationsHidden: boolean;
 }>();
@@ -29,10 +28,10 @@ const emit = defineEmits<{
           'is-loading': anchorBusy,
         }"
         type="button"
-        :aria-label="anchorExists ? '回到閱讀錨點' : anchorSelectionActive ? '取消設定閱讀錨點' : '設定閱讀錨點'"
+        :aria-label="anchorExists ? '回到閱讀書籤' : anchorSelectionActive ? '取消設定閱讀書籤' : '設定閱讀書籤'"
         :aria-pressed="anchorExists || anchorSelectionActive"
         :disabled="anchorBusy"
-        :title="anchorExists ? '回到閱讀錨點' : anchorSelectionActive ? '取消設定閱讀錨點' : '設定閱讀錨點'"
+        :title="anchorExists ? '回到閱讀書籤' : anchorSelectionActive ? '取消設定閱讀書籤' : '設定閱讀書籤'"
         @click.stop="emit('activateAnchor')"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -59,21 +58,14 @@ const emit = defineEmits<{
       </button>
       <button
         class="reading-toolbar__button"
-        :class="{
-          'is-active': copyActive,
-          'is-copy-error': copyStatus === 'error',
-          'is-copy-success': copyStatus === 'success',
-        }"
+        :class="{ 'is-active': copyActive }"
         type="button"
         aria-label="複製英文段落"
         :aria-pressed="copyActive"
         :title="copyActive ? '取消複製段落' : '複製英文段落'"
         @click.stop="emit('activateCopy')"
       >
-        <svg v-if="copyStatus === 'success'" aria-hidden="true" viewBox="0 0 24 24">
-          <path d="m5 12 4 4L19 6" />
-        </svg>
-        <svg v-else aria-hidden="true" viewBox="0 0 24 24">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
           <rect x="8" y="8" width="11" height="11" rx="2" />
           <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
         </svg>
@@ -94,12 +86,5 @@ const emit = defineEmits<{
         </svg>
       </button>
     </span>
-    <span v-if="anchorSelectionActive" class="reading-toolbar__hint">選擇英文段落</span>
-    <span
-      v-else-if="copyStatus"
-      class="reading-toolbar__feedback"
-      :class="{ 'is-error': copyStatus === 'error' }"
-      :role="copyStatus === 'error' ? 'alert' : 'status'"
-    >{{ copyStatus === "success" ? "已複製" : "複製失敗" }}</span>
   </div>
 </template>

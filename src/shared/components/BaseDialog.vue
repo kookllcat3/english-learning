@@ -76,6 +76,9 @@ defineExpose({ close, showModal });
         <div class="dialog__content">
           <slot />
         </div>
+        <div v-if="$slots['footer-meta']" class="dialog__footer-meta">
+          <slot name="footer-meta" />
+        </div>
       </div>
     </dialog>
   </Teleport>

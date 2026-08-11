@@ -71,6 +71,15 @@
 .dialog-form > :first-child { margin-top: 0; }
 .dialog__content > :last-child,
 .dialog-form > :last-child { margin-bottom: 0; }
+.dialog__footer-meta {
+  display: flex;
+  min-height: 20px;
+  flex: 0 0 auto;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
 .dialog__close {
   display: grid;
   width: 40px;
@@ -246,7 +255,7 @@
   background: white;
   font: .88rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
-.copy-status { display: flex; flex-wrap: wrap; gap: 8px; min-height: 24px; margin: 6px 0 0; color: #18794e; font-size: .88rem; }
+.copy-status { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: 8px; margin: 0; color: #18794e; font-size: .88rem; }
 .copy-status__message { color: inherit; }
 .material-guide-dialog__version {
   flex: 0 0 auto;
@@ -278,7 +287,8 @@
   .guide-prompt { padding-top: 16px; }
   .material-guide-dialog .guide-prompt__heading { margin-bottom: 7px; }
   .guide-prompt textarea { min-height: 100px; padding: 10px; font-size: .8rem; }
-  .copy-status { min-height: 18px; margin-top: 3px; font-size: .78rem; }
+  .dialog__footer-meta { min-height: 18px; margin-top: 3px; }
+  .copy-status { font-size: .78rem; }
 }
 
 .text-button {

@@ -170,7 +170,10 @@ onBeforeUnmount(() => {
     title="如何製作學習教材"
     @close="flushPromptSaves"
   >
-    <template #title-meta>
+    <template #footer-meta>
+      <p class="copy-status" role="status">
+        <span v-if="status" class="copy-status__message">{{ status }}</span>
+      </p>
       <span class="material-guide-dialog__version">v{{ APP_VERSION }}</span>
     </template>
 
@@ -208,9 +211,6 @@ onBeforeUnmount(() => {
         rows="22"
         @input="updatePrompt"
       />
-      <p class="copy-status" role="status">
-        <span v-if="status" class="copy-status__message">{{ status }}</span>
-      </p>
     </section>
   </BaseDialog>
 </template>

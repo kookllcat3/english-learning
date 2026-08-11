@@ -170,6 +170,10 @@ onBeforeUnmount(() => {
     title="如何製作學習教材"
     @close="flushPromptSaves"
   >
+    <template #title-meta>
+      <span class="material-guide-dialog__version">v{{ APP_VERSION }}</span>
+    </template>
+
     <ol class="guide-steps">
       <li><strong>選擇想學的英文內容</strong><p>文章、對話、逐字稿或你想練習的句子都可以。</p></li>
       <li><strong>準備純文字內容</strong><p>請直接貼上教材內容，或選擇 UTF-8 TXT 檔案。</p></li>
@@ -205,7 +209,6 @@ onBeforeUnmount(() => {
         @input="updatePrompt"
       />
       <p class="copy-status" role="status">
-        <span class="copy-status__version">v{{ APP_VERSION }}</span>
         <span v-if="status" class="copy-status__message">{{ status }}</span>
       </p>
     </section>

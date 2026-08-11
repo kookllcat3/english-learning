@@ -56,7 +56,10 @@ defineExpose({ close, showModal });
         <div class="dialog__heading">
           <div class="dialog__heading-copy">
             <p class="eyebrow">{{ eyebrow }}</p>
-            <h2 :id="titleId">{{ title }}</h2>
+            <div class="dialog__title-row">
+              <h2 :id="titleId">{{ title }}</h2>
+              <slot name="title-meta" />
+            </div>
           </div>
           <button
             class="dialog__close"

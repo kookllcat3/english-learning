@@ -51,6 +51,13 @@
   gap: 16px;
 }
 .dialog__heading-copy { min-width: 0; }
+.dialog__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+.dialog__title-row h2 { min-width: 0; }
 .dialog__content {
   min-width: 0;
   min-height: 0;
@@ -240,8 +247,14 @@
   font: .88rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 .copy-status { display: flex; flex-wrap: wrap; gap: 8px; min-height: 24px; margin: 6px 0 0; color: #18794e; font-size: .88rem; }
-.copy-status__version { order: 2; margin-left: auto; color: var(--muted); }
 .copy-status__message { color: inherit; }
+.material-guide-dialog__version {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+  letter-spacing: .02em;
+}
 
 @media (max-width: 560px) {
   .dialog {

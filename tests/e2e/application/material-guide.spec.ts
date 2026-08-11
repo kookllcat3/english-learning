@@ -1,5 +1,18 @@
 import { expect, test } from "@playwright/test";
 
+test("keeps the app version visible in the material guide heading on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 667 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "查看教材製作教學" }).click();
+
+  const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
+  const heading = guideDialog.locator(".dialog__heading");
+  const version = heading.locator(".material-guide-dialog__version");
+  await expect(version).toHaveText(/^v\d+\.\d+\.\d+$/);
+  await expect(version).toBeVisible();
+  await expect(guideDialog.locator(".dialog__content .material-guide-dialog__version")).toHaveCount(0);
+});
+
 test("reports a material prompt persistence failure without replacing the default", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "查看教材製作教學" }).click();

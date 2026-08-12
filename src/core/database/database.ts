@@ -655,17 +655,23 @@ export async function writeBackupStores({
   const contentStore = transaction.objectStore(STORES.materialContents);
   const termStore = transaction.objectStore(STORES.materialTerms);
 
-  materials.forEach((material) => trackRequest(materialStore.put(material)));
-  trackRequest(assetStore.clear());
-  assetsToStore.forEach((asset) => trackRequest(assetStore.put(asset)));
-  materialContents.forEach((content) => trackRequest(contentStore.put(content)));
-  materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
-  vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
-  trackRequest(materialAnnotationStore.clear());
-  materialAnnotations.forEach((record) => trackRequest(materialAnnotationStore.put(record)));
-  trackRequest(wordNoteStore.clear());
-  wordNotes.forEach((record) => trackRequest(wordNoteStore.put(record)));
-  settings.forEach((setting) => trackRequest(settingsStore.put(setting)));
+  try {
+    Object.values(STORES).forEach((storeName) => {
+      trackRequest(transaction.objectStore(storeName).clear());
+    });
+    materials.forEach((material) => trackRequest(materialStore.put(material)));
+    assetsToStore.forEach((asset) => trackRequest(assetStore.put(asset)));
+    materialContents.forEach((content) => trackRequest(contentStore.put(content)));
+    materialTerms.forEach((terms) => trackRequest(termStore.put(terms)));
+    vocabulary.forEach((record) => trackRequest(vocabularyStore.put(record)));
+    materialAnnotations.forEach((record) => trackRequest(materialAnnotationStore.put(record)));
+    wordNotes.forEach((record) => trackRequest(wordNoteStore.put(record)));
+    settings.forEach((setting) => trackRequest(settingsStore.put(setting)));
+  } catch (error) {
+    transaction.abort();
+    await transactionResult(transaction).catch(() => undefined);
+    throw error;
+  }
   await transactionResult(
     transaction,
     BACKUP_TRANSACTION_TIMEOUT_MS,

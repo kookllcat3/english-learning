@@ -1,5 +1,5 @@
 import { STORES, readAll, writeBackupStores } from "../database/database.js";
-import { mergeNewerRecords, synchronizeVocabularyRecords } from "../learning/learning-records.js";
+import { synchronizeVocabularyRecords } from "../learning/learning-records.js";
 import {
   contextualWordNoteId,
   isContextualOccurrenceValid,
@@ -7,7 +7,6 @@ import {
 } from "../learning/contextual-word-note.js";
 import {
   contextualWordNoteToMaterialAnnotation,
-  mergeImportedMaterialAnnotations,
   materialAnnotationsForReplacement,
 } from "../learning/material-annotation.js";
 import { normalizedReadingParagraphKey } from "../learning/reading-position.js";
@@ -19,14 +18,13 @@ import {
   currentVocabularyRecord,
   ensureMaterialKnowledge,
   hasValidReadingParagraphReference,
-  listMaterials,
   metadataFor,
   normalizedBlocks,
   READING_CONTENT_CLASSIFICATION_KEY,
   validateMaterialContent,
 } from "../learning/material-migrations.js";
-import { materialAssetFromStoredRecord } from "../materials/material-repository.js";
 import { isValidWord } from "../text/text.js";
+import { materialAssetFromStoredRecord } from "../materials/material-repository.js";
 import {
   AI_PROMPT_MAX_LENGTH,
   MATERIAL_GUIDE_PROMPT_MAX_LENGTH,
@@ -105,16 +103,27 @@ export async function createBackup(): Promise<LearningBackup> {
     readAll(STORES.settings),
   ]);
   const assets = storedAssets.map(materialAssetFromStoredRecord);
+  const exportedAt = new Date().toISOString();
+  const annotationsByMaterialId = new Map<string, MaterialAnnotationRecord[]>();
+  materialAnnotations.forEach((annotation) => {
+    const records = annotationsByMaterialId.get(annotation.materialId) ?? [];
+    records.push(annotation);
+    annotationsByMaterialId.set(annotation.materialId, records);
+  });
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
-    exportedAt: new Date().toISOString(),
+    exportedAt,
     materials,
     materialAssets: await Promise.all(assets.map(async ({ blob, ...asset }) => ({
       ...asset,
       data: await blobToDataUrl(blob),
     }))),
     vocabulary: vocabulary.map(currentVocabularyRecord),
-    materialAnnotations,
+    materialAnnotations: materials.flatMap((material) => materialAnnotationsForReplacement(
+      annotationsByMaterialId.get(material.id) ?? [],
+      material.contentBlocks,
+      exportedAt,
+    )),
     wordNotes,
     settings: settings.filter(({ key }) => ![
       "familiarityTrackingVersion",
@@ -124,24 +133,27 @@ export async function createBackup(): Promise<LearningBackup> {
 }
 
 export interface BackupImportPreview {
-  newAnnotations: number;
-  newMaterials: number;
-  updatedMaterials: number;
-  updatedAnnotations: number;
-  newWords: number;
-  updatedWords: number;
+  annotationCount: number;
+  materialCount: number;
+  vocabularyCount: number;
+  replacedAnnotationCount: number;
+  replacedMaterialCount: number;
+  replacedVocabularyCount: number;
+  skippedAnnotations: number;
   skippedMaterials: string[];
   skippedLegacyWordNotes: number;
   plan: BackupImportPlan;
 }
 
 export interface BackupImportResult {
+  skippedAnnotations: number;
   skippedMaterials: string[];
   skippedLegacyWordNotes: number;
 }
 
 export interface BackupImportPlan {
   backup: LearningBackup;
+  skippedAnnotations: number;
   skippedMaterials: string[];
   skippedLegacyWordNotes: number;
   decodedAssets: MaterialAssetRecord[];
@@ -213,6 +225,23 @@ function findConflictingMaterialIds(materials: LearningBackup["materials"]): Set
   return conflicts;
 }
 
+function reconciledAnnotationsForMaterial(
+  material: BackupMaterial,
+  annotations: MaterialAnnotationRecord[],
+  timestamp: string,
+): { annotations: MaterialAnnotationRecord[]; skippedCount: number } {
+  const blocks = normalizedBlocks(material.content, material.contentBlocks);
+  const reconciled = annotations.map((annotation) => materialAnnotationsForReplacement(
+    [annotation],
+    blocks,
+    timestamp,
+  ));
+  return {
+    annotations: reconciled.flat(),
+    skippedCount: reconciled.filter((records) => records.length === 0).length,
+  };
+}
+
 function prepareBackup(backup: LearningBackup): BackupImportPlan {
   if (!Array.isArray(backup?.materials) || !Array.isArray(backup?.vocabulary)) {
     validateBackup(backup);
@@ -222,6 +251,7 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
   }
 
   const decodedAssetCache = new Map<string, Blob>();
+  validateMaterialAnnotationStructure(backup.materialAnnotations ?? []);
   const baseBackup = backupWithoutMaterials(backup);
   validateBackup(baseBackup, decodedAssetCache);
   const materialIds = new Map<string, number>();
@@ -235,6 +265,8 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
     }
   });
   const supportedMaterials: LearningBackup["materials"] = [];
+  const supportedAnnotations: MaterialAnnotationRecord[] = [];
+  let skippedAnnotations = 0;
   const skippedMaterials: string[] = [];
   backup.materials.forEach((material) => {
     const id = materialId(material);
@@ -260,7 +292,18 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
       skippedMaterials.push(materialDisplayName(material));
       return;
     }
-    validateBackup(candidate, decodedAssetCache);
+    if (backup.schemaVersion === BACKUP_SCHEMA_VERSION) {
+      const reconciled = reconciledAnnotationsForMaterial(
+        material,
+        candidate.materialAnnotations ?? [],
+        backup.exportedAt ?? material.updatedAt,
+      );
+      skippedAnnotations += reconciled.skippedCount;
+      validateBackup({ ...candidate, materialAnnotations: reconciled.annotations }, decodedAssetCache);
+      supportedAnnotations.push(...reconciled.annotations);
+    } else {
+      validateBackup(candidate, decodedAssetCache);
+    }
     supportedMaterials.push(material);
   });
   const conflictingMaterialIds = findConflictingMaterialIds(supportedMaterials);
@@ -289,7 +332,7 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
       : {}),
     ...(backup.schemaVersion === BACKUP_SCHEMA_VERSION
       ? {
-        materialAnnotations: (backup.materialAnnotations ?? [])
+        materialAnnotations: supportedAnnotations
           .filter((annotation) => supportedMaterialIds.has(annotation.materialId)),
       }
       : {}),
@@ -309,10 +352,80 @@ function prepareBackup(backup: LearningBackup): BackupImportPlan {
       contextualWordNotes: undefined,
       materialAnnotations,
     },
+    skippedAnnotations,
     skippedMaterials,
     skippedLegacyWordNotes: 0,
     decodedAssets,
   };
+}
+
+function validateMaterialAnnotationStructure(annotations: unknown[]): void {
+  const annotationIds = new Set<string>();
+  annotations.forEach((annotation) => {
+    if (
+      !isRecord(annotation)
+      || typeof annotation.id !== "string"
+      || annotation.id.length === 0
+      || annotation.id.length > 500
+      || typeof annotation.materialId !== "string"
+      || annotation.materialId.length === 0
+      || !isTimestamp(annotation.createdAt)
+      || !isTimestamp(annotation.updatedAt)
+      || annotationIds.has(annotation.id)
+    ) {
+      throw new Error("備份包含格式不正確或重複的教材標記。");
+    }
+    if (annotation.kind === "legacy-contextual-word-note") {
+      if (
+        !isRecord(annotation.target)
+        || !isRecord(annotation.body)
+        || annotation.target.type !== "contextual-word-occurrence"
+        || annotation.body.format !== "markdown"
+        || typeof annotation.target.occurrenceKey !== "string"
+        || typeof annotation.target.word !== "string"
+        || typeof annotation.body.value !== "string"
+      ) {
+        throw new Error("備份包含格式不正確的舊版位置型單字筆記。");
+      }
+      const note = {
+        id: annotation.id,
+        materialId: annotation.materialId,
+        occurrenceKey: annotation.target.occurrenceKey,
+        word: annotation.target.word,
+        markdown: annotation.body.value,
+      };
+      if (
+        note.markdown.length > 20_000
+        || !isValidWordNoteContext(note)
+        || note.id !== contextualWordNoteId(note)
+      ) {
+        throw new Error("備份包含格式不正確的舊版位置型單字筆記。");
+      }
+    } else if (annotation.kind === "highlight") {
+      if (
+        !UUID_PATTERN.test(annotation.id)
+        || !isRecord(annotation.target)
+        || !isRecord(annotation.style)
+        || annotation.target.type !== "reading-word-occurrences"
+        || typeof annotation.target.paragraphKey !== "string"
+        || annotation.target.paragraphKey.length === 0
+        || !Array.isArray(annotation.target.occurrenceKeys)
+        || annotation.target.occurrenceKeys.length === 0
+        || !annotation.target.occurrenceKeys.every((key) => typeof key === "string")
+        || new Set(annotation.target.occurrenceKeys).size !== annotation.target.occurrenceKeys.length
+        || annotation.style.color !== "yellow"
+      ) {
+        throw new Error("備份包含格式不正確的螢光標記。");
+      }
+    } else {
+      throw new Error("備份包含不受支援的教材標記種類。");
+    }
+    annotationIds.add(annotation.id);
+  });
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
 function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<string, Blob>()): void {
@@ -350,8 +463,6 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
     throw new Error("備份版本與位置型單字筆記格式不相容。");
   }
 
-  const isTimestamp = (value: unknown): value is string =>
-    typeof value === "string" && Number.isFinite(Date.parse(value));
   const materialIds = new Set<string>();
   const materialBlocksById = new Map<string, ReturnType<typeof normalizedBlocks>>();
   const referencedAssetIds = new Set<string>();
@@ -493,6 +604,7 @@ function validateBackup(backup: LearningBackup, decodedAssetCache = new Map<stri
 
   const annotationIds = new Set<string>();
   const highlightedOccurrences = new Set<string>();
+  validateMaterialAnnotationStructure(backup.materialAnnotations ?? []);
   (backup.materialAnnotations ?? []).forEach((annotation: unknown) => {
     if (
       !isRecord(annotation)
@@ -631,22 +743,18 @@ export async function previewBackup(backup: LearningBackup): Promise<BackupImpor
   const plan = prepareBackup(backup);
   backup = plan.backup;
   const [currentMaterials, currentVocabulary, currentAnnotations] = await Promise.all([
-    listMaterials(),
+    readAll(STORES.materials),
     readAll(STORES.vocabulary),
     readAll(STORES.materialAnnotations),
   ]);
-  const materialIds = new Set(currentMaterials.map((item) => item.id));
-  const words = new Set(currentVocabulary.map((item) => item.word));
-  const annotationIds = new Set(currentAnnotations.map((item) => item.id));
   return {
-    newAnnotations: (backup.materialAnnotations ?? [])
-      .filter((item) => !annotationIds.has(item.id)).length,
-    newMaterials: backup.materials.filter((item) => !materialIds.has(item.id)).length,
-    updatedMaterials: backup.materials.filter((item) => materialIds.has(item.id)).length,
-    updatedAnnotations: (backup.materialAnnotations ?? [])
-      .filter((item) => annotationIds.has(item.id)).length,
-    newWords: backup.vocabulary.filter((item) => !words.has(item.word)).length,
-    updatedWords: backup.vocabulary.filter((item) => words.has(item.word)).length,
+    annotationCount: (backup.materialAnnotations ?? []).length,
+    materialCount: backup.materials.length,
+    vocabularyCount: backup.vocabulary.length,
+    replacedAnnotationCount: currentAnnotations.length,
+    replacedMaterialCount: currentMaterials.length,
+    replacedVocabularyCount: currentVocabulary.length,
+    skippedAnnotations: plan.skippedAnnotations,
     skippedMaterials: plan.skippedMaterials,
     skippedLegacyWordNotes: plan.skippedLegacyWordNotes,
     plan,
@@ -658,21 +766,11 @@ export async function importBackup(
 ): Promise<BackupImportResult> {
   const plan = isBackupImportPlan(input) ? input : prepareBackup(input);
   const backup = plan.backup;
-  const [currentMaterials, currentAssets, currentVocabulary, currentAnnotations, currentWordNotes, currentSettings] = await Promise.all([
-    materialsWithContent(),
-    readAll(STORES.materialAssets).then((assets) => assets.map(materialAssetFromStoredRecord)),
-    readAll(STORES.vocabulary),
-    readAll(STORES.materialAnnotations),
-    readAll(STORES.wordNotes),
-    readAll(STORES.settings),
-  ]);
-  let vocabulary = mergeNewerRecords(currentVocabulary, backup.vocabulary, "word")
-    .map(currentVocabularyRecord);
+  let vocabulary = backup.vocabulary.map(currentVocabularyRecord);
   const legacyKnownWords = new Set(
     vocabulary.filter((record) => record.learned).map((record) => record.word),
   );
-  const mergedMaterials = mergeNewerRecords(currentMaterials, backup.materials, "id");
-  const bundles = mergedMaterials.map((material) => {
+  const bundles = backup.materials.map((material) => {
     validateMaterialContent(material.content);
     const contentBlocks = normalizedBlocks(material.content, material.contentBlocks);
     const words = sourceWordsForBlocks(contentBlocks);
@@ -692,10 +790,6 @@ export async function importBackup(
       words,
     };
   });
-  const assetRecords = new Map(currentAssets.map((asset) => [asset.id, asset]));
-  plan.decodedAssets.forEach((asset) => {
-    assetRecords.set(asset.id, asset);
-  });
   const referencedAssetMaterialById = new Map<string, string>();
   bundles.forEach((bundle) => {
     bundle.contentBlocks
@@ -703,41 +797,34 @@ export async function importBackup(
       .forEach((block) => {
         const existingMaterialId = referencedAssetMaterialById.get(block.assetId);
         if (existingMaterialId && existingMaterialId !== bundle.metadata.id) {
-          throw new Error("備份與現有教材使用了相同的圖片識別碼。");
+          throw new Error("備份內有多份教材使用相同的圖片識別碼。");
         }
         referencedAssetMaterialById.set(block.assetId, bundle.metadata.id);
       });
   });
-  const mergedAssets = [...assetRecords.values()].filter((asset) => {
+  const importedAssets = plan.decodedAssets.filter((asset) => {
     const materialId = referencedAssetMaterialById.get(asset.id);
     if (!materialId) return false;
     if (asset.materialId !== materialId) {
-      throw new Error("備份與教材的圖片關聯不一致。");
+      throw new Error("備份圖片與教材的關聯不一致。");
     }
     return true;
   });
-  if (mergedAssets.length !== referencedAssetMaterialById.size) {
-    throw new Error("備份或現有教材缺少引用的圖片。");
+  if (importedAssets.length !== referencedAssetMaterialById.size) {
+    throw new Error("備份缺少教材引用的圖片。");
   }
   const learnedWords = new Set(bundles.flatMap((bundle) => bundle.metadata.knownWords));
   const timestamp = new Date().toISOString();
   vocabulary = synchronizeVocabularyRecords(vocabulary, learnedWords, timestamp);
-  const materialsWithAuthoritativeHighlights = backup.schemaVersion === BACKUP_SCHEMA_VERSION
-    ? new Set(backup.materials.map((material) => material.id))
-    : new Set<string>();
-  const mergedAnnotations = mergeImportedMaterialAnnotations(
-    currentAnnotations,
-    backup.materialAnnotations ?? [],
-    materialsWithAuthoritativeHighlights,
-  );
+  const importedAnnotations = backup.materialAnnotations ?? [];
   const materialAnnotations = bundles.flatMap((bundle) => materialAnnotationsForReplacement(
-    mergedAnnotations.filter((annotation) => annotation.materialId === bundle.metadata.id),
+    importedAnnotations.filter((annotation) => annotation.materialId === bundle.metadata.id),
     bundle.contentBlocks,
     timestamp,
   ));
   await writeBackupStores({
     materials: bundles.map((bundle) => bundle.metadata),
-    materialAssets: mergedAssets,
+    materialAssets: importedAssets,
     materialContents: bundles.map((bundle) => ({
       materialId: bundle.metadata.id,
       content: bundle.content,
@@ -749,17 +836,14 @@ export async function importBackup(
     })),
     vocabulary,
     materialAnnotations,
-    wordNotes: mergeNewerRecords(currentWordNotes, backup.wordNotes ?? [], "word"),
-    settings: mergeNewerRecords(
-      currentSettings.filter(({ key }) => key !== "familiarityTrackingVersion"),
-      (backup.settings ?? []).filter(({ key }) => ![
+    wordNotes: backup.wordNotes ?? [],
+    settings: (backup.settings ?? []).filter(({ key }) => ![
         "familiarityTrackingVersion",
         READING_CONTENT_CLASSIFICATION_KEY,
       ].includes(key)),
-      "key",
-    ),
   });
   return {
+    skippedAnnotations: plan.skippedAnnotations,
     skippedMaterials: plan.skippedMaterials,
     skippedLegacyWordNotes: plan.skippedLegacyWordNotes,
   };

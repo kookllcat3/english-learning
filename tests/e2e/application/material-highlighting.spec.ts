@@ -73,7 +73,7 @@ test("paints and erases words by dragging across the paragraph", async ({ page }
   await expect(page.getByRole("button", { name: "螢光筆" }))
     .toHaveAttribute("aria-pressed", "false");
   await page.getByRole("button", { name: "螢光筆" }).click();
-  await expect(page.getByRole("button", { name: "螢光筆" }))
+  await expect(page.getByRole("button", { name: "編輯中文解釋" }))
     .toHaveCSS("border-top-right-radius", "8px");
   await expect(words.nth(0)).toHaveCSS("cursor", /url\(/);
   await page.mouse.move(firstWord.x + firstWord.width / 2, firstWord.y + firstWord.height / 2);

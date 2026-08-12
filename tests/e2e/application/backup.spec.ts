@@ -335,7 +335,7 @@ test("replaces local highlights with the imported set for an included material",
   }]);
 });
 
-test("removes orphaned legacy contextual annotations while merging a backup", async ({ page }) => {
+test("replaces all local records with the imported backup", async ({ page }) => {
   const timestamp = "2026-08-05T08:00:00.000Z";
   await createMaterial(page);
   await page.evaluate(async ({ timestamp }) => {
@@ -394,6 +394,96 @@ test("removes orphaned legacy contextual annotations while merging a backup", as
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
   await expect(dataDialog.getByRole("status")).toContainText("備份已匯入");
   await expect.poll(async () => storedContextualNotes(page)).toHaveLength(0);
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect(page.getByRole("heading", { name: materialTitle })).toHaveCount(0);
+});
+
+test("imports a backup after removing a stale highlight target", async ({ page }) => {
+  const timestamp = "2026-08-09T08:00:00.000Z";
+  const materialId = "37f59d40-4f5f-4fc2-ac4d-515719319ba2";
+  await page.goto("/");
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toContain("略過失效教材標記 1 筆");
+    void dialog.accept();
+  });
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "stale-highlight-v6.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 6,
+      exportedAt: timestamp,
+      materials: [{
+        id: materialId,
+        title: "保留教材並略過失效標記",
+        description: "",
+        content: "A bear runs.",
+        contentBlocks: [{ type: "text", text: "A bear runs.", order: 0 }],
+        knownWords: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      materialAssets: [],
+      vocabulary: [],
+      materialAnnotations: [{
+        id: "df52b38d-02eb-4e99-a13e-320742f73803",
+        materialId,
+        kind: "highlight",
+        target: {
+          type: "reading-word-occurrences",
+          paragraphKey: "stale-paragraph",
+          occurrenceKeys: ["stale-occurrence"],
+        },
+        style: { color: "yellow" },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+      wordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("status")).toContainText("失效教材標記 1 筆");
+  await expect.poll(() => storedHighlights(page)).toEqual([]);
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "保留教材並略過失效標記" })).toBeVisible();
+});
+
+test("rolls back the complete replacement when a store clear fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalClear = IDBObjectStore.prototype.clear;
+    IDBObjectStore.prototype.clear = function clear() {
+      if (
+        this.name === "vocabulary"
+        && sessionStorage.getItem("failBackupReplacement") === "true"
+      ) throw new DOMException("Simulated backup replacement failure", "UnknownError");
+      return originalClear.call(this);
+    };
+  });
+  await createMaterial(page);
+  await page.evaluate(() => sessionStorage.setItem("failBackupReplacement", "true"));
+  await page.getByRole("button", { name: "開啟資料管理" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+    name: "empty-current-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: 6,
+      exportedAt: "2026-08-12T08:00:00.000Z",
+      materials: [],
+      materialAssets: [],
+      vocabulary: [],
+      materialAnnotations: [],
+      wordNotes: [],
+      settings: [],
+    }), "utf8"),
+  });
+
+  const dataDialog = page.getByRole("dialog", { name: "資料管理" });
+  await expect(dataDialog.getByRole("alert")).toContainText("備份匯入失敗");
+  await page.getByRole("button", { name: "關閉", exact: true }).click();
+  await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
 });
 
 test("skips an unsupported image material and imports the remaining backup", async ({ page }) => {
@@ -519,7 +609,7 @@ test("skips a material whose reading position does not exist", async ({ page }) 
   const dataDialog = page.getByRole("dialog", { name: "資料管理" });
   await expect(dataDialog.getByRole("status")).toBeVisible();
   await page.getByRole("button", { name: "關閉", exact: true }).click();
-  await expect(page.getByRole("heading", { name: materialTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: materialTitle })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Invalid reading position" })).toHaveCount(0);
 });
 

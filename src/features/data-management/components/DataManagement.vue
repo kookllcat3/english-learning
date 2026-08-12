@@ -86,20 +86,23 @@ async function importBackupFile(file: File): Promise<void> {
       : (await readBackupPackage(file)).backup;
     const preview = await previewBackup(backup);
     const summary = [
-      `新增教材 ${preview.newMaterials} 份`,
-      `更新教材 ${preview.updatedMaterials} 份`,
-      `新增詞彙 ${preview.newWords} 筆`,
-      `更新詞彙 ${preview.updatedWords} 筆`,
-      `新增教材標記 ${preview.newAnnotations} 筆`,
-      `更新教材標記 ${preview.updatedAnnotations} 筆`,
+      `備份含教材 ${preview.materialCount} 份`,
+      `詞彙 ${preview.vocabularyCount} 筆`,
+      `教材標記 ${preview.annotationCount} 筆`,
+      `將覆蓋目前教材 ${preview.replacedMaterialCount} 份`,
+      `詞彙 ${preview.replacedVocabularyCount} 筆`,
+      `教材標記 ${preview.replacedAnnotationCount} 筆`,
       ...(preview.skippedMaterials.length > 0
         ? [`略過不支援教材 ${preview.skippedMaterials.length} 份`]
+        : []),
+      ...(preview.skippedAnnotations > 0
+        ? [`略過失效教材標記 ${preview.skippedAnnotations} 筆`]
         : []),
       ...(preview.skippedLegacyWordNotes > 0
         ? [`略過舊版全域單字筆記 ${preview.skippedLegacyWordNotes} 筆`]
         : []),
     ].join("、");
-    if (!window.confirm(`即將匯入備份：${summary}。要繼續嗎？`)) {
+    if (!window.confirm(`即將以備份完整覆蓋目前資料庫：${summary}。此操作無法復原，要繼續嗎？`)) {
       backupStatus.value = "已取消匯入。";
       backupStatusKind.value = "idle";
       return;
@@ -111,6 +114,9 @@ async function importBackupFile(file: File): Promise<void> {
     const skippedDetails = [
       ...(result.skippedMaterials.length > 0
         ? [`不支援教材 ${result.skippedMaterials.length} 份`]
+        : []),
+      ...(result.skippedAnnotations > 0
+        ? [`失效教材標記 ${result.skippedAnnotations} 筆`]
         : []),
       ...(result.skippedLegacyWordNotes > 0
         ? [`舊版全域單字筆記 ${result.skippedLegacyWordNotes} 筆`]
@@ -185,8 +191,8 @@ function chooseBackupFile(): void {
       </section>
       <section class="data-action-card">
         <div>
-          <h3>匯入並合併</h3>
-          <p>選擇 `.elpkg` 或舊版 JSON；相同資料保留較新的版本，不會直接清空現有內容。</p>
+          <h3>匯入並覆蓋</h3>
+          <p>選擇 `.elpkg` 或舊版 JSON；驗證後完整覆蓋目前瀏覽器資料。</p>
           <button
             class="button button--secondary"
             :class="{ 'is-loading': activeBackupAction === 'import' }"

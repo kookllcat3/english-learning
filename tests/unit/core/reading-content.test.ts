@@ -43,6 +43,62 @@ describe("reading content classification", () => {
     ]);
   });
 
+  it("splits a bilingual line sequence into independent reading paragraphs", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: [
+        "I've been a liar, been a thief",
+        "我一直到處欺騙並竊取他人的心",
+        "Been a lover, been a cheat",
+        "我曾付出真心，也曾欺騙感情",
+        "So let the river run",
+      ].join("\n"),
+    }]);
+
+    expect(sections).toMatchObject([
+      {
+        key: "0-0-0",
+        lines: [
+          { role: "source", text: "I've been a liar, been a thief" },
+          { role: "translation", text: "我一直到處欺騙並竊取他人的心" },
+        ],
+        role: "source",
+      },
+      {
+        key: "0-0-0.2",
+        lines: [
+          { role: "source", text: "Been a lover, been a cheat" },
+          { role: "translation", text: "我曾付出真心，也曾欺騙感情" },
+        ],
+        role: "source",
+      },
+      {
+        key: "0-0-0.4",
+        lines: [{ role: "source", text: "So let the river run" }],
+        role: "source",
+      },
+    ]);
+  });
+
+  it("keeps a multiline English paragraph intact without an interleaved translation", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: "This paragraph wraps manually\nbut remains one continuous thought.",
+    }]);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]).toMatchObject({
+      key: "0-0-0",
+      lines: [
+        { role: "source", text: "This paragraph wraps manually" },
+        { role: "source", text: "but remains one continuous thought." },
+      ],
+      role: "source",
+    });
+  });
+
   it("attaches an adjacent short Chinese text block as a source translation", () => {
     const sections = classifyReadingContent([
       { type: "text", order: 0, text: "That Arizona sky" },

@@ -132,6 +132,29 @@ function paragraphCandidates(
   });
 }
 
+function splitBilingualLineSequence(candidate: ParagraphCandidate): ParagraphCandidate[] {
+  const firstLineIsSource = isSourceText(candidate.lines[0]?.text ?? "");
+  const firstTranslationIndex = candidate.lines.findIndex((line) => (
+    isDirectChineseTranslation(line.text)
+  ));
+  const hasSourceAfterTranslation = firstTranslationIndex >= 0
+    && candidate.lines.slice(firstTranslationIndex + 1).some((line) => isSourceText(line.text));
+  if (!firstLineIsSource || !hasSourceAfterTranslation) return [candidate];
+
+  const units: ParagraphCandidate[] = [];
+  candidate.lines.forEach((line, lineIndex) => {
+    if (isSourceText(line.text)) {
+      units.push({
+        key: units.length === 0 ? candidate.key : `${candidate.key}.${lineIndex}`,
+        lines: [line],
+      });
+      return;
+    }
+    units.at(-1)?.lines.push(line);
+  });
+  return units;
+}
+
 function sourceSection(candidate: ParagraphCandidate): ReadingTextSection | null {
   const firstSourceLine = candidate.lines.findIndex((line) => isSourceText(line.text));
   if (firstSourceLine < 0) return null;
@@ -217,16 +240,18 @@ export function classifyReadingContent(blocks: ContentBlock[]): ReadingContentSe
         sections.push({ block, key: `${block.order}-${blockIndex}`, type: "image" });
         return;
       }
-      paragraphCandidates(block, blockIndex).forEach((candidate) => {
-        const source = sourceSection(candidate);
-        if (source) {
-          sections.push(source);
-          return;
-        }
-        if (!attachTranslation(sections, candidate)) {
-          sections.push(nonSourceSection(candidate));
-        }
-      });
+      paragraphCandidates(block, blockIndex)
+        .flatMap(splitBilingualLineSequence)
+        .forEach((candidate) => {
+          const source = sourceSection(candidate);
+          if (source) {
+            sections.push(source);
+            return;
+          }
+          if (!attachTranslation(sections, candidate)) {
+            sections.push(nonSourceSection(candidate));
+          }
+        });
     });
   return sections;
 }

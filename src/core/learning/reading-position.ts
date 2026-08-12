@@ -1,19 +1,12 @@
 import type { ContentBlock } from "../models/models.js";
-import {
-  classifyReadingContent,
-  readingParagraphKey,
-  splitReadingParagraphs,
-} from "./reading-content.js";
+import { classifyReadingContent } from "./reading-content.js";
 
 export { readingParagraphKey, splitReadingParagraphs } from "./reading-content.js";
 
 export function hasReadingParagraphKey(value: string, blocks: ContentBlock[]): boolean {
-  return [...blocks]
-    .sort((first, second) => first.order - second.order)
-    .some((block, blockIndex) => block.type === "text"
-      && splitReadingParagraphs(block.text).some((_paragraph, paragraphIndex) => (
-        readingParagraphKey(block.order, blockIndex, paragraphIndex) === value
-      )));
+  return classifyReadingContent(blocks).some((section) => (
+    section.type === "text" && section.key === value
+  ));
 }
 
 export function readingParagraphKeys(blocks: ContentBlock[]): Set<string> {

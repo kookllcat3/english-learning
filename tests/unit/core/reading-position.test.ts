@@ -46,4 +46,16 @@ describe("reading position references", () => {
     expect(hasReadingParagraphKey("1-1-1", blocks)).toBe(true);
     expect(hasReadingParagraphKey("1-1-9", blocks)).toBe(false);
   });
+
+  it("recognizes source paragraphs inferred from a bilingual line sequence", () => {
+    const bilingualBlocks = [{
+      type: "text" as const,
+      order: 0,
+      text: "First line\n第一行翻譯\nSecond line\n第二行翻譯",
+    }];
+
+    expect([...readingParagraphKeys(bilingualBlocks)]).toEqual(["0-0-0", "0-0-0.2"]);
+    expect(hasReadingParagraphKey("0-0-0.2", bilingualBlocks)).toBe(true);
+    expect(normalizedReadingParagraphKey("0-0-0.2", bilingualBlocks)).toBe("0-0-0.2");
+  });
 });

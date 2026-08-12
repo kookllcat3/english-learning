@@ -54,7 +54,11 @@ const TITLE_MINOR_WORDS = new Set([
 ]);
 
 export function splitReadingParagraphs(text: string): string[] {
-  return text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
 }
 
 export function readingParagraphKey(

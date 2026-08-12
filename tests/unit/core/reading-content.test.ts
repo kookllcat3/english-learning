@@ -30,6 +30,19 @@ describe("reading content classification", () => {
     });
   });
 
+  it("classifies Windows TXT paragraphs independently", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: "First English paragraph.\r\n\r\nSecond English paragraph.",
+    }]);
+
+    expect(sections).toMatchObject([
+      { key: "0-0-0", role: "source", words: ["english", "first", "paragraph"] },
+      { key: "0-0-1", role: "source", words: ["english", "paragraph", "second"] },
+    ]);
+  });
+
   it("attaches an adjacent short Chinese text block as a source translation", () => {
     const sections = classifyReadingContent([
       { type: "text", order: 0, text: "That Arizona sky" },

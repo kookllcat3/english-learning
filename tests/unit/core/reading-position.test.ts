@@ -24,6 +24,16 @@ describe("reading position references", () => {
     expect([...readingParagraphKeys(blocks)]).toEqual(["1-1-0", "1-1-2"]);
   });
 
+  it.each([
+    ["Windows CRLF", "First paragraph.\r\n\r\nSecond paragraph."],
+    ["legacy CR", "First paragraph.\r\rSecond paragraph."],
+  ])("normalizes %s line endings before splitting paragraphs", (_label, content) => {
+    expect(splitReadingParagraphs(content)).toEqual([
+      "First paragraph.",
+      "Second paragraph.",
+    ]);
+  });
+
   it("clears malformed and orphaned paragraph references", () => {
     expect(normalizedReadingParagraphKey("1-1-2", blocks)).toBe("1-1-2");
     expect(normalizedReadingParagraphKey("1-1-1", blocks)).toBeNull();

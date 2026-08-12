@@ -21,7 +21,6 @@ export interface MaterialTranslationUpdate {
 
 export function normalizedTranslationText(text: string): string {
   const normalized = text.replace(/\r\n?/g, "\n").trim();
-  if (!normalized) throw new Error("中文解釋不能留空。");
   if (normalized.length > MAX_TRANSLATION_LENGTH) {
     throw new Error(`中文解釋不能超過 ${MAX_TRANSLATION_LENGTH.toLocaleString()} 個字元。`);
   }
@@ -37,12 +36,12 @@ export function updateMaterialParagraphTranslation(
   const target = translationTarget(blocks, paragraphKey);
   const contentBlocks = structuredClone(blocks);
   const sortedBlocks = [...contentBlocks].sort((first, second) => first.order - second.order);
-  if (target.translations.length > 0) {
-    target.translations.slice(1).reverse().forEach((location) => {
-      removeStoredLine(sortedBlocks, location);
-    });
+  removeAdditionalTranslations(sortedBlocks, target.translations);
+  if (target.translations.length > 0 && translation) {
     replaceStoredLine(sortedBlocks, target.translations[0], translation);
-  } else {
+  } else if (target.translations.length > 0) {
+    removeStoredLine(sortedBlocks, target.translations[0]);
+  } else if (translation) {
     insertStoredLineAfter(sortedBlocks, target.source, translation);
   }
 
@@ -59,6 +58,15 @@ export function updateMaterialParagraphTranslation(
       .join("\n\n"),
     contentBlocks: retainedBlocks,
   };
+}
+
+function removeAdditionalTranslations(
+  blocks: ContentBlock[],
+  translations: StoredLineLocation[],
+): void {
+  translations.slice(1).reverse().forEach((location) => {
+    removeStoredLine(blocks, location);
+  });
 }
 
 function translationTarget(blocks: ContentBlock[], paragraphKey: string): TranslationTarget {

@@ -180,7 +180,7 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
     .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
 });
 
-test("edits or adds a paragraph translation from the reading toolbar", async ({ page }) => {
+test("edits, adds, or removes a paragraph translation from the reading toolbar", async ({ page }) => {
   await createMaterial(
     page,
     materialTitle,
@@ -198,6 +198,10 @@ test("edits or adds a paragraph translation from the reading toolbar", async ({ 
   const dialog = page.getByRole("dialog", { name: "編輯中文解釋" });
   const editor = dialog.getByRole("textbox", { name: "中文解釋" });
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveClass(/dialog--standard/);
+  await expect.poll(() => dialog.evaluate((element) => (
+    getComputedStyle(element).getPropertyValue("--dialog-width").trim()
+  ))).toBe("640px");
   await expect(dialog).toContainText("A bear runs.");
   await expect(editor).toHaveValue("熊正在奔跑。");
   await editor.fill("熊正快速奔跑。");
@@ -222,7 +226,14 @@ test("edits or adds a paragraph translation from the reading toolbar", async ({ 
   await page.keyboard.press("Enter");
   await expect(dialog).toBeVisible();
   await expect(editor).toBeFocused();
-  await dialog.getByRole("button", { name: "取消" }).click();
+  await editor.fill("");
+  await dialog.getByRole("button", { name: "儲存" }).click();
+  await expect(paragraphs.nth(0).locator(".is-translation")).toHaveCount(0);
+  await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
+
+  await page.reload();
+  await expect(paragraphs.nth(0).locator(".is-translation")).toHaveCount(0);
+  await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
 });
 
 test("keeps the translation editor and original text when persistence fails", async ({ page }) => {
@@ -249,6 +260,12 @@ test("keeps the translation editor and original text when persistence fails", as
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("alert")).toContainText("中文解釋儲存失敗");
   await expect(editor).toHaveValue("不應寫入的解釋。");
+  await expect(page.locator(".reading-line-wrap.is-translation")).toHaveText("原本的解釋。");
+
+  await editor.fill("");
+  await dialog.getByRole("button", { name: "儲存" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(editor).toHaveValue("");
   await expect(page.locator(".reading-line-wrap.is-translation")).toHaveText("原本的解釋。");
 });
 

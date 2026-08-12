@@ -240,7 +240,8 @@
 .translation-editor-source strong { color: var(--navy); font-size: .82rem; }
 .translation-editor-source p { margin: 5px 0 0; white-space: pre-wrap; line-height: 1.55; }
 .translation-editor-form .field { margin-bottom: 10px; }
-.translation-editor-form .form-message { margin: 0 0 12px; }
+.translation-editor-message { min-height: 28px; }
+.translation-editor-form .form-message { margin: 0; }
 .reading-content .reading-line {
   display: inline;
 }

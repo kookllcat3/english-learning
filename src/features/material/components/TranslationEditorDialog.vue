@@ -27,10 +27,6 @@ function open(options: { paragraphKey: string; sourceText: string; translation: 
 async function save(): Promise<void> {
   if (saving.value) return;
   const text = draft.value.trim();
-  if (!text) {
-    errorMessage.value = "中文解釋不能留空。";
-    return;
-  }
   saving.value = true;
   errorMessage.value = "";
   try {
@@ -56,7 +52,7 @@ defineExpose({ open });
 <template>
   <BaseDialog
     ref="dialog"
-    dialog-class="dialog--compact dialog--form translation-editor-dialog"
+    dialog-class="dialog--standard dialog--form translation-editor-dialog"
     eyebrow="Translation"
     title="編輯中文解釋"
   >
@@ -76,9 +72,13 @@ defineExpose({ open });
           aria-describedby="translation-editor-hint"
           @keydown="handleKeydown"
         />
-        <small id="translation-editor-hint">Ctrl／⌘ + Enter 儲存，最多 2,000 字元。</small>
+        <small id="translation-editor-hint">
+          Ctrl／⌘ + Enter 儲存；留空會移除解釋，最多 2,000 字元。
+        </small>
       </label>
-      <p v-if="errorMessage" class="form-message is-error" role="alert">{{ errorMessage }}</p>
+      <div class="translation-editor-message" aria-live="polite">
+        <p v-if="errorMessage" class="form-message is-error" role="alert">{{ errorMessage }}</p>
+      </div>
       <div class="dialog__actions">
         <button class="button button--primary" type="submit" :disabled="saving">
           {{ saving ? "儲存中…" : "儲存" }}

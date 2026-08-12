@@ -45,10 +45,40 @@ describe("material paragraph translations", () => {
     ]);
   });
 
-  it("rejects empty, oversized, and missing translations", () => {
+  it("removes all translations when the saved explanation is empty", () => {
+    const update = updateMaterialParagraphTranslation([{
+      type: "text",
+      order: 0,
+      text: "A bear runs.\n熊正在奔跑。\n補充說明。\n\nThe fox sleeps.\n狐狸在睡覺。",
+    }], "0-0-0", " \n ");
+
+    expect(update.contentBlocks).toEqual([{
+      type: "text",
+      order: 0,
+      text: "A bear runs.\n\nThe fox sleeps.\n狐狸在睡覺。",
+    }]);
+  });
+
+  it("removes an empty adjacent translation block", () => {
+    const update = updateMaterialParagraphTranslation([
+      { type: "text", order: 0, text: "Arizona skies." },
+      { type: "text", order: 1, text: "亞利桑那州的天空" },
+    ], "0-0-0", "");
+
+    expect(update.contentBlocks).toEqual([
+      { type: "text", order: 0, text: "Arizona skies." },
+    ]);
+    expect(update.content).toBe("Arizona skies.");
+  });
+
+  it("keeps source-only content unchanged when an empty explanation is saved", () => {
     const blocks = [{ type: "text" as const, order: 0, text: "A bear runs." }];
-    expect(() => updateMaterialParagraphTranslation(blocks, "0-0-0", " \n "))
-      .toThrow("中文解釋不能留空。");
+    expect(updateMaterialParagraphTranslation(blocks, "0-0-0", " ").contentBlocks)
+      .toEqual(blocks);
+  });
+
+  it("rejects oversized and missing translations", () => {
+    const blocks = [{ type: "text" as const, order: 0, text: "A bear runs." }];
     expect(() => updateMaterialParagraphTranslation(blocks, "0-0-0", "中".repeat(2_001)))
       .toThrow("中文解釋不能超過 2,000 個字元。");
     expect(() => updateMaterialParagraphTranslation(blocks, "9-9-9", "翻譯"))

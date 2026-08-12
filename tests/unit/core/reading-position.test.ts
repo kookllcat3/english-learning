@@ -58,4 +58,17 @@ describe("reading position references", () => {
     expect(hasReadingParagraphKey("0-0-0.2", bilingualBlocks)).toBe(true);
     expect(normalizedReadingParagraphKey("0-0-0.2", bilingualBlocks)).toBe("0-0-0.2");
   });
+
+  it("recognizes inferred English line-oriented paragraph keys", () => {
+    const lineOrientedBlocks = [{
+      type: "text" as const,
+      order: 0,
+      text: "First source line\nSecond source line\nThird source line",
+    }];
+
+    expect([...readingParagraphKeys(lineOrientedBlocks)])
+      .toEqual(["0-0-0", "0-0-0.1", "0-0-0.2"]);
+    expect(normalizedReadingParagraphKey("0-0-0", lineOrientedBlocks)).toBe("0-0-0");
+    expect(normalizedReadingParagraphKey("0-0-0.2", lineOrientedBlocks)).toBe("0-0-0.2");
+  });
 });

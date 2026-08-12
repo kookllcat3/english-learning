@@ -52,6 +52,9 @@ const NUMBERED_BILINGUAL_LABEL_PATTERN = /^\s*\d{1,3}\s+[a-z][^.!?\n]*[\u3400-\u
 const TITLE_MINOR_WORDS = new Set([
   "a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with",
 ]);
+const LINE_ORIENTED_MINIMUM_LINES = 3;
+const LINE_ORIENTED_MAXIMUM_WORDS = 18;
+const LINE_ORIENTED_MATCH_RATIO = 0.75;
 
 export function splitReadingParagraphs(text: string): string[] {
   return text
@@ -132,14 +135,39 @@ function paragraphCandidates(
   });
 }
 
-function splitBilingualLineSequence(candidate: ParagraphCandidate): ParagraphCandidate[] {
+function startsWithUppercaseEnglishLetter(text: string): boolean {
+  const firstLetter = /[a-z]/i.exec(text.slice(sourceTextStart(text)))?.[0];
+  return Boolean(firstLetter) && firstLetter === firstLetter?.toUpperCase();
+}
+
+function hasRequiredLineRatio(
+  candidate: ParagraphCandidate,
+  predicate: (text: string) => boolean,
+): boolean {
+  const requiredMatches = Math.ceil(candidate.lines.length * LINE_ORIENTED_MATCH_RATIO);
+  return candidate.lines.filter((line) => predicate(line.text)).length >= requiredMatches;
+}
+
+function isEnglishLineOrientedContent(candidate: ParagraphCandidate): boolean {
+  if (candidate.lines.length < LINE_ORIENTED_MINIMUM_LINES) return false;
+  if (!candidate.lines.every((line) => isSourceText(line.text))) return false;
+  return hasRequiredLineRatio(candidate, startsWithUppercaseEnglishLetter)
+    && hasRequiredLineRatio(candidate, (text) => !hasSentencePunctuation(text))
+    && hasRequiredLineRatio(candidate, (text) => (
+      englishWords(text).length <= LINE_ORIENTED_MAXIMUM_WORDS
+    ));
+}
+
+function splitStructuredLineSequence(candidate: ParagraphCandidate): ParagraphCandidate[] {
   const firstLineIsSource = isSourceText(candidate.lines[0]?.text ?? "");
   const firstTranslationIndex = candidate.lines.findIndex((line) => (
     isDirectChineseTranslation(line.text)
   ));
   const hasSourceAfterTranslation = firstTranslationIndex >= 0
     && candidate.lines.slice(firstTranslationIndex + 1).some((line) => isSourceText(line.text));
-  if (!firstLineIsSource || !hasSourceAfterTranslation) return [candidate];
+  const shouldSplit = firstLineIsSource
+    && (hasSourceAfterTranslation || isEnglishLineOrientedContent(candidate));
+  if (!shouldSplit) return [candidate];
 
   const units: ParagraphCandidate[] = [];
   candidate.lines.forEach((line, lineIndex) => {
@@ -241,7 +269,7 @@ export function classifyReadingContent(blocks: ContentBlock[]): ReadingContentSe
         return;
       }
       paragraphCandidates(block, blockIndex)
-        .flatMap(splitBilingualLineSequence)
+        .flatMap(splitStructuredLineSequence)
         .forEach((candidate) => {
           const source = sourceSection(candidate);
           if (source) {

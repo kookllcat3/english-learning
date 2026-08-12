@@ -81,11 +81,35 @@ describe("reading content classification", () => {
     ]);
   });
 
+  it("splits English line-oriented content without requiring translations", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: [
+        "I've been a liar, been a thief",
+        "Been a lover, been a cheat",
+        "All my sins need holy water, feel it washin' over me",
+        "So let the river run",
+      ].join("\n"),
+    }]);
+
+    expect(sections).toMatchObject([
+      { key: "0-0-0", lines: [{ role: "source" }], role: "source" },
+      { key: "0-0-0.1", lines: [{ role: "source" }], role: "source" },
+      { key: "0-0-0.2", lines: [{ role: "source" }], role: "source" },
+      { key: "0-0-0.3", lines: [{ role: "source" }], role: "source" },
+    ]);
+  });
+
   it("keeps a multiline English paragraph intact without an interleaved translation", () => {
     const sections = classifyReadingContent([{
       type: "text",
       order: 0,
-      text: "This paragraph wraps manually\nbut remains one continuous thought.",
+      text: [
+        "This paragraph wraps manually",
+        "but remains one continuous thought",
+        "and should stay together.",
+      ].join("\n"),
     }]);
 
     expect(sections).toHaveLength(1);
@@ -93,10 +117,26 @@ describe("reading content classification", () => {
       key: "0-0-0",
       lines: [
         { role: "source", text: "This paragraph wraps manually" },
-        { role: "source", text: "but remains one continuous thought." },
+        { role: "source", text: "but remains one continuous thought" },
+        { role: "source", text: "and should stay together." },
       ],
       role: "source",
     });
+  });
+
+  it("keeps complete English prose sentences in one hard paragraph", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: [
+        "This is the first sentence.",
+        "This is the second sentence.",
+        "This is the third sentence.",
+      ].join("\n"),
+    }]);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]).toMatchObject({ key: "0-0-0", role: "source" });
   });
 
   it("attaches an adjacent short Chinese text block as a source translation", () => {

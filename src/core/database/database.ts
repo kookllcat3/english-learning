@@ -380,17 +380,23 @@ export async function writeMaterialBundles(bundles: MaterialBundle[]): Promise<v
   const assets = transaction.objectStore(STORES.materialAssets);
   const contents = transaction.objectStore(STORES.materialContents);
   const terms = transaction.objectStore(STORES.materialTerms);
-  bundles.forEach((bundle) => {
-    materials.put(bundle.metadata);
-    contents.put({
-      materialId: bundle.metadata.id,
-      content: bundle.content,
-      contentBlocks: bundle.contentBlocks,
+  try {
+    bundles.forEach((bundle) => {
+      materials.put(bundle.metadata);
+      contents.put({
+        materialId: bundle.metadata.id,
+        content: bundle.content,
+        contentBlocks: bundle.contentBlocks,
+      });
+      terms.put({ materialId: bundle.metadata.id, words: bundle.words });
     });
-    terms.put({ materialId: bundle.metadata.id, words: bundle.words });
-  });
-  assetsToStore.forEach((asset) => assets.put(asset));
-  await transactionResult(transaction);
+    assetsToStore.forEach((asset) => assets.put(asset));
+  } catch {
+    transaction.abort();
+    await transactionResult(transaction).catch(() => undefined);
+    throw new Error("教材儲存失敗，未寫入任何資料。");
+  }
+  await transactionResult(transaction, 0, "教材儲存失敗，未寫入任何資料。");
 }
 
 export interface MaterialReplacementWrite {

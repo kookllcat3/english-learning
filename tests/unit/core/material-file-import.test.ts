@@ -23,6 +23,11 @@ describe("material file import", () => {
     await expect(readMaterialFile(file)).rejects.toThrow("TXT 檔案請控制在 2 MB 以內");
   });
 
+  it("rejects malformed UTF-8 text instead of replacing invalid bytes", async () => {
+    const file = new File([new Uint8Array([0xc3, 0x28])], "invalid.txt", { type: "text/plain" });
+    await expect(readMaterialFile(file)).rejects.toThrow("TXT 檔案必須使用有效的 UTF-8 編碼");
+  });
+
   it("rejects unsupported files", async () => {
     const file = new File(["data"], "lesson.html", { type: "text/html" });
     await expect(readMaterialFile(file)).rejects.toThrow("目前只支援 UTF-8 TXT 檔案或直接貼上文字");

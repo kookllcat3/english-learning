@@ -14,6 +14,7 @@
 - **中文解釋編輯**：選段後新增或修改解釋。
 - **備份完整還原**：匯入時覆蓋本機資料。
 - **失效標記相容**：不再阻擋還原。
+- **UTF-8 驗證**：拒絕無效編碼且不寫入。
 
 ## 線上 Demo
 
@@ -88,7 +89,7 @@ npm start
 
 ## 教材限制
 
-- TXT：UTF-8 純文字，內容上限 2 MB；支援 LF、CRLF 與 CR 換行
+- TXT：UTF-8 純文字，內容上限 2 MB；支援 LF、CRLF 與 CR 換行；無效 UTF-8 會拒絕且不寫入
 - 教材匯出：目前僅提供不含圖片教材的 UTF-8 TXT
 - 備份：介面接受 100 MB 以內的 `.elpkg` 或舊版 JSON；封裝內容還會檢查項目數、單檔及累積解壓容量，超限、驗證或 IndexedDB 寫入失敗時會顯示錯誤，無法支援的個別教材則自動略過並顯示數量
 
@@ -209,6 +210,9 @@ Playwright 會以桌面 Chromium、390 px 窄螢幕與觸控裝置執行核心�
 驗證單一 Vue App、Vue Router、IndexedDB 學習進度持久化、跨分頁同步、
 離線資料寫入、舊版資料庫升級、螢光標記、備份往返、axe WCAG 2.0/2.1 A 與 AA
 自動檢查基線，以及舊網址轉址。自動檢查不能取代完整的人工無障礙測試。
+核心資料 E2E 會逐筆比對八個 IndexedDB store，涵蓋 `.elpkg` 完整匯出與覆蓋還原、
+備份 schema 1–6、DB v6／v7／v8 直接升級、教材新增／下載／更新，以及
+clear、put、quota、abort 等失敗後的完整回滾；圖片與下載檔也會比對 MIME 與 bytes。
 application E2E 依核心流程、單字卡、彈窗、閱讀進度、AI 助手、備份、教材庫與
 韌性測試拆檔；application 與 production runner 在本機最多使用 4 個 workers，CI 固定使用單一 worker，避免效能門檻受到共享 runner 的平行負載干擾。
 一般與 production E2E runner 會直接管理各自的 Vite server，並在測試結束時關閉，

@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  CORE_STORE_NAMES,
+  databaseSnapshot,
+  importJsonBackup,
+  seedCompleteDatabase,
+} from "./data-integrity-helpers";
+import {
   createMaterial,
   materialTitle,
   storedContextualNotes,
@@ -9,6 +15,274 @@ import {
   storedWordNotes,
   validWebpBase64,
 } from "./test-helpers";
+
+const fixedTimestamp = "2026-08-12T08:00:00.000Z";
+
+function completeBackupFixture(prefix = "incoming") {
+  const materialId = "22222222-2222-4222-8222-222222222222";
+  const assetId = "44444444-4444-4444-8444-444444444444";
+  const content = `${prefix} reads.\n\n${prefix} 中文解釋。`;
+  return {
+    schemaVersion: 6,
+    exportedAt: fixedTimestamp,
+    materials: [{
+      id: materialId,
+      title: `${prefix} material`,
+      description: `${prefix} description`,
+      content,
+      contentBlocks: [
+        { type: "text", text: `${prefix} reads.`, order: 0 },
+        {
+          type: "image",
+          assetId,
+          alt: `${prefix} image`,
+          caption: `${prefix} caption`,
+          order: 1,
+        },
+        { type: "text", text: `${prefix} 中文解釋。`, order: 2 },
+      ],
+      knownWords: [prefix],
+      readingParagraphKey: null,
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }],
+    materialAssets: [{
+      id: assetId,
+      materialId,
+      mimeType: "image/webp",
+      width: 1,
+      height: 1,
+      alt: `${prefix} image`,
+      caption: `${prefix} caption`,
+      data: `data:image/webp;base64,${validWebpBase64}`,
+    }],
+    vocabulary: [{
+      word: prefix,
+      learned: true,
+      learnedAt: fixedTimestamp,
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }],
+    materialAnnotations: [{
+      id: `${materialId}::vocabulary%3A${prefix}`,
+      materialId,
+      kind: "legacy-contextual-word-note",
+      target: {
+        type: "contextual-word-occurrence",
+        occurrenceKey: `vocabulary:${prefix}`,
+        word: prefix,
+      },
+      body: { format: "markdown", value: `${prefix} contextual note` },
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }],
+    wordNotes: [{
+      word: prefix,
+      markdown: `${prefix} shared note`,
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }],
+    settings: [{
+      key: "searchHistory",
+      value: [`${prefix} search`],
+      updatedAt: fixedTimestamp,
+    }],
+  };
+}
+
+function legacyBackupFixture(schemaVersion: number) {
+  const materialId = `00000000-0000-4000-8000-00000000000${schemaVersion}`;
+  const backup: Record<string, unknown> = {
+    schemaVersion,
+    exportedAt: fixedTimestamp,
+    materials: [{
+      id: materialId,
+      title: `Schema ${schemaVersion} 教材`,
+      description: "歷史備份相容性",
+      content: "Bear learns.",
+      knownWords: ["bear"],
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }],
+    materialAssets: [],
+    vocabulary: [{
+      word: "bear",
+      learned: true,
+      learnedAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }],
+    settings: [{
+      key: "searchHistory",
+      value: [`schema-${schemaVersion}`],
+      updatedAt: fixedTimestamp,
+    }],
+  };
+  if (schemaVersion === 4) {
+    backup.contextualWordNotes = [{
+      id: `${materialId}::vocabulary%3Abear`,
+      materialId,
+      occurrenceKey: "vocabulary:bear",
+      word: "bear",
+      markdown: "schema 4 contextual note",
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }];
+  }
+  if (schemaVersion >= 5) {
+    backup.wordNotes = [{
+      word: "bear",
+      markdown: `schema ${schemaVersion} shared note`,
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }];
+  }
+  if (schemaVersion === 6) {
+    backup.materialAnnotations = [{
+      id: `${materialId}::vocabulary%3Abear`,
+      materialId,
+      kind: "legacy-contextual-word-note",
+      target: {
+        type: "contextual-word-occurrence",
+        occurrenceKey: "vocabulary:bear",
+        word: "bear",
+      },
+      body: { format: "markdown", value: "schema 6 contextual note" },
+      createdAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+    }];
+  }
+  return backup;
+}
+
+test("round-trips all eight stores and replaces every existing record", async ({ browser, page }) => {
+  const sourceContext = await browser.newContext({ baseURL: "http://127.0.0.1:4173" });
+  const sourcePage = await sourceContext.newPage();
+  try {
+    await seedCompleteDatabase(sourcePage, "incoming");
+    const expected = await databaseSnapshot(sourcePage);
+    CORE_STORE_NAMES.forEach((storeName) => expect(expected.stores[storeName]).not.toEqual([]));
+
+    await sourcePage.getByRole("button", { name: "開啟資料管理" }).click();
+    const downloadPromise = sourcePage.waitForEvent("download");
+    await sourcePage.getByRole("button", { name: "下載備份" }).click();
+    const backupDownload = await downloadPromise;
+    const backupPath = await backupDownload.path();
+    if (!backupPath) throw new Error("Synthetic complete backup was not downloaded.");
+
+    await seedCompleteDatabase(page, "local");
+    const localSnapshot = await databaseSnapshot(page);
+    CORE_STORE_NAMES.forEach((storeName) => expect(localSnapshot.stores[storeName]).not.toEqual([]));
+    expect(JSON.stringify(localSnapshot)).toContain("local");
+
+    await page.getByRole("button", { name: "開啟資料管理" }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator('.data-management-dialog input[type="file"]').setInputFiles(backupPath);
+    await expect(page.getByRole("dialog", { name: "資料管理" }).getByRole("status"))
+      .toContainText("備份已匯入");
+
+    const restored = await databaseSnapshot(page);
+    expect(restored).toEqual(expected);
+    expect(JSON.stringify(restored)).not.toContain("local");
+  } finally {
+    await sourceContext.close();
+  }
+});
+
+for (const schemaVersion of [1, 2, 3, 4, 5, 6]) {
+  test(`imports backup schema ${schemaVersion} into the exact current database shape`, async ({ page }) => {
+    const materialId = `00000000-0000-4000-8000-00000000000${schemaVersion}`;
+    await importJsonBackup(page, legacyBackupFixture(schemaVersion), `schema-${schemaVersion}.json`);
+    const snapshot = await databaseSnapshot(page);
+
+    expect(snapshot.version).toBe(9);
+    expect(snapshot.stores.materials).toEqual([{
+      createdAt: fixedTimestamp,
+      description: "歷史備份相容性",
+      id: materialId,
+      knownCount: 1,
+      knownWords: ["bear"],
+      readingParagraphKey: null,
+      title: `Schema ${schemaVersion} 教材`,
+      updatedAt: fixedTimestamp,
+      wordCount: 2,
+    }]);
+    expect(snapshot.stores.materialContents).toEqual([{
+      content: "Bear learns.",
+      contentBlocks: [{ order: 0, text: "Bear learns.", type: "text" }],
+      materialId,
+    }]);
+    expect(snapshot.stores.materialTerms).toEqual([{ materialId, words: ["bear", "learns"] }]);
+    expect(snapshot.stores.materialAssets).toEqual([]);
+    expect(snapshot.stores.vocabulary).toEqual([{
+      learned: true,
+      learnedAt: fixedTimestamp,
+      updatedAt: fixedTimestamp,
+      word: "bear",
+    }]);
+    expect(snapshot.stores.settings).toEqual([{
+      key: "searchHistory",
+      updatedAt: fixedTimestamp,
+      value: [`schema-${schemaVersion}`],
+    }]);
+    expect(snapshot.stores.materialAnnotations).toHaveLength([4, 6].includes(schemaVersion) ? 1 : 0);
+    expect(snapshot.stores.wordNotes).toHaveLength(schemaVersion >= 5 ? 1 : 0);
+  });
+}
+
+const backupWriteFailures = [
+  { mode: "clear", label: "store clear throws" },
+  { mode: "put", label: "store put throws" },
+  { mode: "quota", label: "asset quota is exceeded" },
+  { mode: "abort", label: "transaction aborts" },
+] as const;
+
+for (const failure of backupWriteFailures) {
+  test(`rolls back all eight stores when backup ${failure.label}`, async ({ page }) => {
+    await page.addInitScript((mode) => {
+      const failureEnabled = () => sessionStorage.getItem("failCompleteBackupImport") === "true";
+      const originalClear = IDBObjectStore.prototype.clear;
+      const originalPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.clear = function clear() {
+        if (failureEnabled() && mode === "clear" && this.name === "vocabulary") {
+          throw new DOMException("Synthetic clear failure", "UnknownError");
+        }
+        return originalClear.call(this);
+      };
+      IDBObjectStore.prototype.put = function put(value: unknown, key?: IDBValidKey) {
+        const matchesPut = mode === "put" && this.name === "materialContents";
+        const matchesQuota = mode === "quota" && this.name === "materialAssets";
+        if (failureEnabled() && matchesPut) {
+          throw new DOMException("Synthetic put failure", "UnknownError");
+        }
+        if (failureEnabled() && matchesQuota) {
+          throw new DOMException("Synthetic quota failure", "QuotaExceededError");
+        }
+        const request = key === undefined
+          ? originalPut.call(this, value)
+          : originalPut.call(this, value, key);
+        if (failureEnabled() && mode === "abort" && this.name === "settings") {
+          this.transaction.abort();
+        }
+        return request;
+      };
+    }, failure.mode);
+
+    await seedCompleteDatabase(page, "local");
+    const before = await databaseSnapshot(page);
+    await page.evaluate(() => sessionStorage.setItem("failCompleteBackupImport", "true"));
+    await page.getByRole("button", { name: "開啟資料管理" }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator('.data-management-dialog input[type="file"]').setInputFiles({
+      name: `failed-${failure.mode}-backup.json`,
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(completeBackupFixture()), "utf8"),
+    });
+
+    await expect(page.getByRole("dialog", { name: "資料管理" }).getByRole("alert"))
+      .toContainText("備份匯入失敗");
+    expect(await databaseSnapshot(page)).toEqual(before);
+  });
+}
 
 test("exports, removes, and restores a complete backup", async ({ page }) => {
   await page.goto("/");

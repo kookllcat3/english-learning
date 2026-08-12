@@ -1,6 +1,184 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { seedKnownWordsForCurrentMaterial } from "./test-helpers";
+import { databaseSchemaSnapshot, databaseSnapshot } from "./data-integrity-helpers";
+import { seedKnownWordsForCurrentMaterial, validWebpBase64 } from "./test-helpers";
+
+const historicalTimestamp = "2026-01-01T00:00:00.000Z";
+const historicalMaterialId = "55555555-5555-4555-8555-555555555555";
+const historicalAssetId = "66666666-6666-4666-8666-666666666666";
+
+async function seedHistoricalDatabase(
+  page: Page,
+  version: 6 | 7 | 8,
+  keepConnectionOpen = false,
+): Promise<void> {
+  await page.goto("/tests/e2e/fixtures/same-origin.html");
+  await page.evaluate(async ({
+    assetId,
+    imageBase64,
+    keepConnectionOpen,
+    materialId,
+    timestamp,
+    version,
+  }) => {
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase("english-learning");
+      deletion.addEventListener("success", () => resolve(), { once: true });
+      deletion.addEventListener("error", () => reject(deletion.error), { once: true });
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("english-learning", version);
+      request.addEventListener("upgradeneeded", () => {
+        const database = request.result;
+        const materials = database.createObjectStore("materials", { keyPath: "id" });
+        materials.createIndex("updatedAt", "updatedAt");
+        materials.createIndex("title", "title");
+        const vocabulary = database.createObjectStore("vocabulary", { keyPath: "word" });
+        vocabulary.createIndex("learned", "learned");
+        vocabulary.createIndex("updatedAt", "updatedAt");
+        database.createObjectStore("settings", { keyPath: "key" });
+        database.createObjectStore("materialContents", { keyPath: "materialId" });
+        const terms = database.createObjectStore("materialTerms", { keyPath: "materialId" });
+        terms.createIndex("word", "words", { multiEntry: true });
+        const assets = database.createObjectStore("materialAssets", { keyPath: "id" });
+        assets.createIndex("materialId", "materialId");
+        if (version === 6 || version === 8) {
+          database.createObjectStore("wordNotes", { keyPath: "word" });
+        }
+        if (version >= 7) {
+          const contextualNotes = database.createObjectStore("contextualWordNotes", { keyPath: "id" });
+          contextualNotes.createIndex("materialId", "materialId");
+        }
+
+        const imageBytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0));
+        const transaction = request.transaction;
+        if (!transaction) throw new Error("Historical upgrade transaction is unavailable.");
+        transaction.objectStore("materials").put({
+          id: materialId,
+          title: `DB v${version} 歷史教材`,
+          description: "歷史 schema fixture",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          wordCount: 2,
+          knownCount: 1,
+          knownWords: ["bear"],
+        });
+        transaction.objectStore("materialContents").put({
+          materialId,
+          content: "Bear learns.\n\n熊學習。",
+          contentBlocks: [
+            { type: "text", text: "Bear learns.", order: 0 },
+            { type: "image", assetId, alt: "歷史圖片", caption: "歷史說明", order: 1 },
+            { type: "text", text: "熊學習。", order: 2 },
+          ],
+        });
+        transaction.objectStore("materialTerms").put({ materialId, words: ["bear", "learns"] });
+        transaction.objectStore("materialAssets").put({
+          id: assetId,
+          materialId,
+          blob: imageBytes.buffer,
+          mimeType: "image/webp",
+          width: 1,
+          height: 1,
+          alt: "歷史圖片",
+          caption: "歷史說明",
+        });
+        transaction.objectStore("vocabulary").put({
+          word: "bear",
+          learned: true,
+          learnedAt: timestamp,
+          updatedAt: timestamp,
+        });
+        transaction.objectStore("settings").put({
+          key: "searchHistory",
+          value: [`db-v${version}`],
+          updatedAt: timestamp,
+        });
+        if (version === 6 || version === 8) {
+          transaction.objectStore("wordNotes").put({
+            word: "bear",
+            markdown: `DB v${version} global note`,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+        }
+        if (version >= 7) {
+          transaction.objectStore("contextualWordNotes").put({
+            id: `${materialId}::vocabulary%3Abear`,
+            materialId,
+            occurrenceKey: "vocabulary:bear",
+            word: "bear",
+            markdown: `DB v${version} contextual note`,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+        }
+      }, { once: true });
+      request.addEventListener("success", () => {
+        if (keepConnectionOpen) {
+          (globalThis as typeof globalThis & { legacyDatabase?: IDBDatabase }).legacyDatabase = request.result;
+        } else {
+          request.result.close();
+        }
+        resolve();
+      }, { once: true });
+      request.addEventListener("error", () => reject(request.error), { once: true });
+    });
+  }, {
+    assetId: historicalAssetId,
+    imageBase64: validWebpBase64,
+    keepConnectionOpen,
+    materialId: historicalMaterialId,
+    timestamp: historicalTimestamp,
+    version,
+  });
+}
+
+function expectedCurrentSchema() {
+  const store = (
+    name: string,
+    keyPath: string,
+    indexes: Array<{
+      keyPath: string | string[];
+      multiEntry?: boolean;
+      name: string;
+      unique?: boolean;
+    }> = [],
+  ) => ({
+    autoIncrement: false,
+    indexes: indexes.map((index) => ({
+      keyPath: index.keyPath,
+      multiEntry: index.multiEntry ?? false,
+      name: index.name,
+      unique: index.unique ?? false,
+    })),
+    keyPath,
+    name,
+  });
+  return {
+    version: 9,
+    stores: [
+      store("materialAnnotations", "id", [
+        { keyPath: "kind", name: "kind" },
+        { keyPath: "materialId", name: "materialId" },
+        { keyPath: ["materialId", "kind"], name: "materialIdKind" },
+      ]),
+      store("materialAssets", "id", [{ keyPath: "materialId", name: "materialId" }]),
+      store("materialContents", "materialId"),
+      store("materialTerms", "materialId", [{ keyPath: "words", multiEntry: true, name: "word" }]),
+      store("materials", "id", [
+        { keyPath: "title", name: "title" },
+        { keyPath: "updatedAt", name: "updatedAt" },
+      ]),
+      store("settings", "key"),
+      store("vocabulary", "word", [
+        { keyPath: "learned", name: "learned" },
+        { keyPath: "updatedAt", name: "updatedAt" },
+      ]),
+      store("wordNotes", "word"),
+    ],
+  };
+}
 
 async function createMaterial(page: Page, title: string, content: string): Promise<void> {
   await page.goto("/");
@@ -39,6 +217,87 @@ test("keeps local learning progress writable while offline", async ({ page, cont
   await page.reload();
   await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
 });
+
+for (const databaseVersion of [6, 7, 8] as const) {
+  test(`upgrades the complete released DB v${databaseVersion} schema and data to v9`, async ({ page }) => {
+    await seedHistoricalDatabase(page, databaseVersion);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: `DB v${databaseVersion} 歷史教材` })).toBeVisible();
+
+    expect(await databaseSchemaSnapshot(page)).toEqual(expectedCurrentSchema());
+    const snapshot = await databaseSnapshot(page);
+    expect(snapshot.version).toBe(9);
+    expect(snapshot.stores.materials).toEqual([{
+      createdAt: historicalTimestamp,
+      description: "歷史 schema fixture",
+      id: historicalMaterialId,
+      knownCount: 1,
+      knownWords: ["bear"],
+      readingParagraphKey: null,
+      title: `DB v${databaseVersion} 歷史教材`,
+      updatedAt: historicalTimestamp,
+      wordCount: 2,
+    }]);
+    expect(snapshot.stores.materialContents).toEqual([{
+      content: "Bear learns.\n\n熊學習。",
+      contentBlocks: [
+        { order: 0, text: "Bear learns.", type: "text" },
+        {
+          alt: "歷史圖片",
+          assetId: historicalAssetId,
+          caption: "歷史說明",
+          order: 1,
+          type: "image",
+        },
+        { order: 2, text: "熊學習。", type: "text" },
+      ],
+      materialId: historicalMaterialId,
+    }]);
+    expect(snapshot.stores.materialTerms).toEqual([{
+      materialId: historicalMaterialId,
+      words: ["bear", "learns"],
+    }]);
+    expect(snapshot.stores.materialAssets).toEqual([expect.objectContaining({
+      alt: "歷史圖片",
+      caption: "歷史說明",
+      id: historicalAssetId,
+      materialId: historicalMaterialId,
+      mimeType: "image/webp",
+      width: 1,
+      height: 1,
+    })]);
+    expect(snapshot.stores.vocabulary).toEqual([{
+      learned: true,
+      learnedAt: historicalTimestamp,
+      updatedAt: historicalTimestamp,
+      word: "bear",
+    }]);
+    expect(snapshot.stores.settings).toEqual([{
+      key: "searchHistory",
+      updatedAt: historicalTimestamp,
+      value: [`db-v${databaseVersion}`],
+    }]);
+    expect(snapshot.stores.wordNotes).toEqual(databaseVersion === 7 ? [] : [{
+      createdAt: historicalTimestamp,
+      markdown: `DB v${databaseVersion} global note`,
+      updatedAt: historicalTimestamp,
+      word: "bear",
+    }]);
+    expect(snapshot.stores.materialAnnotations).toEqual(databaseVersion === 6 ? [] : [{
+      body: { format: "markdown", value: `DB v${databaseVersion} contextual note` },
+      createdAt: historicalTimestamp,
+      id: `${historicalMaterialId}::vocabulary%3Abear`,
+      kind: "legacy-contextual-word-note",
+      materialId: historicalMaterialId,
+      target: {
+        occurrenceKey: "vocabulary:bear",
+        type: "contextual-word-occurrence",
+        word: "bear",
+      },
+      updatedAt: historicalTimestamp,
+    }]);
+  });
+}
 
 test("upgrades a version 1 IndexedDB material in place", async ({ page }) => {
   await page.goto("/tests/e2e/fixtures/same-origin.html");
@@ -239,28 +498,7 @@ test("rolls back the version 8 upgrade when a contextual note is malformed", asy
 });
 
 test("reports a blocked database upgrade and succeeds after the old connection closes", async ({ page }) => {
-  await page.goto("/tests/e2e/fixtures/same-origin.html");
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve, reject) => {
-      const deletion = indexedDB.deleteDatabase("english-learning");
-      deletion.onsuccess = () => resolve();
-      deletion.onerror = () => reject(deletion.error);
-    });
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open("english-learning", 6);
-      request.onupgradeneeded = () => {
-        request.result.createObjectStore("materials", { keyPath: "id" });
-        request.result.createObjectStore("vocabulary", { keyPath: "word" });
-        request.result.createObjectStore("settings", { keyPath: "key" });
-        request.result.createObjectStore("wordNotes", { keyPath: "word" });
-      };
-      request.onsuccess = () => {
-        (window as typeof window & { legacyDatabase?: IDBDatabase }).legacyDatabase = request.result;
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
-    });
-  });
+  await seedHistoricalDatabase(page, 6, true);
 
   const blockedMessage = await page.evaluate(async () => {
     const databaseModulePath = "/src/core/database/database.ts";

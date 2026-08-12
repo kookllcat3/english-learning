@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { databaseSnapshot, seedCompleteDatabase } from "./data-integrity-helpers";
 import {
   createMaterial,
   seedKnownWordsForCurrentMaterial,
@@ -123,7 +124,19 @@ test("exports and updates the same text material while preserving compatible lea
     .click();
   await page.goto("/");
   const before = await storedMaterial(page, title);
+  const beforeExport = await databaseSnapshot(page);
+  await page.evaluate(() => {
+    const originalCreateObjectUrl = URL.createObjectURL;
+    URL.createObjectURL = function createObjectURL(object: Blob | MediaSource): string {
+      if (object instanceof Blob) {
+        (globalThis as typeof globalThis & { lastMaterialExportType?: string }).lastMaterialExportType = object.type;
+      }
+      return originalCreateObjectUrl.call(URL, object);
+    };
+  });
 
+  let downloadCount = 0;
+  page.on("download", () => { downloadCount += 1; });
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: new RegExp(`匯出目前教材 ${title}`) }).click();
   const download = await downloadPromise;
@@ -131,6 +144,11 @@ test("exports and updates the same text material while preserving compatible lea
   const downloadPath = await download.path();
   if (!downloadPath) throw new Error("Text material export was not downloaded.");
   await expect(fs.readFile(downloadPath, "utf8")).resolves.toBe(originalContent);
+  await expect.poll(() => downloadCount).toBe(1);
+  expect(await page.evaluate(() => (
+    globalThis as typeof globalThis & { lastMaterialExportType?: string }
+  ).lastMaterialExportType)).toBe("text/plain;charset=utf-8");
+  expect(await databaseSnapshot(page)).toEqual(beforeExport);
 
   await chooseReplacementFile(
     page,
@@ -154,6 +172,43 @@ test("exports and updates the same text material while preserving compatible lea
   expect(after.readingParagraphKey).toBeNull();
   expect(after.wordNote).toBe("shared bear note");
   expect(after.foxLearned).toBe(false);
+  const afterSnapshot = await databaseSnapshot(page);
+  expect(afterSnapshot.stores.materialAssets).toEqual([]);
+  expect(afterSnapshot.stores.materialContents).toEqual([
+    expect.objectContaining({ content: "Bear owl.\n\n熊與貓頭鷹。", materialId: before.id }),
+  ]);
+  expect(afterSnapshot.stores.materialTerms).toEqual([{ materialId: before.id, words: ["bear", "owl"] }]);
+  expect(afterSnapshot.stores.wordNotes).toEqual(beforeExport.stores.wordNotes);
+});
+
+test("downloads one safe UTF-8 file without mutating IndexedDB", async ({ page }) => {
+  const title = "A/B: C*?";
+  const content = "First line.\n中文解釋。";
+  await createMaterial(page, title, content);
+  await page.evaluate(() => {
+    const originalCreateObjectUrl = URL.createObjectURL;
+    URL.createObjectURL = function createObjectURL(object: Blob | MediaSource): string {
+      if (object instanceof Blob) {
+        (globalThis as typeof globalThis & { capturedDownloadType?: string }).capturedDownloadType = object.type;
+      }
+      return originalCreateObjectUrl.call(URL, object);
+    };
+  });
+  const before = await databaseSnapshot(page);
+  let downloadCount = 0;
+  page.on("download", () => { downloadCount += 1; });
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: `匯出目前教材 ${title}`, exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("A B C.txt");
+  const path = await download.path();
+  if (!path) throw new Error("Safe UTF-8 material export was not downloaded.");
+  expect(await fs.readFile(path)).toEqual(Buffer.from(content, "utf8"));
+  await expect.poll(() => downloadCount).toBe(1);
+  expect(await page.evaluate(() => (
+    globalThis as typeof globalThis & { capturedDownloadType?: string }
+  ).capturedDownloadType)).toBe("text/plain;charset=utf-8");
+  expect(await databaseSnapshot(page)).toEqual(before);
 });
 
 test("rejects illustrated export and DOCX updates while preserving the material", async ({ page }) => {
@@ -212,7 +267,7 @@ test("rejects illustrated export and DOCX updates while preserving the material"
   }), { materialTitle: title, webpBase64: validWebpBase64 });
   await page.reload();
 
-  const before = await storedMaterial(page, title);
+  const before = await databaseSnapshot(page);
   const dialogMessages: string[] = [];
   page.on("dialog", async (dialog) => {
     dialogMessages.push(dialog.message());
@@ -235,9 +290,7 @@ test("rejects illustrated export and DOCX updates while preserving the material"
     .toHaveAttribute("aria-busy", "false");
   await expect.poll(() => dialogMessages)
     .toContain("目前只支援 UTF-8 TXT 檔案或直接貼上文字。");
-  const snapshot = await storedMaterial(page, title);
-  expect(snapshot.assets).toBe(1);
-  expect(snapshot.updatedAt).toBe(before.updatedAt);
+  expect(await databaseSnapshot(page)).toEqual(before);
 
   await page.getByRole("article").filter({ hasText: title }).getByRole("link", { name: "開始閱讀" }).click();
   await expect(page.getByRole("img", { name: "測試圖片" })).toBeVisible();
@@ -251,9 +304,9 @@ test("rejects illustrated export and DOCX updates while preserving the material"
 });
 
 test("rolls back every store when the replacement transaction fails", async ({ page }) => {
-  const title = "交易回滾教材";
-  await createMaterial(page, title, "Bear fox.");
-  const before = await storedMaterial(page, title);
+  const title = "local material";
+  await seedCompleteDatabase(page, "local");
+  const before = await databaseSnapshot(page);
   const dialogMessages: string[] = [];
   page.on("dialog", async (dialog) => {
     dialogMessages.push(dialog.message());
@@ -287,8 +340,46 @@ test("rolls back every store when the replacement transaction fails", async ({ p
     (globalThis as typeof globalThis & { restoreMaterialPut?: () => void }).restoreMaterialPut?.();
   });
 
-  const after = await storedMaterial(page, title);
-  expect(after).toEqual(before);
+  expect(await databaseSnapshot(page)).toEqual(before);
+});
+
+test("updates an illustrated material without leaving orphan assets", async ({ page }) => {
+  const title = "local material";
+  await seedCompleteDatabase(page, "local");
+  const before = await databaseSnapshot(page);
+  const materialBefore = before.stores.materials[0] as Record<string, unknown>;
+  const dialogMessages: string[] = [];
+  page.on("dialog", async (dialog) => {
+    dialogMessages.push(dialog.message());
+    await dialog.accept();
+  });
+
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: `重新匯入並更新教材 ${title}` }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: "updated-local.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("local studies.\n\n更新後解釋。", "utf8"),
+  });
+  await expect(page.locator('p[aria-live="polite"]')).toContainText(`「${title}」已更新`);
+
+  const after = await databaseSnapshot(page);
+  const materialAfter = after.stores.materials[0] as Record<string, unknown>;
+  expect(materialAfter.id).toBe(materialBefore.id);
+  expect(materialAfter.createdAt).toBe(materialBefore.createdAt);
+  expect(materialAfter.updatedAt).not.toBe(materialBefore.updatedAt);
+  expect(materialAfter).toMatchObject({ knownCount: 1, knownWords: ["local"], wordCount: 2 });
+  expect(after.stores.materialAssets).toEqual([]);
+  expect(after.stores.materialContents).toEqual([{
+    content: "local studies.\n\n更新後解釋。",
+    contentBlocks: [{ order: 0, text: "local studies.\n\n更新後解釋。", type: "text" }],
+    materialId: materialBefore.id,
+  }]);
+  expect(after.stores.materialTerms).toEqual([{ materialId: materialBefore.id, words: ["local", "studies"] }]);
+  expect(after.stores.materialAnnotations).toEqual(before.stores.materialAnnotations);
+  expect(after.stores.wordNotes).toEqual(before.stores.wordNotes);
+  expect(after.stores.settings).toEqual(before.stores.settings);
 });
 
 test("refuses to overwrite a material changed after the card was loaded", async ({ page }) => {
@@ -314,6 +405,7 @@ test("refuses to overwrite a material changed after the card was loaded", async 
     }, { once: true });
     request.addEventListener("error", () => reject(request.error), { once: true });
   }), { materialId: before.id, updatedAt: externalUpdatedAt });
+  const externallyUpdatedSnapshot = await databaseSnapshot(page);
 
   const dialogMessages: string[] = [];
   page.on("dialog", async (dialog) => {
@@ -330,8 +422,5 @@ test("refuses to overwrite a material changed after the card was loaded", async 
   });
   await expect.poll(() => dialogMessages.some((message) => message.includes("其他分頁更新"))).toBe(true);
 
-  const after = await storedMaterial(page, title);
-  expect(after.content).toBe(before.content);
-  expect(after.updatedAt).toBe(externalUpdatedAt);
-  expect(after.knownWords).toEqual(before.knownWords);
+  expect(await databaseSnapshot(page)).toEqual(externallyUpdatedSnapshot);
 });

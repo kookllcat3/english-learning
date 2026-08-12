@@ -19,7 +19,12 @@ export async function readMaterialFile(
 
   if (isText) {
     if (file.size > MAX_TEXT_FILE_BYTES) throw new Error("TXT 檔案請控制在 2 MB 以內。");
-    return { content: await file.text(), contentBlocks: undefined, assets: [] };
+    try {
+      const content = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+      return { content, contentBlocks: undefined, assets: [] };
+    } catch {
+      throw new Error("TXT 檔案必須使用有效的 UTF-8 編碼。");
+    }
   }
   throw new Error("目前只支援 UTF-8 TXT 檔案或直接貼上文字。");
 }

@@ -193,6 +193,9 @@ test("edits, adds, or removes a paragraph translation from the reading toolbar",
   await expect(editTool).toBeVisible();
   await editTool.click();
   await expect(editTool).toHaveAttribute("aria-pressed", "true");
+  await paragraphs.nth(0).locator(".reading-word").first().hover();
+  await page.waitForTimeout(650);
+  await expect(page.locator(".word-card")).toBeHidden();
   await paragraphs.nth(0).locator("[data-source-line-key]").click();
 
   const dialog = page.getByRole("dialog", { name: "編輯中文解釋" });
@@ -204,19 +207,34 @@ test("edits, adds, or removes a paragraph translation from the reading toolbar",
   ))).toBe("640px");
   await expect(dialog).toContainText("A bear runs.");
   await expect(editor).toHaveValue("熊正在奔跑。");
+  const saveButton = dialog.getByRole("button", { name: "儲存" });
+  const cancelButton = dialog.getByRole("button", { name: "取消" });
+  await expect.poll(async () => {
+    const saveBox = await saveButton.boundingBox();
+    const cancelBox = await cancelButton.boundingBox();
+    return saveBox && cancelBox ? Math.round(cancelBox.x - saveBox.x - saveBox.width) : -1;
+  }).toBe(12);
   await editor.fill("熊正快速奔跑。");
   await editor.press("Control+Enter");
   await expect(dialog).toBeHidden();
+  await expect(editTool).toHaveAttribute("aria-pressed", "true");
   await expect(paragraphs.nth(0).locator(".is-translation")).toHaveText("熊正快速奔跑。");
 
-  await editTool.click();
   await paragraphs.nth(1).locator("[data-source-line-key]").click();
   await expect(editor).toHaveValue("");
   await editor.fill("狐狸正在睡覺。");
   await dialog.getByRole("button", { name: "儲存" }).click();
+  await expect(editTool).toHaveAttribute("aria-pressed", "true");
   await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
 
+  await paragraphs.nth(0).locator("[data-source-line-key]").click();
+  await dialog.getByRole("button", { name: "取消" }).click();
+  await expect(editTool).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(editTool).toHaveAttribute("aria-pressed", "false");
+
   await page.reload();
+  await expect(editTool).toHaveAttribute("aria-pressed", "false");
   await expect(paragraphs.nth(0).locator(".is-translation")).toHaveText("熊正快速奔跑。");
   await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
 
@@ -230,6 +248,9 @@ test("edits, adds, or removes a paragraph translation from the reading toolbar",
   await dialog.getByRole("button", { name: "儲存" }).click();
   await expect(paragraphs.nth(0).locator(".is-translation")).toHaveCount(0);
   await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
+  await expect(editTool).toHaveAttribute("aria-pressed", "true");
+  await editTool.click();
+  await expect(editTool).toHaveAttribute("aria-pressed", "false");
 
   await page.reload();
   await expect(paragraphs.nth(0).locator(".is-translation")).toHaveCount(0);

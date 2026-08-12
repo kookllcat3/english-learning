@@ -107,6 +107,7 @@
 .dialog__close:active { background: #eadfd8; }
 .dialog-form { display: contents; }
 .dialog__actions--centered { justify-content: center; }
+.dialog__actions--end { justify-content: flex-end; gap: 12px; }
 .icon-button { width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); background: transparent; font-size: 1.6rem; cursor: pointer; }
 .icon-button:hover { background: var(--accent-soft); }
 .field { display: block; margin-block: 18px; font-weight: 750; }

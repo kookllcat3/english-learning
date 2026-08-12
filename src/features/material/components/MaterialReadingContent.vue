@@ -263,7 +263,6 @@ function paragraphTranslationText(paragraphKey: string): string {
 function selectTranslationParagraph(paragraph: HTMLElement): boolean {
   const paragraphKey = paragraph.dataset.paragraphKey;
   if (!paragraphKey) return false;
-  translationSelectionActive.value = false;
   emit(
     "editTranslation",
     paragraphKey,
@@ -275,6 +274,14 @@ function selectTranslationParagraph(paragraph: HTMLElement): boolean {
 
 function isAnnotationActiveFor(element: HTMLElement | null): boolean {
   return Boolean(element && props.annotationMode);
+}
+
+function isWordInteractionBlocked(): boolean {
+  return Boolean(
+    props.annotationMode
+    || copySelectionActive.value
+    || translationSelectionActive.value,
+  );
 }
 
 function annotationTarget(target: EventTarget | null): AnnotationTarget | null {
@@ -305,7 +312,7 @@ function annotateStrokeTarget(target: EventTarget | null): boolean {
 
 function activateWordElement(target: EventTarget | null): void {
   const element = wordElement(target);
-  if (props.annotationMode || copySelectionActive.value) return;
+  if (isWordInteractionBlocked()) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("activate", word, element.getBoundingClientRect(), key, "focus");
@@ -314,7 +321,7 @@ function activateWordElement(target: EventTarget | null): void {
 function handlePointerOver(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (props.annotationMode || copySelectionActive.value) return;
+  if (isWordInteractionBlocked()) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const word = element.dataset.word;
   const key = element.dataset.wordKey;
@@ -324,7 +331,7 @@ function handlePointerOver(event: PointerEvent): void {
 function handlePointerOut(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
   const element = wordElement(event.target);
-  if (props.annotationMode || copySelectionActive.value) return;
+  if (isWordInteractionBlocked()) return;
   if (!element || element.contains(event.relatedTarget as Node | null)) return;
   const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : null;
   if (nextElement?.closest(".word-card, .word-card-hover-bridge, .reading-word")) return;
@@ -333,7 +340,7 @@ function handlePointerOut(event: PointerEvent): void {
 
 function beginPointerInteraction(event: PointerEvent): void {
   const element = wordElement(event.target);
-  if (copySelectionActive.value) {
+  if (copySelectionActive.value || translationSelectionActive.value) {
     touchStart = null;
     return;
   }
@@ -407,7 +414,7 @@ function cancelPointerInteraction(event: PointerEvent): void {
 
 function handleDoubleClick(event: MouseEvent): void {
   const element = wordElement(event.target);
-  if (props.annotationMode || copySelectionActive.value) return;
+  if (isWordInteractionBlocked()) return;
   const word = element?.dataset.word;
   const key = element?.dataset.wordKey;
   if (element && word && key) emit("lookup", word, element.getBoundingClientRect(), key);
@@ -505,12 +512,11 @@ function toggleTranslations(): void {
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
-  if (!copySelectionActive.value && !translationSelectionActive.value) return;
+  if (!copySelectionActive.value) return;
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest(".reading-toolbar, .reading-anchor")) return;
   if (target?.closest(".reading-content")) return;
   clearCopySelection();
-  translationSelectionActive.value = false;
 }
 
 function handleDocumentKeydown(event: KeyboardEvent): void {

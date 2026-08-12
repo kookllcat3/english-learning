@@ -79,7 +79,7 @@ defineExpose({ open });
       <div class="translation-editor-message" aria-live="polite">
         <p v-if="errorMessage" class="form-message is-error" role="alert">{{ errorMessage }}</p>
       </div>
-      <div class="dialog__actions">
+      <div class="dialog__actions dialog__actions--end">
         <button class="button button--primary" type="submit" :disabled="saving">
           {{ saving ? "儲存中…" : "儲存" }}
         </button>

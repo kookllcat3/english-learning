@@ -73,7 +73,7 @@ defineExpose({ open });
           @keydown="handleKeydown"
         />
         <small id="translation-editor-hint">
-          Ctrl／⌘ + Enter 儲存；留空會移除解釋，最多 2,000 字元。
+          Ctrl／⌘ + Enter 儲存；內容須含中文字，留空會移除解釋，最多 2,000 字元。
         </small>
       </label>
       <div class="translation-editor-message" aria-live="polite">

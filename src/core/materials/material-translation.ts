@@ -2,6 +2,7 @@ import type { ContentBlock } from "../models/models.js";
 import { classifyReadingContent } from "../learning/reading-content.js";
 
 const MAX_TRANSLATION_LENGTH = 2_000;
+const CHINESE_CHARACTER_PATTERN = /\p{Script=Han}/u;
 
 interface TranslationTarget {
   source: StoredLineLocation;
@@ -23,6 +24,9 @@ export function normalizedTranslationText(text: string): string {
   const normalized = text.replace(/\r\n?/g, "\n").trim();
   if (normalized.length > MAX_TRANSLATION_LENGTH) {
     throw new Error(`中文解釋不能超過 ${MAX_TRANSLATION_LENGTH.toLocaleString()} 個字元。`);
+  }
+  if (normalized && !CHINESE_CHARACTER_PATTERN.test(normalized)) {
+    throw new Error("中文解釋必須包含中文字。");
   }
   return normalized.replace(/\n+/g, " ");
 }

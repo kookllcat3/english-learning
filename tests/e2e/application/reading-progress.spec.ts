@@ -207,6 +207,7 @@ test("edits, adds, or removes a paragraph translation from the reading toolbar",
   ))).toBe("640px");
   await expect(dialog).toContainText("A bear runs.");
   await expect(editor).toHaveValue("熊正在奔跑。");
+  await expect(dialog).toContainText("內容須含中文字");
   const saveButton = dialog.getByRole("button", { name: "儲存" });
   const cancelButton = dialog.getByRole("button", { name: "取消" });
   await expect.poll(async () => {
@@ -214,6 +215,12 @@ test("edits, adds, or removes a paragraph translation from the reading toolbar",
     const cancelBox = await cancelButton.boundingBox();
     return saveBox && cancelBox ? Math.round(cancelBox.x - saveBox.x - saveBox.width) : -1;
   }).toBe(12);
+  await editor.fill("A bear runs quickly.");
+  await saveButton.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveText("中文解釋必須包含中文字。");
+  await expect(editor).toHaveValue("A bear runs quickly.");
+  await expect(paragraphs.nth(0).locator(".is-translation")).toHaveText("熊正在奔跑。");
   await editor.fill("熊正快速奔跑。");
   await editor.press("Control+Enter");
   await expect(dialog).toBeHidden();

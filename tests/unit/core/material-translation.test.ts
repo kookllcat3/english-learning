@@ -77,8 +77,23 @@ describe("material paragraph translations", () => {
       .toEqual(blocks);
   });
 
-  it("rejects oversized and missing translations", () => {
+  it("accepts a Chinese explanation containing English text", () => {
+    const update = updateMaterialParagraphTranslation([{
+      type: "text",
+      order: 0,
+      text: "A bear runs.",
+    }], "0-0-0", "bear 的意思是熊。");
+
+    expect(update.content).toBe("A bear runs.\nbear 的意思是熊。");
+  });
+
+  it("rejects non-Chinese, oversized, and missing translations", () => {
     const blocks = [{ type: "text" as const, order: 0, text: "A bear runs." }];
+    ["A bear runs.", "12345", "!?…"].forEach((text) => {
+      expect(() => updateMaterialParagraphTranslation(blocks, "0-0-0", text))
+        .toThrow("中文解釋必須包含中文字。");
+    });
+    expect(blocks).toEqual([{ type: "text", order: 0, text: "A bear runs." }]);
     expect(() => updateMaterialParagraphTranslation(blocks, "0-0-0", "中".repeat(2_001)))
       .toThrow("中文解釋不能超過 2,000 個字元。");
     expect(() => updateMaterialParagraphTranslation(blocks, "9-9-9", "翻譯"))

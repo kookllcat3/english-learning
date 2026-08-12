@@ -22,6 +22,10 @@ import {
   readMaterialFile,
 } from "../../../core/materials/material-file-import.js";
 import {
+  materialRemovalConfirmationMessage,
+  materialUpdateConfirmationMessage,
+} from "../material-confirmation.js";
+import {
   clearSearchHistory,
   getSearchHistory,
   rememberSearchQuery,
@@ -153,9 +157,10 @@ async function updateMaterialFromFile(): Promise<void> {
     finishFileSelection();
     return;
   }
-  const confirmed = window.confirm(
-    `要以「${file.name}」更新「${selectedMaterial.title}」嗎？\n\n目前教材的內容與圖片會被取代；仍存在於新正文的已認識單字及共用筆記會保留。`,
-  );
+  const confirmed = window.confirm(materialUpdateConfirmationMessage(
+    file.name,
+    selectedMaterial.title,
+  ));
   if (!confirmed) {
     finishFileSelection();
     return;
@@ -259,7 +264,7 @@ async function useHistoryQuery(historyQuery: string): Promise<void> {
 }
 
 async function removeSelectedMaterial(material: DashboardMaterial): Promise<void> {
-  if (!window.confirm(`確定要移除「${material.title}」嗎？學習詞彙紀錄會保留。`)) return;
+  if (!window.confirm(materialRemovalConfirmationMessage(material.title))) return;
 
   removingMaterialId.value = material.id;
   try {

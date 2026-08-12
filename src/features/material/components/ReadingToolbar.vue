@@ -5,6 +5,7 @@ defineProps<{
   anchorBusy: boolean;
   anchorExists: boolean;
   copyActive: boolean;
+  translationEditActive: boolean;
   hasTranslations: boolean;
   translationsHidden: boolean;
 }>();
@@ -13,6 +14,7 @@ const emit = defineEmits<{
   activateAnchor: [];
   activateCopy: [];
   activateHighlight: [];
+  activateTranslationEdit: [];
   toggleTranslations: [];
 }>();
 </script>
@@ -83,6 +85,20 @@ const emit = defineEmits<{
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <path d="m5 16 8-8 3 3-8 8H5v-3Z" />
           <path d="m14 7 2-2 3 3-2 2M4 20h8" />
+        </svg>
+      </button>
+      <button
+        class="reading-toolbar__button"
+        :class="{ 'is-active': translationEditActive }"
+        type="button"
+        aria-label="編輯中文解釋"
+        :aria-pressed="translationEditActive"
+        :title="translationEditActive ? '取消編輯中文解釋' : '編輯中文解釋'"
+        @click.stop="emit('activateTranslationEdit')"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="m4 16-.8 4.8L8 20l4.8-.8L20 4.8a2.8 2.8 0 0 0-4-4L4 16Z" />
+          <path d="m14 6 4 4" />
         </svg>
       </button>
     </span>

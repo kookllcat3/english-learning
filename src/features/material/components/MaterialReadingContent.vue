@@ -66,6 +66,7 @@ const emit = defineEmits<{
   activate: [word: string, rect: DOMRect, key: string, trigger: "hover" | "focus" | "touch"];
   annotateWord: [paragraphKey: string, occurrenceKey: string, mode: "erase" | "highlight"];
   deactivate: [];
+  editTranslation: [paragraphKey: string, sourceText: string, translation: string];
   lookup: [word: string, rect: DOMRect, key: string];
   returnToReadingParagraph: [];
   saveReadingParagraph: [paragraphKey: string | null];
@@ -90,6 +91,7 @@ let annotationPointer: AnnotationPointerState | null = null;
 let ignoreNextAnnotationClick = false;
 let touchStart: { pointerId: number; x: number; y: number } | null = null;
 const copySelectionActive = ref(false);
+const translationSelectionActive = ref(false);
 const translationsHidden = ref(false);
 const copyFeedback = ref<"error" | "success" | null>(null);
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -243,6 +245,32 @@ function paragraphSourceText(paragraphKey: string): string {
     if (paragraph) return paragraph.sourceText;
   }
   return "";
+}
+
+function paragraphTranslationText(paragraphKey: string): string {
+  for (const block of renderedBlocks.value) {
+    if (block.type !== "text") continue;
+    const paragraph = block.paragraphs.find((candidate) => candidate.key === paragraphKey);
+    if (!paragraph) continue;
+    return paragraph.lines
+      .filter((line) => line.isTranslation)
+      .flatMap((line) => line.segments.map((segment) => segment.label))
+      .join("\n");
+  }
+  return "";
+}
+
+function selectTranslationParagraph(paragraph: HTMLElement): boolean {
+  const paragraphKey = paragraph.dataset.paragraphKey;
+  if (!paragraphKey) return false;
+  translationSelectionActive.value = false;
+  emit(
+    "editTranslation",
+    paragraphKey,
+    paragraphSourceText(paragraphKey),
+    paragraphTranslationText(paragraphKey),
+  );
+  return true;
 }
 
 function isAnnotationActiveFor(element: HTMLElement | null): boolean {
@@ -404,6 +432,14 @@ function handleClick(event: MouseEvent): void {
     return;
   }
   const paragraph = paragraphElement(event.target);
+  if (translationSelectionActive.value) {
+    if (!paragraph || isTranslationTarget(event.target)) {
+      translationSelectionActive.value = false;
+      return;
+    }
+    if (selectTranslationParagraph(paragraph)) event.preventDefault();
+    return;
+  }
   if (copySelectionActive.value) {
     if (!paragraph || isTranslationTarget(event.target)) {
       copySelectionActive.value = false;
@@ -429,6 +465,7 @@ function clearCopySelection(): void {
 
 function deactivateTransientTools(): void {
   copySelectionActive.value = false;
+  translationSelectionActive.value = false;
   emit("selectAnnotationTool", null);
 }
 
@@ -439,13 +476,21 @@ function activateAnchorTool(): void {
 
 function activateCopyTool(): void {
   emit("selectAnnotationTool", null);
+  translationSelectionActive.value = false;
   copySelectionActive.value = !copySelectionActive.value;
   copyFeedback.value = null;
 }
 
 function activateHighlightTool(): void {
   copySelectionActive.value = false;
+  translationSelectionActive.value = false;
   emit("selectAnnotationTool", props.annotationMode ? null : "highlight");
+}
+
+function activateTranslationEditTool(): void {
+  copySelectionActive.value = false;
+  emit("selectAnnotationTool", null);
+  translationSelectionActive.value = !translationSelectionActive.value;
 }
 
 function handleAnchorClick(event: MouseEvent, paragraphKey: string): void {
@@ -460,19 +505,30 @@ function toggleTranslations(): void {
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
-  if (!copySelectionActive.value) return;
+  if (!copySelectionActive.value && !translationSelectionActive.value) return;
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest(".reading-toolbar, .reading-anchor")) return;
   if (target?.closest(".reading-content")) return;
   clearCopySelection();
+  translationSelectionActive.value = false;
 }
 
 function handleDocumentKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
   clearCopySelection();
+  translationSelectionActive.value = false;
 }
 
 function handleWordKeydown(event: KeyboardEvent): void {
+  if (
+    event.key === "Enter"
+    && translationSelectionActive.value
+    && event.target instanceof HTMLElement
+    && event.target.matches("[data-reading-paragraph]")
+  ) {
+    if (selectTranslationParagraph(event.target)) event.preventDefault();
+    return;
+  }
   if (!["ArrowLeft", "ArrowRight", "Enter"].includes(event.key)) return;
   if (!wordElement(event.target)) return;
   if (event.key === "Enter" && annotateWordElement(event.target)) {
@@ -526,9 +582,11 @@ onMounted(() => {
       :copy-active="copySelectionActive"
       :has-translations="hasTranslations"
       :translations-hidden="translationsHidden"
+      :translation-edit-active="translationSelectionActive"
       @activate-anchor="activateAnchorTool"
       @activate-copy="activateCopyTool"
       @activate-highlight="activateHighlightTool"
+      @activate-translation-edit="activateTranslationEditTool"
       @toggle-translations="toggleTranslations"
     />
     <div
@@ -547,7 +605,9 @@ onMounted(() => {
           :class="{
             'is-anchor-selection-target': paragraph.role === 'source',
             'is-copy-selection-target': copySelectionActive,
+            'is-translation-selection-target': translationSelectionActive,
           }"
+          :tabindex="paragraph.role === 'source' && translationSelectionActive ? 0 : undefined"
           :data-reading-paragraph="paragraph.role === 'source' ? '' : undefined"
           :data-paragraph-key="paragraph.role === 'source' ? paragraph.key : undefined"
         >

@@ -295,6 +295,37 @@ export async function writeOne<K extends StoreName>(
   return value;
 }
 
+export async function writeMaterialContent(
+  material: MaterialRecord,
+  content: MaterialContentRecord,
+  expectedUpdatedAt: string,
+): Promise<void> {
+  const database = await openDatabase();
+  const transaction = database.transaction(
+    [STORES.materials, STORES.materialContents],
+    "readwrite",
+  );
+  let conflictingUpdate = false;
+  const materialStore = transaction.objectStore(STORES.materials);
+  const request = materialStore.get(material.id);
+  request.addEventListener("success", () => {
+    const storedMaterial = request.result as MaterialRecord | undefined;
+    if (!storedMaterial || storedMaterial.updatedAt !== expectedUpdatedAt) {
+      conflictingUpdate = true;
+      transaction.abort();
+      return;
+    }
+    materialStore.put(material);
+    transaction.objectStore(STORES.materialContents).put(content);
+  }, { once: true });
+  try {
+    await transactionResult(transaction, 0, "中文解釋儲存失敗，教材內容未變更。");
+  } catch (error) {
+    if (conflictingUpdate) throw new Error("教材已在其他分頁更新，請重新載入後再編輯。");
+    throw error;
+  }
+}
+
 export async function deleteOne<K extends StoreName>(
   storeName: K,
   key: IDBValidKey,

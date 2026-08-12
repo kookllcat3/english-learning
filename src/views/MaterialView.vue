@@ -15,6 +15,7 @@ import {
   getVocabularyProgress,
   listMaterialHighlights,
   saveMaterialHighlight,
+  updateMaterialTranslation,
 } from "../core/learning/learning-repository.js";
 import {
   readingWordOccurrencesForBlocks,
@@ -40,6 +41,7 @@ import {
   type FamiliarityLevel,
 } from "../features/material/familiarity.js";
 import MaterialReadingContent from "../features/material/components/MaterialReadingContent.vue";
+import TranslationEditorDialog from "../features/material/components/TranslationEditorDialog.vue";
 import WordCard from "../features/material/components/WordCard.vue";
 import { useReadingPosition } from "../features/material/composables/use-reading-position.js";
 import { useWordCardInteractions } from "../features/material/composables/use-word-card-interactions.js";
@@ -58,6 +60,7 @@ const highlights = ref<MaterialHighlightAnnotationRecord[]>([]);
 const activeProgressOperation = ref<"completion" | string | null>(null);
 const completionError = ref("");
 const readingContainer = ref<HTMLElement | null>(null);
+const translationEditor = ref<InstanceType<typeof TranslationEditorDialog> | null>(null);
 let loadSequence = 0;
 let progressSequence = 0;
 const pendingAnnotationActions: Array<{
@@ -252,6 +255,34 @@ function selectAnnotationTool(mode: "highlight" | null): void {
   activeHighlightId.value = null;
 }
 
+function openTranslationEditor(
+  paragraphKey: string,
+  sourceText: string,
+  translation: string,
+): void {
+  wordCard.value?.close();
+  translationEditor.value?.open({ paragraphKey, sourceText, translation });
+}
+
+async function saveTranslation(paragraphKey: string, text: string): Promise<void> {
+  if (!material.value) throw new Error("找不到指定的教材。");
+  actionError.value = "";
+  try {
+    await updateMaterialTranslation(
+      material.value.id,
+      material.value.updatedAt,
+      paragraphKey,
+      text,
+    );
+    material.value = await getMaterial(material.value.id);
+    notifyLearningDataChanged("materials");
+  } catch (error) {
+    const message = getErrorMessage(error, "無法更新中文解釋。");
+    actionError.value = message;
+    throw new Error(message);
+  }
+}
+
 function highlightContaining(occurrenceKey: string): MaterialHighlightAnnotationRecord | undefined {
   return highlights.value.find((highlight) => highlight.target.occurrenceKeys.includes(occurrenceKey));
 }
@@ -426,6 +457,7 @@ onBeforeUnmount(() => {
           @activate="openWordCard"
           @annotate-word="annotateWord"
           @deactivate="scheduleWordCardClose"
+          @edit-translation="openTranslationEditor"
           @return-to-reading-paragraph="returnToReadingPosition"
           @save-reading-paragraph="saveReadingParagraph"
           @select-annotation-tool="selectAnnotationTool"
@@ -463,6 +495,7 @@ onBeforeUnmount(() => {
         @pin-change="setWordCardPinned"
       />
       <AiAssistantDialog :material="material" />
+      <TranslationEditorDialog ref="translationEditor" :save-translation="saveTranslation" />
     </template>
   </main>
 </template>

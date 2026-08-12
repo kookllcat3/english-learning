@@ -50,6 +50,7 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
     "隱藏全部中文翻譯",
     "複製英文段落",
     "螢光筆",
+    "編輯中文解釋",
   ]);
   expect(await toolbar.getByRole("button").evaluateAll((buttons) =>
     new Set(buttons.map((button) => getComputedStyle(button).color)).size)).toBe(1);
@@ -177,6 +178,78 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
   await expect.poll(() => storedCurrentMaterialReadingParagraphKey(page)).toBeNull();
   await expect(storedCurrentMaterialKnownWords(page))
     .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
+});
+
+test("edits or adds a paragraph translation from the reading toolbar", async ({ page }) => {
+  await createMaterial(
+    page,
+    materialTitle,
+    "A bear runs.\n熊正在奔跑。\n\nThe fox sleeps.",
+  );
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const editTool = page.getByRole("button", { name: "編輯中文解釋" });
+  const paragraphs = page.locator("[data-reading-paragraph]");
+  await expect(editTool).toBeVisible();
+  await editTool.click();
+  await expect(editTool).toHaveAttribute("aria-pressed", "true");
+  await paragraphs.nth(0).locator("[data-source-line-key]").click();
+
+  const dialog = page.getByRole("dialog", { name: "編輯中文解釋" });
+  const editor = dialog.getByRole("textbox", { name: "中文解釋" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("A bear runs.");
+  await expect(editor).toHaveValue("熊正在奔跑。");
+  await editor.fill("熊正快速奔跑。");
+  await editor.press("Control+Enter");
+  await expect(dialog).toBeHidden();
+  await expect(paragraphs.nth(0).locator(".is-translation")).toHaveText("熊正快速奔跑。");
+
+  await editTool.click();
+  await paragraphs.nth(1).locator("[data-source-line-key]").click();
+  await expect(editor).toHaveValue("");
+  await editor.fill("狐狸正在睡覺。");
+  await dialog.getByRole("button", { name: "儲存" }).click();
+  await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
+
+  await page.reload();
+  await expect(paragraphs.nth(0).locator(".is-translation")).toHaveText("熊正快速奔跑。");
+  await expect(paragraphs.nth(1).locator(".is-translation")).toHaveText("狐狸正在睡覺。");
+
+  await editTool.focus();
+  await page.keyboard.press("Enter");
+  await paragraphs.nth(0).focus();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  await expect(editor).toBeFocused();
+  await dialog.getByRole("button", { name: "取消" }).click();
+});
+
+test("keeps the translation editor and original text when persistence fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function put(value, key) {
+      if (
+        this.name === "materialContents"
+        && sessionStorage.getItem("failTranslationWrite") === "true"
+      ) throw new DOMException("Simulated translation failure", "UnknownError");
+      return key === undefined ? originalPut.call(this, value) : originalPut.call(this, value, key);
+    };
+  });
+  await createMaterial(page, materialTitle, "A bear runs.\n原本的解釋。");
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+  await page.evaluate(() => sessionStorage.setItem("failTranslationWrite", "true"));
+  await page.getByRole("button", { name: "編輯中文解釋" }).click();
+  await page.locator("[data-source-line-key]").click();
+
+  const dialog = page.getByRole("dialog", { name: "編輯中文解釋" });
+  const editor = dialog.getByRole("textbox", { name: "中文解釋" });
+  await editor.fill("不應寫入的解釋。");
+  await dialog.getByRole("button", { name: "儲存" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toContainText("中文解釋儲存失敗");
+  await expect(editor).toHaveValue("不應寫入的解釋。");
+  await expect(page.locator(".reading-line-wrap.is-translation")).toHaveText("原本的解釋。");
 });
 
 test("marks every word in the material as known from the footer action", async ({ page }) => {
@@ -456,7 +529,7 @@ test("classifies structured reading content and repairs polluted learning data",
   await expect(page.locator('[data-word="avian"]')).toHaveCount(0);
   const readingToolbar = page.getByRole("toolbar", { name: "教材閱讀工具" });
   await expect(readingToolbar).toHaveClass(/reading-toolbar/);
-  await expect(readingToolbar.getByRole("button")).toHaveCount(4);
+  await expect(readingToolbar.getByRole("button")).toHaveCount(5);
   await expect(page.getByRole("button", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /編輯這段中文解釋/ })).toHaveCount(0);
   await readingToolbar.getByRole("button", { name: "隱藏全部中文翻譯" }).click();

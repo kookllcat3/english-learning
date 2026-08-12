@@ -7,6 +7,7 @@ import {
   readOne,
   replaceMaterialBundle,
   writeMaterialLearningProgress,
+  writeMaterialContent,
   writeMaterialBundles,
   writeOne,
 } from "../database/database.js";
@@ -22,6 +23,7 @@ import {
 } from "../learning/material-migrations.js";
 import { normalizeWord } from "../text/text.js";
 import { materialReplacementState } from "./material-replacement.js";
+import { updateMaterialParagraphTranslation } from "./material-translation.js";
 import {
   materialLearningProgressState,
   type ReadingParagraphUpdate,
@@ -120,6 +122,36 @@ export async function updateMaterial(
     updatedAt: new Date().toISOString(),
   };
   return writeOne(STORES.materials, updated);
+}
+
+export async function updateMaterialTranslation(
+  id: string,
+  expectedUpdatedAt: string,
+  paragraphKey: string,
+  text: string,
+): Promise<MaterialRecord> {
+  await ensureMaterialKnowledge();
+  const [material, storedContent] = await Promise.all([
+    readOne(STORES.materials, id),
+    readOne(STORES.materialContents, id),
+  ]);
+  if (!material || !storedContent) throw new Error("找不到指定的教材。");
+  if (material.updatedAt !== expectedUpdatedAt) {
+    throw new Error("教材已在其他分頁更新，請重新載入後再編輯。");
+  }
+  const update = updateMaterialParagraphTranslation(
+    normalizedBlocks(storedContent.content, storedContent.contentBlocks),
+    paragraphKey,
+    text,
+  );
+  validateMaterialContent(update.content);
+  const updated = { ...material, updatedAt: new Date().toISOString() };
+  await writeMaterialContent(
+    updated,
+    { materialId: id, content: update.content, contentBlocks: update.contentBlocks },
+    expectedUpdatedAt,
+  );
+  return updated;
 }
 
 export async function replaceMaterial(

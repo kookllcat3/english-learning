@@ -87,7 +87,7 @@
   min-height: 34px;
   align-items: center;
   gap: 8px;
-  margin: 0 0 18px var(--reading-gutter);
+  margin: 0 0 18px;
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 10px;

@@ -540,6 +540,11 @@ test("keeps the single toolbar available and returns to a reading anchor", async
     .not.toHaveClass(/is-reading-position/);
   await expect(returnAction).toBeVisible();
   await expect(page.getByRole("toolbar", { name: "教材閱讀工具" })).toHaveCSS("position", "sticky");
+  const toolbarAndBookmarkLeftEdges = await page.evaluate(() => ({
+    bookmark: document.querySelector(".reading-anchor__button")?.getBoundingClientRect().left,
+    toolbar: document.querySelector(".reading-toolbar")?.getBoundingClientRect().left,
+  }));
+  expect(toolbarAndBookmarkLeftEdges.toolbar).toBe(toolbarAndBookmarkLeftEdges.bookmark);
   await expect(page.locator(".material-view-switcher")).toHaveCount(0);
 
   await page.evaluate(() => window.scrollTo(0, 0));

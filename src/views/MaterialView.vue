@@ -167,18 +167,6 @@ async function loadMaterialPage(): Promise<void> {
   }
 }
 
-function handleDocumentPointerDown(event: PointerEvent): void {
-  const target = event.target instanceof Element ? event.target : null;
-  if (!target) return;
-  handleWordCardPointerDown(event);
-  const paragraph = target.closest<HTMLElement>("[data-reading-paragraph]");
-  const translation = target.closest(".reading-line-wrap.is-translation");
-  const isActiveAnnotationArea = Boolean(annotationMode.value && paragraph && !translation);
-  if (annotationMode.value && !isActiveAnnotationArea && !target.closest(".reading-toolbar")) {
-    exitAnnotationMode();
-  }
-}
-
 function unknownWords(words: string[]): string[] {
   return words.filter((word) => !vocabularyProgress.value.get(word)?.learned);
 }
@@ -364,10 +352,6 @@ async function annotateWord(
 
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
-  if (annotationMode.value) {
-    exitAnnotationMode();
-    return;
-  }
   wordCard.value?.close();
 }
 
@@ -401,7 +385,7 @@ useLearningDataRefresh({
 watch(() => route.params.id, () => void loadMaterialPage());
 onMounted(() => {
   document.body.classList.add("material-page");
-  document.addEventListener("pointerdown", handleDocumentPointerDown);
+  document.addEventListener("pointerdown", handleWordCardPointerDown);
   document.addEventListener("selectionchange", scheduleSelectionLookup);
   document.addEventListener("keydown", handleKeydown);
   void loadMaterialPage();
@@ -411,7 +395,7 @@ onBeforeUnmount(() => {
   loadSequence += 1;
   progressSequence += 1;
   disposeWordCard();
-  document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  document.removeEventListener("pointerdown", handleWordCardPointerDown);
   document.removeEventListener("selectionchange", scheduleSelectionLookup);
   document.removeEventListener("keydown", handleKeydown);
   document.body.classList.remove("material-page");

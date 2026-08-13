@@ -11,3 +11,7 @@ export function readingParagraphElement(target: EventTarget | null): HTMLElement
 export function isReadingTranslationTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(".reading-line-wrap.is-translation"));
 }
+
+export function isReadingSourceTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-source-line-key]"));
+}

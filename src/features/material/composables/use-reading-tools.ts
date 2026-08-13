@@ -1,8 +1,9 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import {
-  isReadingTranslationTarget,
+  isReadingSourceTarget,
   readingParagraphElement,
+  readingWordElement,
 } from "./reading-content-elements.js";
 
 interface ReadingToolOptions {
@@ -17,6 +18,7 @@ interface ReadingToolOptions {
 }
 
 const COPY_FEEDBACK_DURATION_MS = 3000;
+type TransientReadingTool = "copy" | "highlight" | "translationEdit";
 
 export function useReadingTools(options: ReadingToolOptions) {
   const copySelectionActive = ref(false);
@@ -58,19 +60,30 @@ export function useReadingTools(options: ReadingToolOptions) {
     return copySelectionActive.value || translationSelectionActive.value;
   }
 
+  function activeTransientTool(): TransientReadingTool | null {
+    if (copySelectionActive.value) return "copy";
+    if (translationSelectionActive.value) return "translationEdit";
+    return options.annotationMode() ? "highlight" : null;
+  }
+
+  function isValidTargetFor(tool: TransientReadingTool, target: EventTarget | null): boolean {
+    if (tool === "highlight") return readingWordElement(target) !== null;
+    return isReadingSourceTarget(target);
+  }
+
   function handleContentSelectionClick(event: MouseEvent): boolean {
     const paragraph = readingParagraphElement(event.target);
     if (translationSelectionActive.value) {
-      if (!paragraph || isReadingTranslationTarget(event.target)) {
-        translationSelectionActive.value = false;
+      if (!paragraph || !isReadingSourceTarget(event.target)) {
+        deactivateTransientTools();
         return true;
       }
       if (selectTranslationParagraph(paragraph)) event.preventDefault();
       return true;
     }
     if (!copySelectionActive.value) return false;
-    if (!paragraph || isReadingTranslationTarget(event.target)) {
-      copySelectionActive.value = false;
+    if (!paragraph || !isReadingSourceTarget(event.target)) {
+      deactivateTransientTools();
       return true;
     }
     const paragraphKey = paragraph.dataset.paragraphKey;
@@ -79,10 +92,6 @@ export function useReadingTools(options: ReadingToolOptions) {
     void copyParagraph(options.paragraphSourceText(paragraphKey));
     event.preventDefault();
     return true;
-  }
-
-  function clearCopySelection(): void {
-    copySelectionActive.value = false;
   }
 
   function deactivateTransientTools(): void {
@@ -129,16 +138,17 @@ export function useReadingTools(options: ReadingToolOptions) {
   }
 
   function handleDocumentPointerDown(event: PointerEvent): void {
-    if (!copySelectionActive.value) return;
+    const activeTool = activeTransientTool();
+    if (!activeTool) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".reading-toolbar, .reading-anchor, .reading-content")) return;
-    clearCopySelection();
+    if (target?.closest(".reading-toolbar, dialog")) return;
+    if (isValidTargetFor(activeTool, target)) return;
+    deactivateTransientTools();
   }
 
   function handleDocumentKeydown(event: KeyboardEvent): void {
     if (event.key !== "Escape") return;
-    clearCopySelection();
-    translationSelectionActive.value = false;
+    deactivateTransientTools();
   }
 
   onMounted(() => {

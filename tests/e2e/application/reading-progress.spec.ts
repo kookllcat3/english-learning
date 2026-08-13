@@ -180,6 +180,30 @@ test("uses one toolbar for translations, copy, and paragraph bookmark controls",
     .resolves.toEqual(["a", "bear", "fox", "runs", "sleeps", "the"]);
 });
 
+test("deactivates every transient reading tool through the shared cancellation contract", async ({ page }) => {
+  await createMaterial(page, materialTitle, "A bear runs.\n熊正在奔跑。");
+  await page.getByRole("link", { name: "開始閱讀" }).click();
+
+  const outsideTarget = page.locator(".material-heading");
+  const paragraphBlank = page.locator("[data-reading-paragraph]").first();
+  for (const toolName of ["複製英文段落", "螢光筆", "編輯中文解釋"]) {
+    const tool = page.getByRole("button", { name: toolName });
+    await tool.click();
+    await expect(tool).toHaveAttribute("aria-pressed", "true");
+    await outsideTarget.click();
+    await expect(tool).toHaveAttribute("aria-pressed", "false");
+
+    await tool.click();
+    await paragraphBlank.click({ position: { x: 2, y: 2 } });
+    await expect(tool).toHaveAttribute("aria-pressed", "false");
+
+    await tool.click();
+    await expect(tool).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Escape");
+    await expect(tool).toHaveAttribute("aria-pressed", "false");
+  }
+});
+
 test("edits, adds, or removes a paragraph translation from the reading toolbar", async ({ page }) => {
   await createMaterial(
     page,

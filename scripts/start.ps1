@@ -6,6 +6,100 @@ $ErrorActionPreference = "Stop"
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $runtimeVersion = "24.16.0"
 $minimumNodeMajor = 24
+$applicationHost = "127.0.0.1"
+$applicationPort = 4173
+$applicationUrl = "http://${applicationHost}:${applicationPort}/"
+
+function Test-ApplicationPortInUse {
+  $client = New-Object System.Net.Sockets.TcpClient
+  try {
+    $connection = $client.BeginConnect($applicationHost, $applicationPort, $null, $null)
+    return $connection.AsyncWaitHandle.WaitOne(500) -and $client.Connected
+  } catch {
+    return $false
+  } finally {
+    $client.Close()
+  }
+}
+
+function Test-EnglishLearningServer {
+  try {
+    $indexResponse = Invoke-WebRequest -Uri $applicationUrl -UseBasicParsing -TimeoutSec 3
+    $entryResponse = Invoke-WebRequest -Uri "${applicationUrl}src/main.ts" -UseBasicParsing -TimeoutSec 3
+    return (
+      $indexResponse.StatusCode -eq 200 -and
+      $indexResponse.Content -match 'src/main\.ts' -and
+      $entryResponse.StatusCode -eq 200 -and
+      $entryResponse.Content -match 'App\.vue' -and
+      $entryResponse.Content -match 'createPinia'
+    )
+  } catch {
+    return $false
+  }
+}
+
+function Get-ListeningProcessId {
+  try {
+    $connection = Get-NetTCPConnection `
+      -LocalPort $applicationPort `
+      -State Listen `
+      -ErrorAction Stop |
+      Select-Object -First 1
+    if ($connection) {
+      return $connection.OwningProcess
+    }
+  } catch {
+    # Fall back to netstat when Get-NetTCPConnection is unavailable or restricted.
+  }
+
+  $portPattern = ":$applicationPort\s+\S+\s+LISTENING\s+(\d+)\s*$"
+  $matchingLine = netstat -ano -p tcp |
+    Where-Object { $_ -match $portPattern } |
+    Select-Object -First 1
+  if ($matchingLine -and $matchingLine -match $portPattern) {
+    return [int]$Matches[1]
+  }
+
+  return $null
+}
+
+function Get-PortOwnerDescription {
+  $processId = Get-ListeningProcessId
+  if (-not $processId) {
+    return "an unknown process"
+  }
+
+  try {
+    $process = Get-Process -Id $processId -ErrorAction Stop
+    return "process '$($process.ProcessName)' (PID $processId)"
+  } catch {
+    return "PID $processId"
+  }
+}
+
+function Open-EnglishLearning {
+  Start-Process $applicationUrl
+}
+
+function Assert-ApplicationPortAvailable {
+  if (-not (Test-ApplicationPortInUse)) {
+    return
+  }
+
+  if (Test-EnglishLearningServer) {
+    Write-Host "English Learning is already running at $applicationUrl"
+    if (-not $CheckOnly) {
+      Open-EnglishLearning
+    }
+    exit 0
+  }
+
+  $portOwner = Get-PortOwnerDescription
+  Write-Host "Port $applicationPort is already in use by $portOwner." -ForegroundColor Red
+  Write-Host "Close that program and run start.cmd again."
+  Write-Host "English Learning must keep $applicationUrl so the existing browser data remains available."
+  exit 1
+}
 
 function Get-SystemArchitecture {
   $architecture = if ($env:PROCESSOR_ARCHITEW6432) {
@@ -154,6 +248,8 @@ function Install-Dependencies {
   Write-Host "Application dependencies are ready."
 }
 
+Assert-ApplicationPortAvailable
+
 $systemNode = Get-Command node.exe -ErrorAction SilentlyContinue
 $nodeExecutable = if ($systemNode -and (Test-CompatibleNode $systemNode.Source)) {
   $systemNode.Source
@@ -173,14 +269,13 @@ Install-Dependencies $nodeExecutable $npmCli
 $viteEntryPoint = Join-Path $projectDirectory "node_modules\vite\bin\vite.js"
 
 Write-Host "Starting English Learning..."
-Write-Host "The website will open at http://127.0.0.1:4173/"
+Write-Host "The website will open at $applicationUrl"
 Write-Host "Close this window or press Ctrl+C to stop the service."
 Write-Host ""
 
-Start-Job -ScriptBlock {
-  Start-Sleep -Milliseconds 800
-  Start-Process "http://127.0.0.1:4173/"
-} | Out-Null
-
-& $nodeExecutable $viteEntryPoint --host 127.0.0.1 --port 4173 --strictPort
+& $nodeExecutable $viteEntryPoint `
+  --host $applicationHost `
+  --port $applicationPort `
+  --strictPort `
+  --open
 exit $LASTEXITCODE

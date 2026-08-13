@@ -14,6 +14,7 @@
 - **中文內容驗證**：純英文不再誤分段。
 - **彈窗操作排列**：儲存與取消靠右。
 - **閱讀工具取消**：點空白統一關閉。
+- **PDF 元件清理**：移除停用元件。
 
 ## 線上 Demo
 
@@ -124,9 +125,8 @@ dist/
 部署時請注意：
 
 1. 使用固定的 HTTPS 網址，避免 IndexedDB 因來源改變而變成另一份資料。
-2. 伺服器必須能以 JavaScript 相容的 MIME type 提供 `.mjs` 檔案。
-3. `start.cmd` 與 `scripts/` 只供本機啟動，靜態託管不需要上傳。
-4. 不同裝置不會自動同步；請使用 `.elpkg` 匯出與匯入移轉資料，舊 JSON 備份仍可匯入。
+2. `start.cmd` 與 `scripts/` 只供本機啟動，靜態託管不需要上傳。
+3. 不同裝置不會自動同步；請使用 `.elpkg` 匯出與匯入移轉資料，舊 JSON 備份仍可匯入。
 
 ## 專案結構
 
@@ -161,8 +161,7 @@ english-learning/
 │  ├─ styles/{base,home,dialogs,material}.css
 │  ├─ types/
 │  ├─ vendor/
-│  │  ├─ jszip/
-│  │  └─ pdfjs/
+│  │  └─ jszip/
 │  ├─ views/
 │  ├─ App.vue
 │  ├─ main.ts
@@ -244,4 +243,4 @@ TypeScript；持久資料仍維持 local-first，不加入未經產品需求確�
 
 本專案以 [MIT License](LICENSE) 開源。
 
-PDF 匯入模組使用 Mozilla PDF.js，DOCX 解析模組使用 JSZip，介面圖示使用 Lucide。完整來源、授權與使用方式請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+備份封裝與 DOCX 解析元件使用 JSZip，介面圖示使用 Lucide。完整來源、授權與使用方式請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

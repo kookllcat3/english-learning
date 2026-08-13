@@ -2,21 +2,6 @@
 
 This project uses the following third-party software and services.
 
-## Mozilla PDF.js
-
-- Purpose: extract text from text-based PDF files in the user's browser
-- Version: 5.6.205
-- Project: https://github.com/mozilla/pdf.js
-- Distribution: https://www.npmjs.com/package/pdfjs-dist
-- License: Apache License 2.0
-- Included files:
-  - `src/vendor/pdfjs/pdf.min.mjs`
-  - `src/vendor/pdfjs/pdf.worker.min.mjs`
-
-The applicable Apache License 2.0 text is included at
-`src/vendor/pdfjs/LICENSE`. Additional distribution information is included
-at `src/vendor/pdfjs/NOTICE.md`.
-
 ## JSZip
 
 - Purpose: read and write the ZIP container used by DOCX files in the user's browser

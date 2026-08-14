@@ -24,8 +24,8 @@ function close(): void {
   dialog.value?.close();
 }
 
-function closeFromBackdrop(event: MouseEvent): void {
-  if (event.target === event.currentTarget) close();
+function closeFromBackdropPointerDown(event: PointerEvent): void {
+  if (event.button === 0 && event.target === event.currentTarget) close();
 }
 
 function handleClose(): void {
@@ -49,7 +49,7 @@ defineExpose({ close, showModal });
       class="dialog"
       :class="props.dialogClass"
       :aria-labelledby="titleId"
-      @click="closeFromBackdrop"
+      @pointerdown="closeFromBackdropPointerDown"
       @close="handleClose"
     >
       <div class="dialog__body">

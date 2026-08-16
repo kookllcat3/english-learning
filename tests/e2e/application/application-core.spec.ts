@@ -27,7 +27,9 @@ test("uses one Vue app and keeps reading as the only material view", async ({ pa
 
   await seedKnownWordsForCurrentMaterial(page, ["bear"]);
   await page.reload();
-  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
+  const knownReadingWord = page.locator('[data-word="bear"]').first();
+  await expect(knownReadingWord).not.toHaveClass(/known-word/);
+  await expect(knownReadingWord.locator(".known-word__glyph")).toHaveCount(0);
 
   await page.getByRole("link", { name: "回到英文學習庫首頁" }).click();
   await expect(page).toHaveURL(/#\/?$/);
@@ -35,7 +37,7 @@ test("uses one Vue app and keeps reading as the only material view", async ({ pa
   await expect(knownWordMetric.getByRole("strong")).toHaveText("1");
 });
 
-test("shows global familiarity in an unread material", async ({ page }) => {
+test("shows global familiarity only in the word card", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const learnedMaterialTitle = "Familiarity source";
   const unreadMaterialTitle = "Unread material";
@@ -46,7 +48,7 @@ test("shows global familiarity in an unread material", async ({ page }) => {
   await expect(page).toHaveURL(/#\/materials\/.+/);
   await seedKnownWordsForCurrentMaterial(page, ["bear"]);
   await page.reload();
-  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
+  await expect(page.locator('[data-word="bear"]').first()).not.toHaveClass(/known-word/);
   await page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("english-learning");
@@ -71,12 +73,16 @@ test("shows global familiarity in an unread material", async ({ page }) => {
   await unreadMaterialCard.getByRole("link", { name: "開始閱讀" }).click();
 
   const unreadBear = page.locator('[data-word="bear"]').first();
-  await expect(unreadBear).toHaveClass(/known-word/);
-  await expect(unreadBear.locator(".known-word__glyph")).toHaveCount(4);
+  await expect(unreadBear).not.toHaveClass(/known-word/);
+  await expect(unreadBear.locator(".known-word__glyph")).toHaveCount(0);
   await expect(page.locator('input[type="color"]')).toHaveCount(0);
   await expect(page.locator(".familiarity-legend")).toHaveCount(0);
   await expect(page.getByText("熟悉度標記", { exact: true })).toHaveCount(0);
-  const familiarityTokens = await unreadBear.evaluate((element) => {
+  await unreadBear.hover();
+  const wordCardTitle = page.getByRole("heading", { name: "bear", level: 2 });
+  await expect(wordCardTitle).toHaveClass(/known-word/);
+  await expect(wordCardTitle.locator(".known-word__glyph")).toHaveCount(4);
+  const familiarityTokens = await wordCardTitle.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
       base: style.getPropertyValue("--familiarity-color").trim(),
@@ -85,7 +91,7 @@ test("shows global familiarity in an unread material", async ({ page }) => {
   });
   expect(familiarityTokens).toEqual({ base: "63 75 120", glow: "233 190 99" });
   for (const highlightColor of ["#fff2a8", "#dff2c2", "#f8d7df", "#dce9ff"]) {
-    const textShadow = await unreadBear.locator(".known-word__glyph").first().evaluate(
+    const textShadow = await wordCardTitle.locator(".known-word__glyph").first().evaluate(
       (element, backgroundColor) => {
         const word = element.closest<HTMLElement>(".known-word");
         if (word) word.style.backgroundColor = backgroundColor;

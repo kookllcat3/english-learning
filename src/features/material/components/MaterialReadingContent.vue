@@ -3,7 +3,6 @@ import { computed } from "vue";
 import type {
   ContentBlock,
   MaterialHighlightAnnotationRecord,
-  VocabularyRecord,
 } from "../../../core/models/models.js";
 import {
   classifyReadingContent,
@@ -11,12 +10,6 @@ import {
   type ReadingTextRole,
 } from "../../../core/learning/reading-content.js";
 import { normalizeWord } from "../../../core/text/text.js";
-import {
-  familiarityDelay,
-  familiarityPresentation,
-  type FamiliarityLevel,
-  type FamiliarityPresentation,
-} from "../familiarity.js";
 import {
   isReadingTranslationTarget,
   readingParagraphElement,
@@ -29,7 +22,6 @@ import MaterialImage from "./MaterialImage.vue";
 import ReadingToolbar from "./ReadingToolbar.vue";
 
 interface TextSegment {
-  delay?: number;
   label: string;
   word?: string;
 }
@@ -64,10 +56,8 @@ const props = defineProps<{
   annotationMode: "highlight" | null;
   blocks: ContentBlock[];
   currentParagraphKey: string | null;
-  familiarityLevels: FamiliarityLevel[];
   readingProgressBusy: boolean;
   highlights: MaterialHighlightAnnotationRecord[];
-  vocabularyProgress: Map<string, VocabularyRecord>;
 }>();
 
 const emit = defineEmits<{
@@ -89,7 +79,6 @@ function textSegments(text: string): TextSegment[] {
     if (match.index > cursor) segments.push({ label: text.slice(cursor, match.index) });
     const normalizedWord = normalizeWord(match[0]);
     segments.push({
-      delay: familiarityDelay(normalizedWord),
       label: match[0],
       word: normalizedWord,
     });
@@ -136,24 +125,6 @@ const renderedBlocks = computed<Array<RenderedTextBlock | RenderedImageBlock>>((
     };
   }));
 
-const wordPresentations = computed(() => {
-  const presentations = new Map<string, FamiliarityPresentation>();
-  renderedBlocks.value.forEach((block) => {
-    if (block.type !== "text") return;
-    block.paragraphs.forEach((paragraph) => {
-      paragraph.lines.forEach((line) => line.segments.forEach((segment) => {
-        if (!segment.word || presentations.has(segment.word)) return;
-        const materialCount = props.vocabularyProgress.get(segment.word)?.materialCount ?? 0;
-        presentations.set(
-          segment.word,
-          familiarityPresentation(props.familiarityLevels, materialCount),
-        );
-      }));
-    });
-  });
-  return presentations;
-});
-
 const highlightIdByOccurrence = computed(() => new Map(
   props.highlights.flatMap((highlight) => highlight.target.occurrenceKeys.map((occurrenceKey) => (
     [occurrenceKey, highlight.id] as const
@@ -175,14 +146,6 @@ function isHighlightedGap(segments: TextSegment[], segmentIndex: number, lineKey
   const previousHighlightId = highlightIdFor(`${lineKey}-${segmentIndex - 1}`);
   return Boolean(previousHighlightId)
     && previousHighlightId === highlightIdFor(`${lineKey}-${segmentIndex + 1}`);
-}
-
-function presentationFor(segment: TextSegment): FamiliarityPresentation | undefined {
-  return segment.word ? wordPresentations.value.get(segment.word) : undefined;
-}
-
-function hasFamiliarity(segment: TextSegment): boolean {
-  return (presentationFor(segment)?.level.level ?? 0) > 0;
 }
 
 function paragraphSourceText(paragraphKey: string): string {
@@ -436,7 +399,6 @@ function handleWordKeydown(event: KeyboardEvent): void {
               class="reading-word"
               :class="{
                 'is-active': activeWord === `${line.key}-${segmentIndex}`,
-                'known-word': hasFamiliarity(segment),
                 'is-highlighted': highlightIdFor(`${line.key}-${segmentIndex}`),
                 'is-annotation-target': annotationMode !== null,
                 'is-highlight-target': annotationMode !== null
@@ -450,14 +412,8 @@ function handleWordKeydown(event: KeyboardEvent): void {
               :data-paragraph-key="paragraph.key"
               :data-highlight-id="highlightIdFor(`${line.key}-${segmentIndex}`)"
               :data-known-label="segment.label"
-              :style="presentationFor(segment)?.style"
               tabindex="-1"
-            ><template v-if="hasFamiliarity(segment)"><span
-              v-for="(character, characterIndex) in segment.label"
-              :key="characterIndex"
-              class="known-word__glyph"
-              :style="{ '--glyph-delay': `${(segment.delay ?? 0) + (characterIndex * 85)}ms` }"
-            >{{ character }}</span></template><template v-else>{{ segment.label }}</template></span>
+            >{{ segment.label }}</span>
             <span
               v-else
               :class="{ 'reading-highlight-gap': isHighlightedGap(line.segments, segmentIndex, line.key) }"

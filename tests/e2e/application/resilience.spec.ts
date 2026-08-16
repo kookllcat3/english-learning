@@ -215,7 +215,11 @@ test("keeps local learning progress writable while offline", async ({ page, cont
   }
 
   await page.reload();
-  await expect(page.locator('[data-word="bear"]').first()).toHaveClass(/known-word/);
+  const bearWord = page.locator('[data-word="bear"]').first();
+  await expect(bearWord).not.toHaveClass(/known-word/);
+  await expect(bearWord.locator(".known-word__glyph")).toHaveCount(0);
+  await bearWord.hover();
+  await expect(page.getByRole("heading", { name: "bear", level: 2 })).toHaveClass(/known-word/);
 });
 
 for (const databaseVersion of [6, 7, 8] as const) {

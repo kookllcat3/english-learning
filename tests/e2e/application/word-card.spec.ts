@@ -23,15 +23,9 @@ test("shows the source word familiarity effect in the word card title", async ({
   await expect(title.locator(".known-word__glyph")).toHaveCount(4);
   await expect(title.locator(".known-word__glyph").first())
     .toHaveCSS("animation-name", "familiarity-outline-flow");
-  const sourceTokens = await page.locator('[data-word="bear"]').first().evaluate((element) => {
-    const style = getComputedStyle(element);
-    return [
-      style.getPropertyValue("--familiarity-outline-opacity"),
-      style.getPropertyValue("--outline-flow-opacity"),
-      style.getPropertyValue("--outline-flow-duration"),
-      style.getPropertyValue("--outline-glow-blur"),
-    ];
-  });
+  const readingWord = page.locator('[data-word="bear"]').first();
+  await expect(readingWord).not.toHaveClass(/known-word/);
+  await expect(readingWord.locator(".known-word__glyph")).toHaveCount(0);
   const cardTokens = await title.evaluate((element) => {
     const style = getComputedStyle(element);
     return [
@@ -41,7 +35,7 @@ test("shows the source word familiarity effect in the word card title", async ({
       style.getPropertyValue("--outline-glow-blur"),
     ];
   });
-  expect(cardTokens).toEqual(sourceTokens);
+  expect(cardTokens).toEqual(["0.18", "0.3", "1.6s", "0.5px"]);
 });
 
 test("positions a restored note card before its note has loaded", async ({ page }) => {

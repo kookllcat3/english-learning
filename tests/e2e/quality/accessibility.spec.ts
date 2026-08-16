@@ -102,7 +102,7 @@ test("reading view meets accessibility and narrow-layout baselines", async ({ pa
   expect(readingBounds.bottom).toBeGreaterThan(readingBounds.viewportHeight);
 });
 
-test("reduced motion disables familiarity animations", async ({ page }) => {
+test("reduced motion disables word card familiarity animations", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await createAccessibleMaterial(page);
   await page.getByRole("link", { name: "開始閱讀" }).click();
@@ -110,19 +110,10 @@ test("reduced motion disables familiarity animations", async ({ page }) => {
   await seedKnownWordsForCurrentMaterial(page, ["bear"]);
   await page.reload();
 
-  const familiarityPresentation = await page.locator('[data-known-word="bear"]')
-    .evaluate((element) => {
-      const glyph = element.querySelector(".known-word__glyph");
-      const style = glyph ? getComputedStyle(glyph) : null;
-      return {
-        animationName: style?.animationName ?? "",
-        textShadow: style?.textShadow ?? "none",
-      };
-    });
-  expect(familiarityPresentation.animationName).toBe("none");
-  expect(familiarityPresentation.textShadow).not.toBe("none");
-
-  await page.locator('[data-known-word="bear"]').first().hover();
+  const bearWord = page.locator('[data-known-word="bear"]').first();
+  await expect(bearWord).not.toHaveClass(/known-word/);
+  await expect(bearWord.locator(".known-word__glyph")).toHaveCount(0);
+  await bearWord.hover();
   const cardFamiliarityPresentation = await page.getByRole("heading", { name: "bear", level: 2 })
     .locator(".known-word__glyph")
     .first()

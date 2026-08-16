@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import packageMetadata from "../../../package.json" with { type: "json" };
+
 test("keeps the app version in the material guide bottom-right corner", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 667 });
   await page.goto("/");
@@ -8,7 +10,7 @@ test("keeps the app version in the material guide bottom-right corner", async ({
   const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
   const footer = guideDialog.locator(".dialog__footer-meta");
   const version = footer.locator(".material-guide-dialog__version");
-  await expect(version).toHaveText(/^v\d+\.\d+\.\d+$/);
+  await expect(version).toHaveText(`v${packageMetadata.version}`);
   await expect(version).toBeVisible();
   await expect(guideDialog.locator(".dialog__heading .material-guide-dialog__version")).toHaveCount(0);
   const [footerBox, versionBox] = await Promise.all([

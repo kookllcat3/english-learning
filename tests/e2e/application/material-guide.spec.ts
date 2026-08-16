@@ -8,8 +8,17 @@ test("keeps the app version in the material guide bottom-right corner", async ({
   await page.getByRole("button", { name: "查看教材製作教學" }).click();
 
   const guideDialog = page.getByRole("dialog", { name: "如何製作學習教材" });
+  const guideSteps = guideDialog.locator(".guide-steps");
   const footer = guideDialog.locator(".dialog__footer-meta");
   const version = footer.locator(".material-guide-dialog__version");
+  await expect(guideSteps.locator(".guide-step__number")).toHaveText(["1", "2", "3", "4"]);
+  await expect(guideSteps.locator("li strong")).toHaveText([
+    "選擇想學的英文內容",
+    "準備純文字內容",
+    "保持內容聚焦",
+    "上傳到教材庫",
+  ]);
+  await expect(guideSteps.locator("p")).toHaveCount(0);
   await expect(version).toHaveText(`v${packageMetadata.version}`);
   await expect(version).toBeVisible();
   await expect(guideDialog.locator(".dialog__heading .material-guide-dialog__version")).toHaveCount(0);

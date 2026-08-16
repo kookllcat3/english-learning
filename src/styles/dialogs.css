@@ -178,14 +178,16 @@
 }
 .guide-steps li {
   position: relative;
-  min-height: 74px;
+  display: flex;
+  min-height: 54px;
+  align-items: center;
   padding: 14px 14px 12px 46px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fbfaf6;
   font-size: .9rem;
 }
-.guide-steps li::before {
+.guide-step__number {
   position: absolute;
   top: 14px;
   left: 14px;
@@ -196,11 +198,9 @@
   border-radius: 50%;
   color: white;
   background: var(--navy);
-  content: counter(list-item);
   font-size: .78rem;
   font-weight: 800;
 }
-.guide-steps p { margin: 5px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.45; }
 .guide-prompt {
   display: flex;
   min-height: 0;
@@ -276,8 +276,7 @@
     margin-block: 0 16px;
   }
   .guide-steps li { min-height: 0; padding: 11px 12px 10px 43px; font-size: .88rem; }
-  .guide-steps li::before { top: 11px; left: 12px; }
-  .guide-steps p { font-size: .8rem; line-height: 1.35; }
+  .guide-step__number { top: 11px; left: 12px; }
   .guide-prompt { padding-top: 16px; }
   .material-guide-dialog .guide-prompt__heading { margin-bottom: 7px; }
   .guide-prompt textarea { min-height: 100px; padding: 10px; font-size: .8rem; }

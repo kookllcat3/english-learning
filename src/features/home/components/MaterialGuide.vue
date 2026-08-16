@@ -12,6 +12,13 @@ import type { DialogController } from "../../../shared/components/base-dialog.js
 
 type PromptType = MaterialGuidePromptType;
 
+const GUIDE_STEPS = [
+  "選擇想學的英文內容",
+  "準備純文字內容",
+  "保持內容聚焦",
+  "上傳到教材庫",
+] as const;
+
 const TEXT_PROMPT = `你是一位專業的英語教材編輯。請依照我提供的主題或原始內容，製作一份內容充實、可直接匯入英文學習網站的純文字教材。
 
 製作規格：
@@ -178,10 +185,10 @@ onBeforeUnmount(() => {
     </template>
 
     <ol class="guide-steps">
-      <li><strong>選擇想學的英文內容</strong><p>文章、對話、逐字稿或你想練習的句子都可以。</p></li>
-      <li><strong>準備純文字內容</strong><p>請直接貼上教材內容，或選擇 UTF-8 TXT 檔案。</p></li>
-      <li><strong>保持內容聚焦</strong><p>一份教材建議只包含一個主題，篇幅以一次能讀完為準。</p></li>
-      <li><strong>上傳到教材庫</strong><p>按頁面右下角的「＋」，選擇檔案或直接貼上文字。</p></li>
+      <li v-for="(step, index) in GUIDE_STEPS" :key="step">
+        <span class="guide-step__number" aria-hidden="true">{{ index + 1 }}</span>
+        <strong>{{ step }}</strong>
+      </li>
     </ol>
 
     <section class="guide-prompt" aria-labelledby="guide-prompt-title">

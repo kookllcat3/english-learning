@@ -1,5 +1,6 @@
 import type { LearningBackup } from "../models/models.js";
 import { loadJsZip } from "../services/jszip-loader.js";
+import aiReadme from "./AI_README.md?raw";
 import {
   ArchiveReadBudget,
   assertArchiveResourceLimits,
@@ -9,6 +10,7 @@ import {
 
 const PACKAGE_FORMAT = "english-learning-package";
 const PACKAGE_VERSION = 1;
+const AI_GUIDE_FILE = "AI_README.md";
 const MATERIALS_FILE = "data/materials.json";
 const VOCABULARY_FILE = "data/vocabulary.json";
 const LEGACY_WORD_NOTES_FILE = "data/word-notes.json";
@@ -22,6 +24,7 @@ interface PackageManifest {
   schemaVersion: number;
   exportedAt: string;
   applicationVersion: string;
+  aiGuide?: string;
   files: Array<{ path: string; type: string; size: number }>;
   counts: {
     materials: number;
@@ -74,6 +77,23 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 
 function safePath(path: string): boolean {
   return path.length > 0 && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes("..") && !path.includes("\0");
+}
+
+function packageFileType(path: string): "asset" | "data" | "documentation" {
+  if (path === AI_GUIDE_FILE) return "documentation";
+  return path.startsWith("assets/") ? "asset" : "data";
+}
+
+function validateAiGuide(manifest: PackageManifest): void {
+  if (manifest.aiGuide === undefined) return;
+  const declaredGuide = manifest.files.find(({ path }) => path === manifest.aiGuide);
+  if (
+    typeof manifest.aiGuide !== "string"
+    || !safePath(manifest.aiGuide)
+    || declaredGuide?.type !== "documentation"
+  ) {
+    throw new Error("備份 AI 指南宣告不正確。");
+  }
 }
 
 function requiredPackageFile(archive: JsZipArchive, path: string): JsZipFile {
@@ -167,6 +187,7 @@ export async function createBackupPackage(backup: LearningBackup): Promise<Blob>
   }
   files.set(SETTINGS_FILE, settings);
   files.set(MATERIAL_ASSETS_FILE, assetMetadata);
+  files.set(AI_GUIDE_FILE, new TextEncoder().encode(aiReadme));
 
   for (const asset of backup.materialAssets ?? []) files.set(`assets/${asset.id}.webp`, base64ToBytes(asset.data));
 
@@ -176,9 +197,10 @@ export async function createBackupPackage(backup: LearningBackup): Promise<Blob>
     schemaVersion: backup.schemaVersion,
     exportedAt: backup.exportedAt ?? new Date().toISOString(),
     applicationVersion: "english-learning",
+    aiGuide: AI_GUIDE_FILE,
     files: [...files].map(([path, bytes]) => ({
       path,
-      type: path.startsWith("assets/") ? "asset" : "data",
+      type: packageFileType(path),
       size: bytes.byteLength,
     })),
     counts: {
@@ -230,6 +252,7 @@ export async function readBackupPackage(file: Blob): Promise<BackupPackagePrevie
   if (!Array.isArray(manifest.files) || !manifest.files.every((item) => safePath(item.path))) {
     throw new Error("備份 manifest 檔案清單不正確。");
   }
+  validateAiGuide(manifest);
   const declaredPaths = new Set(["manifest.json", "checksums.json", ...manifest.files.map((item) => item.path)]);
   if (paths.some((path) => !declaredPaths.has(path))) throw new Error("備份包含未列出的檔案。");
   if (manifest.files.some((item) => !Number.isSafeInteger(item.size) || item.size < 0)) {

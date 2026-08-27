@@ -983,8 +983,10 @@ test("imports a legacy package with its global word notes", async ({ page }) => 
   const downloadPromise = page.waitForEvent("download");
   await page.evaluate(async ({ timestamp }) => {
     const modulePath = "/src/core/backup/backup-package.ts";
+    const zipModulePath = "/src/core/services/jszip-loader.ts";
     const { createBackupPackage } = await import(modulePath);
-    const blob = await createBackupPackage({
+    const { loadJsZip } = await import(zipModulePath);
+    const currentPackage = await createBackupPackage({
       schemaVersion: 3,
       exportedAt: timestamp,
       materials: [{
@@ -1007,6 +1009,24 @@ test("imports a legacy package with its global word notes", async ({ page }) => 
       }],
       settings: [],
     });
+    const archive = await (await loadJsZip()).loadAsync(await currentPackage.arrayBuffer());
+    const manifestFile = archive.file("manifest.json");
+    const checksumsFile = archive.file("checksums.json");
+    if (!manifestFile || !checksumsFile) throw new Error("package metadata was not generated");
+    const manifest = JSON.parse(await manifestFile.async("text")) as {
+      aiGuide?: string;
+      files: Array<{ path: string }>;
+    };
+    const checksums = JSON.parse(await checksumsFile.async("text")) as {
+      files: Record<string, string>;
+    };
+    delete manifest.aiGuide;
+    manifest.files = manifest.files.filter(({ path }) => path !== "AI_README.md");
+    delete checksums.files["AI_README.md"];
+    delete archive.files["AI_README.md"];
+    archive.file("manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
+    archive.file("checksums.json", `${JSON.stringify(checksums, null, 2)}\n`);
+    const blob = await archive.generateAsync({ type: "blob", compression: "DEFLATE" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "legacy-backup.elpkg";

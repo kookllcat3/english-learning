@@ -158,6 +158,13 @@ function isEnglishLineOrientedContent(candidate: ParagraphCandidate): boolean {
     ));
 }
 
+function isCompleteEnglishProseSequence(candidate: ParagraphCandidate): boolean {
+  return candidate.lines.length > 1
+    && candidate.lines.every((line) => (
+      isSourceText(line.text) && hasSentencePunctuation(line.text)
+    ));
+}
+
 function splitStructuredLineSequence(candidate: ParagraphCandidate): ParagraphCandidate[] {
   const firstLineIsSource = isSourceText(candidate.lines[0]?.text ?? "");
   const firstTranslationIndex = candidate.lines.findIndex((line) => (
@@ -166,7 +173,11 @@ function splitStructuredLineSequence(candidate: ParagraphCandidate): ParagraphCa
   const hasSourceAfterTranslation = firstTranslationIndex >= 0
     && candidate.lines.slice(firstTranslationIndex + 1).some((line) => isSourceText(line.text));
   const shouldSplit = firstLineIsSource
-    && (hasSourceAfterTranslation || isEnglishLineOrientedContent(candidate));
+    && (
+      hasSourceAfterTranslation
+      || isEnglishLineOrientedContent(candidate)
+      || isCompleteEnglishProseSequence(candidate)
+    );
   if (!shouldSplit) return [candidate];
 
   const units: ParagraphCandidate[] = [];

@@ -124,7 +124,7 @@ describe("reading content classification", () => {
     });
   });
 
-  it("keeps complete English prose sentences in one hard paragraph", () => {
+  it("splits complete English prose sentences separated by single line breaks", () => {
     const sections = classifyReadingContent([{
       type: "text",
       order: 0,
@@ -135,8 +135,34 @@ describe("reading content classification", () => {
       ].join("\n"),
     }]);
 
-    expect(sections).toHaveLength(1);
-    expect(sections[0]).toMatchObject({ key: "0-0-0", role: "source" });
+    expect(sections).toMatchObject([
+      { key: "0-0-0", lines: [{ text: "This is the first sentence." }], role: "source" },
+      { key: "0-0-0.1", lines: [{ text: "This is the second sentence." }], role: "source" },
+      { key: "0-0-0.2", lines: [{ text: "This is the third sentence." }], role: "source" },
+    ]);
+  });
+
+  it("splits pasted multi-sentence prose lines into independent reading paragraphs", () => {
+    const sections = classifyReadingContent([{
+      type: "text",
+      order: 0,
+      text: [
+        "Kevin usually gets up at seven in the morning. However, this morning was different.",
+        "He woke up late because he had forgotten to set his alarm.",
+        "Kevin quickly got dressed and left the house.",
+        "In the end, he decided to take a taxi.",
+        "His morning didn't go as expected, but at least he wasn't late.",
+      ].join("\n"),
+    }]);
+
+    expect(sections).toHaveLength(5);
+    expect(sections.map((section) => section.key)).toEqual([
+      "0-0-0",
+      "0-0-0.1",
+      "0-0-0.2",
+      "0-0-0.3",
+      "0-0-0.4",
+    ]);
   });
 
   it("attaches an adjacent short Chinese text block as a source translation", () => {

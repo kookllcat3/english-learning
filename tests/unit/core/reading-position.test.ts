@@ -71,4 +71,15 @@ describe("reading position references", () => {
     expect(normalizedReadingParagraphKey("0-0-0", lineOrientedBlocks)).toBe("0-0-0");
     expect(normalizedReadingParagraphKey("0-0-0.2", lineOrientedBlocks)).toBe("0-0-0.2");
   });
+
+  it("recognizes complete prose lines separated by single line breaks", () => {
+    const proseBlocks = [{
+      type: "text" as const,
+      order: 0,
+      text: "First complete sentence.\nSecond complete sentence.\nThird complete sentence.",
+    }];
+
+    expect([...readingParagraphKeys(proseBlocks)])
+      .toEqual(["0-0-0", "0-0-0.1", "0-0-0.2"]);
+  });
 });

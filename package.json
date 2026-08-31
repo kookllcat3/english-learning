@@ -22,10 +22,10 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@lucide/vue": "1.31.0",
-    "pinia": "4.0.2",
-    "vue": "3.5.40",
-    "vue-router": "5.2.0"
+    "@lucide/vue": "1.35.0",
+    "pinia": "4.0.3",
+    "vue": "3.5.42",
+    "vue-router": "5.3.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
